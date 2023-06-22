@@ -12,11 +12,8 @@ TInt64 = numba.types.int64
 TPrediction = numba.typed.typedlist.ListType(TFloat32[::1])
 TPredictions = numba.typed.typedlist.ListType(TFloat32[:, ::1])
 
-TIResult = TInt64[:, ::1]
-TIResults = TInt64[:, :, ::1]
-
-TFResult = TFloat32[:, ::1]
-TFResults = TFloat32[:, :, ::1]
+TResult = TInt64[:, ::1]
+TResults = TInt64[:, :, ::1]
 
 NUMBA_DEBUG = False
 
@@ -168,7 +165,7 @@ def maximal_prediction(predictions):
     return best_jet, best_prediction, best_value
 
 
-@njit(numba.types.Tuple((TIResult, TFResult))(TPrediction, TInt64[::1], TInt64))
+@njit(TResult(TPrediction, TInt64[::1], TInt64))
 def extract_prediction(predictions, num_partons, max_jets):
     float_negative_inf = -np.float32(np.inf)
     max_partons = num_partons.max()
@@ -184,41 +181,37 @@ def extract_prediction(predictions, num_partons, max_jets):
     # -1 : Masked value
     # else : The actual index value
     results = np.zeros((num_targets, max_partons), np.int64) - 2
-    results_weights = np.zeros((num_targets, max_partons), dtype=np.float32) - np.float32(np.inf)
 
     for _ in range(num_targets):
         best_jet, best_prediction, best_value = maximal_prediction(predictions)
 
         if not np.isfinite(best_value):
-            return results, results_weights
+            return results
 
         best_jets = unravel_index(best_jet, strides[best_prediction])
 
         results[best_prediction, :] = -1
-        results_weights[best_prediction, :] = float_negative_inf
         for i in range(num_partons[best_prediction]):
             results[best_prediction, i] = best_jets[i]
-            results_weights[best_prediction, i] = best_value
 
         predictions[best_prediction][:] = float_negative_inf
         for i in range(num_targets):
             for jet in best_jets:
                 mask_jet(predictions[i], num_partons[i], max_jets, jet, float_negative_inf)
 
-    return results, results_weights
+    return results
 
 
-@njit(numba.types.Tuple((TIResults, TFResults))(TPredictions, TInt64[::1], TInt64, TInt64), parallel=True)
+@njit(TResults(TPredictions, TInt64[::1], TInt64, TInt64), parallel=True)
 def _extract_predictions(predictions, num_partons, max_jets, batch_size):
     output = np.zeros((batch_size, len(predictions), num_partons.max()), np.int64)
-    weight = np.zeros((batch_size, len(predictions), num_partons.max()), np.float32)
     predictions = [p.copy() for p in predictions]
 
     for batch in numba.prange(batch_size):
         current_prediction = numba.typed.List([prediction[batch] for prediction in predictions])
-        output[batch, :, :], weight[batch, :, :] = extract_prediction(current_prediction, num_partons, max_jets)
+        output[batch, :, :] = extract_prediction(current_prediction, num_partons, max_jets)
 
-    return np.ascontiguousarray(output.transpose((1, 0, 2))), np.ascontiguousarray(weight.transpose((1, 0, 2)))
+    return np.ascontiguousarray(output.transpose((1, 0, 2)))
 
 
 def extract_predictions(predictions: List[TArray]):
@@ -227,28 +220,5 @@ def extract_predictions(predictions: List[TArray]):
     max_jets = max(max(p.shape[1:]) for p in predictions)
     batch_size = max(p.shape[0] for p in predictions)
 
-    max_partons = np.max(num_partons)
-    results = np.zeros((len(predictions), len(predictions[0]), 3, max_partons))
-    weights = np.zeros((len(predictions), len(predictions[0]), 3, max_partons))
-    for i in range(max_partons):
-        temp_predictions = np.array(predictions).copy()
-        parton_slice = temp_predictions[:,:,:,:,i]
-        for j in range(parton_slice.shape[0]):
-            for k in range(parton_slice.shape[1]):
-                max_indices = np.argmax(parton_slice[j,k])
-                index_2D = np.unravel_index(max_indices, parton_slice[j,k].shape)
-                parton_slice[j, k, index_2D[0], index_2D[1]] = 999
-        temp_predictions[:,:,:,:,i] = parton_slice
-        temp_predictions_list = numba.typed.List([p.reshape((p.shape[0], -1)) for p in temp_predictions])
-        result, weight = _extract_predictions(temp_predictions_list, num_partons, max_jets, batch_size)
-        results[:,:,:,i] = result
-        weights[:,:,:,i] = weight
-    
-    max_results = np.zeros_like(result)
-    for i in range(results.shape[1]):
-        temp_weight = weights[:,i,:,:]
-        new_prod = np.prod(temp_weight, axis=(0,1))
-        indx = np.argmax(new_prod)
-        max_results[:,i,:] = results[:,i,:,indx]
-            
-    return [max_result[:, :partons] for max_result, partons in zip(max_results, num_partons)]
+    results = _extract_predictions(flat_predictions, num_partons, max_jets, batch_size)
+    return [result[:, :partons] for result, partons in zip(results, num_partons)]
