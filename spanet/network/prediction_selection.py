@@ -228,8 +228,8 @@ def extract_predictions(predictions: List[TArray]):
     batch_size = max(p.shape[0] for p in predictions)
 
     max_partons = np.max(num_partons)
-    results = np.zeros((len(predictions), len(predictions[0]), 3, max_jets*2))
-    weights = np.ones((len(predictions), len(predictions[0]), max_jets*2)) - np.float32(np.inf)
+    results = np.zeros((len(predictions), len(predictions[0]), max_partons, max_jets*2))
+    weights = np.zeros((len(predictions), len(predictions[0]), max_jets*2)) - np.float32(np.inf)
     original_weights = np.zeros(len(predictions[0]))
     for i in range(max_jets):
         for j in range(len(predictions)):
