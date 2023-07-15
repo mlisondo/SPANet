@@ -13,6 +13,8 @@ from spanet.network.jet_reconstruction.jet_reconstruction_network import extract
 
 from collections import defaultdict
 
+import datetime
+
 
 def dict_concatenate(tree):
     output = {}
@@ -99,10 +101,13 @@ def evaluate_on_test_dataset(
         sources = tuple(Source(x[0].to(model.device), x[1].to(model.device)) for x in batch.sources)
         outputs = model.forward(sources)
 
+        print('Beginning extract_predictions: ', datetime.datetime.now())
         assignment_indices = extract_predictions([
             np.nan_to_num(assignment.detach().cpu().numpy(), -np.inf)
             for assignment in outputs.assignments
         ])
+        print('Finished extract_predictions: ', datetime.datetime.now())
+
 
         detection_probabilities = np.stack([
             torch.sigmoid(detection).cpu().numpy()
