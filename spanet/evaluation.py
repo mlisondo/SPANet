@@ -7,14 +7,40 @@ from torch.utils._pytree import tree_flatten, tree_unflatten, tree_map
 
 from rich import progress
 
+import time
+
 from spanet import JetReconstructionModel, Options
 from spanet.dataset.types import Evaluation, Outputs, Source
 from spanet.network.jet_reconstruction.jet_reconstruction_network import extract_predictions
 
 from collections import defaultdict
 
-import datetime
+class Timer:
+    def __init__(self):
+        self.start_time = 0
+        self.total_time = 0
+        self.running = False
 
+    def start(self):
+        if not self.running:
+            self.start_time = time.time()
+            self.running = True
+
+    def stop(self):
+        if self.running:
+            self.total_time += time.time() - self.start_time
+            self.running = False
+
+    def reset(self):
+        self.start_time = 0
+        self.total_time = 0
+        self.running = False
+
+    def get_time(self):
+        if self.running:
+            return self.total_time + time.time() - self.start_time
+        else:
+            return self.total_time
 
 def dict_concatenate(tree):
     output = {}
@@ -97,17 +123,17 @@ def evaluate_on_test_dataset(
     if progress:
         dataloader = progress.track(model.test_dataloader(), description="Evaluating Model")
 
+    timer = Timer()
     for batch in dataloader:
         sources = tuple(Source(x[0].to(model.device), x[1].to(model.device)) for x in batch.sources)
         outputs = model.forward(sources)
 
-        print('Beginning extract_predictions: ', datetime.datetime.now())
+        timer.start()
         assignment_indices = extract_predictions([
             np.nan_to_num(assignment.detach().cpu().numpy(), -np.inf)
             for assignment in outputs.assignments
         ])
-        print('Finished extract_predictions: ', datetime.datetime.now())
-
+        timer.stop()
 
         detection_probabilities = np.stack([
             torch.sigmoid(detection).cpu().numpy()
@@ -157,6 +183,8 @@ def evaluate_on_test_dataset(
 
         if return_full_output:
             full_outputs.append(tree_map(lambda x: x.cpu().numpy(), outputs))
+
+    print(f'Total combinatorics time: {timer.get_time()}')
 
     evaluation = Evaluation(
         dict_concatenate(full_assignments),
