@@ -230,8 +230,7 @@ def extract_predictions(predictions: List[TArray]):
     results = np.zeros((len(predictions), len(predictions[0]), max_partons, max_jets*2))
     weights = np.zeros((len(predictions), len(predictions[0]), max_jets*2)) - np.float32(np.inf)
     original_weights = np.zeros((batch_size, max_jets*2))
-    temp_predictions = np.array(predictions).copy()
-    
+    predictions = np.array(predictions)
     for i in prange(max_jets):
         for j in prange(len(predictions)):
             parton_slice = predictions[j,:,:,:,i].copy()
