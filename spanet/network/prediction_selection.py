@@ -236,8 +236,8 @@ def extract_predictions(predictions: List[TArray]):
         for k in range(parton_slice.shape[1]):
             max_indices = np.argmax(parton_slice[k])
             index_3D = np.unravel_index(max_indices, parton_slice[k].shape)
-            original_weights[k, j] = parton_slice[k, index_2D[0], index_2D[1], index_2D[2]]
-            parton_slice[k, index_2D[0], index_2D[1], index_2D[2]] = 999.
+            original_weights[k, j] = parton_slice[k, index_3D[0], index_3D[1], index_3D[2]]
+            parton_slice[k, index_3D[0], index_3D[1], index_3D[2]] = 999.
         temp_predictions = predictions.copy()
         temp_predictions[j,:,:,:,:] = parton_slice
         temp_predictions_list = numba.typed.List([p.reshape((p.shape[0], -1)) for p in temp_predictions])
