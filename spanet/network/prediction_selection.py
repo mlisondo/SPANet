@@ -256,7 +256,7 @@ def extract_predictions(predictions: List[TArray]):
     for j in range(targets):
         original_weights = predictions[j,:,:,:,:].copy()
         for k in range(batch_size):
-            parton_slice, indices = find_max_and_mask(original_weights[j,k])
+            parton_slice, indices = find_max_and_mask(original_weights[k])
         temp_predictions = predictions.copy()
         temp_predictions[j,:,:,:,:] = parton_slice
         temp_predictions_list = numba.typed.List([p.reshape((p.shape[0], -1)) for p in temp_predictions])
