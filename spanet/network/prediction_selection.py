@@ -263,7 +263,10 @@ def extract_predictions(predictions: List[TArray]):
         for l in range(targets):
             for m in range(batch_size):
                 if tuple(result[l, m]) in valid_perms:
+                    print('True')
                     weights[j, m, l] = original_weights[m, result[l,m,0], result[l,m,1], result[l,m,2]]
+                else:
+                    print('False')
         results[:,:,:,j] = result
     
     max_results = np.zeros_like(result)
