@@ -238,8 +238,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
 
         # Take the weighted average of the symmetric loss terms.
         masks = masks.unsqueeze(1)
-        symmetric_losses_product = torch.prod(weights * symmetric_losses, dim=0)
-        symmetric_losses_sum = (symmetric_losses_product).sum(-1) / masks.sum(-1)
+        symmetric_losses = (weights * symmetric_losses).sum(-1) / masks.sum(-1)
         assignment_loss, detection_loss = torch.unbind(symmetric_losses, 1)
 
         # ===================================================================================================
@@ -284,8 +283,10 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         # ===================================================================================================
         # Combine and return the loss
         # ---------------------------------------------------------------------------------------------------
-        total_loss = torch.cat([loss.view(-1) for loss in total_loss])
+        total_loss = torch.prod(total_loss, dim=0)
 
+        total_loss = torch.cat([loss.view(-1) for loss in total_loss])
+        
         self.log("loss/total_loss", total_loss.sum(), sync_dist=True)
 
         return total_loss.mean()
