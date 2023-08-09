@@ -264,7 +264,6 @@ def extract_predictions(predictions: List[TArray]):
         for l in range(targets):
             for m in range(batch_size):
                 weights[l, m, j] = original_weights[m, result[l,m,0], result[l,m,1], result[l,m,2]]
-                print('weights: ', weights[l, m, j])
                 
         results[:,:,:,j] = result
     
