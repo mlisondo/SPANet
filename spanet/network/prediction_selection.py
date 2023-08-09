@@ -227,8 +227,8 @@ def extract_predictions(predictions: List[TArray]):
     batch_size = max(p.shape[0] for p in predictions)
     max_partons = np.max(num_partons)
     
-    results = np.zeros((len(predictions), batch_size, max_partons, len(predictions), max_jets))
-    weights = np.zeros((len(predictions), batch_size, len(predictions), max_jets)) - np.float32(np.inf)
+    results = np.zeros((len(predictions), batch_size, max_partons, len(predictions), max_partons))
+    weights = np.zeros((len(predictions), batch_size, len(predictions), max_partons)) - np.float32(np.inf)
     original_weights = np.zeros((batch_size, len(predictions), max_partons, max_jets))
     
     predictions = np.array(predictions)
@@ -256,7 +256,9 @@ def extract_predictions(predictions: List[TArray]):
             temp_predictions_list = numba.typed.List([p.reshape((p.shape[0], -1)) for p in temp_predictions])
             result, weight = _extract_predictions(temp_predictions_list, num_partons, max_jets, batch_size)
             
-            weights[:,:,j,i] = np.where(weight == 999., original_weights[:, j, i, :], weight)
+            for k in range(len(result)):
+                for l in range(len(result[0])):
+                    weights[k,l,j,i] = original_weights[k, j, i, result[k,l,2]]
             results[:,:,:,j,i] = result
 
     max_results = np.zeros_like(result)
