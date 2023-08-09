@@ -215,8 +215,6 @@ class JetReconstructionTraining(JetReconstructionNetwork):
             batch.assignment_targets
         )
 
-        print('symmetric_losses_size: ', symmetric_losses.size())
-
         # Construct the newly permuted masks based on the minimal permutation found during NLL loss.
         permutations = self.event_permutation_tensor[best_indices].T
         masks = torch.stack([target.mask for target in batch.assignment_targets])
@@ -240,7 +238,8 @@ class JetReconstructionTraining(JetReconstructionNetwork):
 
         # Take the weighted average of the symmetric loss terms.
         masks = masks.unsqueeze(1)
-        symmetric_losses = (weights * symmetric_losses).sum(-1) / masks.sum(-1)
+        symmetric_losses_product = torch.prod(weights * symmetric_losses, dim=0)
+        symmetric_losses_sum = (symmetric_losses_product).sum(-1) / masks.sum(-1)
         assignment_loss, detection_loss = torch.unbind(symmetric_losses, 1)
 
         # ===================================================================================================
