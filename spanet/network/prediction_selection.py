@@ -255,7 +255,7 @@ def extract_predictions(predictions: List[TArray]):
     predictions = np.array(predictions)
     for j in range(targets):
         original_weights = predictions[j,:,:,:,:].copy()
-        for k in range(parton_slice.shape[1]):
+        for k in range(batch_size):
             parton_slice, indices = find_max_and_mask(original_weights[j,k])
         temp_predictions = predictions.copy()
         temp_predictions[j,:,:,:,:] = parton_slice
