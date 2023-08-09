@@ -283,10 +283,12 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         # ===================================================================================================
         # Combine and return the loss
         # ---------------------------------------------------------------------------------------------------
-        total_loss = torch.prod(total_loss, dim=0)
 
         total_loss = torch.cat([loss.view(-1) for loss in total_loss])
-        
-        self.log("loss/total_loss", total_loss.sum(), sync_dist=True)
 
-        return total_loss.mean()
+        reshaped_loss = total_loss.view(NUM_PARTICLES, -1)
+        product_loss = torch.prod(reshaped_loss, dim=0)
+        
+        self.log("loss/total_loss", product_loss.sum(), sync_dist=True)
+
+        return product_loss.mean()
