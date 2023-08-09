@@ -272,9 +272,7 @@ def extract_predictions(predictions: List[TArray]):
     for i in prange(batch_size):
         temp_weight = weights[:,i,:]
         new_product = np.prod(np.exp(temp_weight), axis=0)
-        print('temp_weight: ', temp_weight)
         indx = np.argmax(new_product)
-        print('new_product: ', new_product)
         max_results[:,i,:] = results[:,i,:,indx]
             
     return [max_result[:, :partons] for max_result, partons in zip(max_results, num_partons)]
