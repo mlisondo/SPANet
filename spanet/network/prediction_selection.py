@@ -11,6 +11,8 @@ TArray = np.ndarray
 TFloat32 = numba.types.float32
 TInt64 = numba.types.int64
 
+TIndices = numba.typed.typedlist.ListType(TInt64[::1])
+
 TPrediction = numba.typed.typedlist.ListType(TFloat32[::1])
 TPredictions = numba.typed.typedlist.ListType(TFloat32[:, ::1])
 
@@ -222,7 +224,7 @@ def _extract_predictions(predictions, num_partons, max_jets, batch_size):
 
     return np.ascontiguousarray(output.transpose((1, 0, 2))), np.ascontiguousarray(weight.transpose((1, 0)))
 
-@njit((TArray, TInt64, TInt64, TInt64)(TArray))
+@njit((TArray, TIndices)(TArray))
 def find_max_and_mask(matrix, max_jets):
     flat_matrix = matrix.flatten()
 
