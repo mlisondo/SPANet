@@ -263,13 +263,13 @@ def extract_predictions(predictions: List[TArray]):
         for l in range(targets):
             for m in range(batch_size):
                 if tuple(result[l, m]) in valid_perms:
-                    weights[l, m, j] = original_weights[m, result[l,m,0], result[l,m,1], result[l,m,2]]
+                    weights[j, m, l] = original_weights[m, result[l,m,0], result[l,m,1], result[l,m,2]]
         results[:,:,:,j] = result
     
     max_results = np.zeros_like(result)
-    for i in prange(results.shape[1]):
+    for i in prange(batch_size):
         temp_weight = weights[:,i,:]
-        new_prod = np.prod(np.exp(temp_weight), axis=1)
+        new_prod = np.prod(np.exp(temp_weight), axis=0)
         indx = np.argmax(new_prod)
         max_results[:,i,:] = results[:,i,:,indx]
             
