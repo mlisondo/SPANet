@@ -237,7 +237,7 @@ def find_max_and_mask(matrix):
     matrix[indices] = 999
 
     # Handle the cube diagonal symmetry
-    symmetric_indices = permutations(i, j, k)
+    symmetric_indices = permutations(indices)
     for permutation in symmetric_indices:
         matrix[permutation] = 999
 
