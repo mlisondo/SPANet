@@ -233,7 +233,7 @@ def extract_predictions(predictions: List[TArray]):
     
     predictions = np.array(predictions)
 
-    print('0th pred: ', predicitions[0,0])
+    print('0th pred: ', predictions[0,0])
     print('1st pred: ', predictions[1,0])
 
     for i in range(max_partons):
