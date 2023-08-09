@@ -233,6 +233,9 @@ def extract_predictions(predictions: List[TArray]):
     
     predictions = np.array(predictions)
 
+    print('0th pred: ', predicitions[0,0])
+    print('1st pred: ', predictions[1,0])
+
     for i in range(max_partons):
         for j in range(len(predictions)):
             parton_slice = predictions[j,:,:,:,:].copy()
