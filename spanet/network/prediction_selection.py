@@ -264,10 +264,11 @@ def extract_predictions(predictions: List[TArray]):
         for l in range(targets):
             for m in range(batch_size):
                 current_list = list(result[l, m])
-                print(current_list)
-                print(valid_perms)
-                print(type(current_list[0]), type(valid_perms[0][0]))
-                if tuple(result[l, m]) in valid_perms:
+                is_match = any(all(a == b for a, b in zip(current_list, perm)) for perm in valid_perms)
+                # print(current_list)
+                # print(valid_perms)
+                # print(type(current_list[0]), type(valid_perms[0][0]))
+                if is_match:
                     print('True')
                     weights[j, m, l] = original_weights[m, result[l,m,0], result[l,m,1], result[l,m,2]]
                 else:
