@@ -256,15 +256,16 @@ def extract_predictions(predictions: List[TArray]):
         temp_predictions = predictions.copy()
         for k in range(batch_size):
             parton_slice, indx1, indx2, indx3 = find_max_and_mask(original_weights[k])
+            print('parton slice: ', parton_slice[indx1, indx2, indx3])
             temp_predictions[j,k,:,:,:] = parton_slice
         temp_predictions_list = numba.typed.List([p.reshape((p.shape[0], -1)) for p in temp_predictions])
         result, weight = _extract_predictions(temp_predictions_list, num_partons, max_jets, batch_size)
         valid_perms = [[indx1, indx2, indx3], [indx2, indx1, indx3]]
         for l in range(targets):
             for m in range(batch_size):
-                print('before: ', weights[l,m,j])
+                # print('before: ', weights[l,m,j])
                 weights[l, m, j] = original_weights[m, result[l,m,0], result[l,m,1], result[l,m,2]]
-                print('after: ', weights[l,m,j])
+                # print('after: ', weights[l,m,j])
                 # current_list = list(result[l, m])
                 # is_match = any(all(a == b for a, b in zip(current_list, perm)) for perm in valid_perms)
                 # # print(current_list)
