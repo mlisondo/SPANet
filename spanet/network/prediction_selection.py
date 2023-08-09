@@ -225,21 +225,22 @@ def _extract_predictions(predictions, num_partons, max_jets, batch_size):
     return np.ascontiguousarray(output.transpose((1, 0, 2))), np.ascontiguousarray(weight.transpose((1, 0)))
 
 def find_max_and_mask(matrix):
+    new_matrix = matrix.copy()
     # Find the index of the maximum value
-    index = np.argmax(matrix)
+    index = np.argmax(new_matrix)
     
     # Convert the flat index back to 3D indices
-    indices = np.unravel_index(index, matrix.shape)
+    indices = np.unravel_index(index, new_matrix.shape)
     
     # Replace the found value with 999
-    matrix[indices] = 999
+    new_matrix[indices] = 999
     
     # Handle the i-j swap symmetry
     i, j, k = indices
     symmetric_index = (j, i, k)
-    matrix[symmetric_index] = 999
+    new_matrix[symmetric_index] = 999
     
-    return matrix, i, j, k
+    return new_matrix, i, j, k
 
 def extract_predictions(predictions: List[TArray]):
     num_partons = np.array([len(p.shape) - 1 for p in predictions])
