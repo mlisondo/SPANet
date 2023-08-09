@@ -245,6 +245,8 @@ def extract_predictions(predictions: List[TArray]):
                     index_2D = np.unravel_index(max_indices, (parton_slice[k].shape[i], parton_slice[k].shape[i+2]))
                 else:
                     index_2D = np.unravel_index(max_indices, (parton_slice[k].shape[i], parton_slice[k].shape[i+1]))
+
+                print('index_2d: ', index_2D)
                 
                 if i == 0:
                     original_weights[k, j, i, :] = parton_slice[k, :, index_2D[0], index_2D[1]]
