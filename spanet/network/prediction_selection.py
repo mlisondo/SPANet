@@ -224,7 +224,6 @@ def _extract_predictions(predictions, num_partons, max_jets, batch_size):
 
     return np.ascontiguousarray(output.transpose((1, 0, 2))), np.ascontiguousarray(weight.transpose((1, 0)))
 
-@njit(numba.types.Tuple((TArray, TIndices))(TArray))
 def find_max_and_mask(matrix):
     flat_matrix = matrix.flatten()
 
