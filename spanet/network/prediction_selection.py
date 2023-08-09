@@ -225,23 +225,21 @@ def _extract_predictions(predictions, num_partons, max_jets, batch_size):
     return np.ascontiguousarray(output.transpose((1, 0, 2))), np.ascontiguousarray(weight.transpose((1, 0)))
 
 def find_max_and_mask(matrix):
-    flat_matrix = matrix.flatten()
-
     # Find the index of the maximum value
-    index = np.argmax(flat_matrix)
-
+    index = np.argmax(matrix)
+    
     # Convert the flat index back to 3D indices
     indices = np.unravel_index(index, matrix.shape)
-
+    
     # Replace the found value with 999
     matrix[indices] = 999
-
-    # Handle the cube diagonal symmetry
-    symmetric_indices = permutations(indices)
-    for permutation in symmetric_indices:
-        matrix[permutation] = 999
-
-    return matrix, indices
+    
+    # Handle the i-j swap symmetry
+    i, j, k = indices
+    symmetric_index = (j, i, k)
+    matrix[symmetric_index] = 999
+    
+    return matrix, i, j, k
 
 def extract_predictions(predictions: List[TArray]):
     num_partons = np.array([len(p.shape) - 1 for p in predictions])
@@ -257,11 +255,11 @@ def extract_predictions(predictions: List[TArray]):
         original_weights = predictions[j,:,:,:,:].copy()
         temp_predictions = predictions.copy()
         for k in range(batch_size):
-            parton_slice, indices = find_max_and_mask(original_weights[k])
+            parton_slice, indx1, indx2, indx3 = find_max_and_mask(original_weights[k])
             temp_predictions[j,k,:,:,:] = parton_slice
         temp_predictions_list = numba.typed.List([p.reshape((p.shape[0], -1)) for p in temp_predictions])
         result, weight = _extract_predictions(temp_predictions_list, num_partons, max_jets, batch_size)
-        valid_perms = set(permutations(indices))
+        valid_perms = [[indx1, indx2, indx3], [indx2, indx1, indx3]]
         for l in range(targets):
             for m in range(batch_size):
                 if tuple(result[l, m]) in valid_perms:
