@@ -263,6 +263,8 @@ def extract_predictions(predictions: List[TArray]):
         for l in range(targets):
             for m in range(batch_size):
                 weights[l, m, j] = original_weights[m, result[l,m,0], result[l,m,1], result[l,m,2]]
+        print(original_weights)
+        print(weights[:,:,j])
                 # current_list = list(result[l, m])
                 # is_match = any(all(a == b for a, b in zip(current_list, perm)) for perm in valid_perms)
                 # # print(current_list)
