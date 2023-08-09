@@ -227,9 +227,9 @@ def extract_predictions(predictions: List[TArray]):
     batch_size = max(p.shape[0] for p in predictions)
     max_partons = np.max(num_partons)
     
-    results = np.zeros((len(predictions), len(predictions[0]), max_partons, len(predictions), max_partons))
-    weights = np.zeros((len(predictions), len(predictions[0]), len(predictions), max_partons)) - np.float32(np.inf)
-    original_weights = np.zeros((batch_size, len(predictions), max_partons))
+    results = np.zeros((len(predictions), batch_size, max_partons, len(predictions), max_jets))
+    weights = np.zeros((len(predictions), batch_size, len(predictions), max_jets)) - np.float32(np.inf)
+    original_weights = np.zeros((batch_size, len(predictions), max_partons, max_jets))
     
     predictions = np.array(predictions)
 
@@ -239,16 +239,21 @@ def extract_predictions(predictions: List[TArray]):
             
             for k in range(parton_slice.shape[1]):
                 max_indices = np.argmax(parton_slice[k], axis=i+1)
-                index_2D = np.unravel_index(max_indices, (parton_slice[k].shape[i+1], parton_slice[k].shape[i+2]))
+                if i == 0:
+                    index_2D = np.unravel_index(max_indices, (parton_slice[k].shape[i+1], parton_slice[k].shape[i+2]))
+                elif i == 1:
+                    index_2D = np.unravel_index(max_indices, (parton_slice[k].shape[i], parton_slice[k].shape[i+2]))
+                else:
+                    index_2D = np.unravel_index(max_indices, (parton_slice[k].shape[i], parton_slice[k].shape[i+1]))
                 
                 if i == 0:
-                    original_weights[k, j, i] = parton_slice[k, :, index_2D[0], index_2D[1]]
+                    original_weights[k, j, i, :] = parton_slice[k, :, index_2D[0], index_2D[1]]
                     parton_slice[k, :, index_2D[0], index_2D[1]] = 999.
                 elif i == 1:
-                    original_weights[k, j, i] = parton_slice[k, index_2D[0], :, index_2D[1]]
+                    original_weights[k, j, i, :] = parton_slice[k, index_2D[0], :, index_2D[1]]
                     parton_slice[k, index_2D[0], :, index_2D[1]] = 999.
                 elif i == 2:
-                    original_weights[k, j, i] = parton_slice[k, index_2D[0], index_2D[1], :]
+                    original_weights[k, j, i, :] = parton_slice[k, index_2D[0], index_2D[1], :]
                     parton_slice[k, index_2D[0], index_2D[1], :] = 999.
             
             temp_predictions = predictions.copy()
@@ -256,13 +261,14 @@ def extract_predictions(predictions: List[TArray]):
             temp_predictions_list = numba.typed.List([p.reshape((p.shape[0], -1)) for p in temp_predictions])
             result, weight = _extract_predictions(temp_predictions_list, num_partons, max_jets, batch_size)
             
-            weights[:,:,j,i] = np.where(weight == 999., original_weights[:, j, i], weight)
+            weights[:,:,j,i] = np.where(weight == 999., original_weights[:, j, i, :], weight)
             results[:,:,:,j,i] = result
 
     max_results = np.zeros_like(result)
 
     weights = weights.reshape(weights.shape[0], weights.shape[1], weights.shape[2]*weights.shape[3])
     results = results.reshape(results.shape[0], results.shape[1], results.shape[2], results.shape[3]*results.shape[4])
+
     for i in prange(results.shape[1]):
         temp_weight = weights[:,i,:]
         new_prod = np.prod(np.exp(temp_weight), axis=0)
