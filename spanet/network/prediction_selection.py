@@ -260,6 +260,7 @@ def extract_predictions(predictions: List[TArray]):
         temp_predictions_list = numba.typed.List([p.reshape((p.shape[0], -1)) for p in temp_predictions])
         result, weight = _extract_predictions(temp_predictions_list, num_partons, max_jets, batch_size)
         valid_perms = [[indx1, indx2, indx3], [indx2, indx1, indx3]]
+        print('resultshape: ', result.shape)
         for l in range(targets):
             for m in range(batch_size):
                 current_list = list(result[l, m])
