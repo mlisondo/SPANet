@@ -11,7 +11,7 @@ TArray = np.ndarray
 TFloat32 = numba.types.float32
 TInt64 = numba.types.int64
 
-TIndices = numba.typed.typedlist.ListType(TInt64[::1])
+TIndices = numba.types.UniTuple(TInt64, 3)
 
 TPrediction = numba.typed.typedlist.ListType(TFloat32[::1])
 TPredictions = numba.typed.typedlist.ListType(TFloat32[:, ::1])
