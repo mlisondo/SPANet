@@ -260,19 +260,18 @@ def extract_predictions(predictions: List[TArray]):
         temp_predictions_list = numba.typed.List([p.reshape((p.shape[0], -1)) for p in temp_predictions])
         result, weight = _extract_predictions(temp_predictions_list, num_partons, max_jets, batch_size)
         valid_perms = [[indx1, indx2, indx3], [indx2, indx1, indx3]]
-        print('resultshape: ', result.shape)
         for l in range(targets):
             for m in range(batch_size):
-                current_list = list(result[l, m])
-                is_match = any(all(a == b for a, b in zip(current_list, perm)) for perm in valid_perms)
-                # print(current_list)
-                # print(valid_perms)
-                # print(type(current_list[0]), type(valid_perms[0][0]))
-                if is_match:
-                    print('True')
-                    weights[j, m, l] = original_weights[m, result[l,m,0], result[l,m,1], result[l,m,2]]
-                else:
-                    print('False')
+                weights[l, m, j] = original_weights[m, result[l,m,0], result[l,m,1], result[l,m,2]]
+                # current_list = list(result[l, m])
+                # is_match = any(all(a == b for a, b in zip(current_list, perm)) for perm in valid_perms)
+                # # print(current_list)
+                # # print(valid_perms)
+                # # print(type(current_list[0]), type(valid_perms[0][0]))
+                # if is_match:
+                #     weights[l, m, j] = original_weights[m, result[l,m,0], result[l,m,1], result[l,m,2]]
+                # else:
+                #     weights[l, m, j] = parton_slice[l,m]
         results[:,:,:,j] = result
     
     max_results = np.zeros_like(result)
