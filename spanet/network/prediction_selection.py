@@ -258,6 +258,8 @@ def extract_predictions(predictions: List[TArray]):
             parton_slice, indx1, indx2, indx3 = find_max_and_mask(original_weights[k])
             print('parton slice: ', parton_slice[indx1, indx2, indx3])
             print('original slice: ', original_weights[k, indx1, indx2, indx3])
+            print('parton slice swap: ', parton_slice[indx2, indx1, indx3])
+            print('original slice swap: ', original_weights[k, indx2, indx1, indx3])
             temp_predictions[j,k,:,:,:] = parton_slice
         temp_predictions_list = numba.typed.List([p.reshape((p.shape[0], -1)) for p in temp_predictions])
         result, weight = _extract_predictions(temp_predictions_list, num_partons, max_jets, batch_size)
