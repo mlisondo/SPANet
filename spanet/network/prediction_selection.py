@@ -262,6 +262,8 @@ def extract_predictions(predictions: List[TArray]):
         valid_perms = [[indx1, indx2, indx3], [indx2, indx1, indx3]]
         for l in range(targets):
             for m in range(batch_size):
+                print(tuple(result[l,m]))
+                print(valid_perms)
                 if tuple(result[l, m]) in valid_perms:
                     print('True')
                     weights[j, m, l] = original_weights[m, result[l,m,0], result[l,m,1], result[l,m,2]]
