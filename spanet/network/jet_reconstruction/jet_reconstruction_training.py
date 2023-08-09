@@ -55,9 +55,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
             )
 
             # The loss for a single permutation is the sum of particle losses.
-            # Modified to take the product of the two probability assignments
-            current_permutation_loss_product = torch.stack(current_permutation_loss).prod(dim=0) + 1e-6
-            symmetric_losses.append(current_permutation_loss_product)
+            symmetric_losses.append(torch.stack(current_permutation_loss))
 
         # Shape: (NUM_PERMUTATIONS, NUM_PARTICLES, 2, BATCH_SIZE)
         return torch.stack(symmetric_losses)
@@ -71,17 +69,17 @@ class JetReconstructionTraining(JetReconstructionNetwork):
 
         combined_loss = torch.gather(symmetric_losses, 0, index.expand_as(symmetric_losses))[0]
 
-        # Simple average of all losses as a baseline.
-        if self.options.combine_pair_loss.lower() == "mean":
-            combined_loss = symmetric_losses.mean(0)
+        # # Simple average of all losses as a baseline.
+        # if self.options.combine_pair_loss.lower() == "mean":
+        #     combined_loss = symmetric_losses.mean(0)
 
-        # Soft minimum function to smoothly fuse all loss function weighted by their size.
-        if self.options.combine_pair_loss.lower() == "softmin":
-            weights = F.softmin(total_symmetric_loss, 0)
-            weights = weights.unsqueeze(1).unsqueeze(1)
-            combined_loss = (weights * symmetric_losses).sum(0)
+        # # Soft minimum function to smoothly fuse all loss function weighted by their size.
+        # if self.options.combine_pair_loss.lower() == "softmin":
+        #     weights = F.softmin(total_symmetric_loss, 0)
+        #     weights = weights.unsqueeze(1).unsqueeze(1)
+        #     combined_loss = (weights * symmetric_losses).sum(0)
 
-        return combined_loss, index
+        return symmetric_losses.prod(0), index
 
     def symmetric_losses(
         self,
