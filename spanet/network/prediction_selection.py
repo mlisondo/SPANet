@@ -279,7 +279,7 @@ def extract_predictions(predictions: List[TArray]):
         print('results0: ', results[:,i,:,0])
         print('results1: ', results[:,i,:,1])
         max_results[:,i,:] = results[:,i,:,indx]
-        print('max_results0: ', max_results[:,i,0])
-        print('max_results1: ', max_results[:,i,1])
+        print('max_results0: ', max_results[0,i,:])
+        print('max_results1: ', max_results[1,i,:])
             
     return [max_result[:, :partons] for max_result, partons in zip(max_results, num_partons)]
