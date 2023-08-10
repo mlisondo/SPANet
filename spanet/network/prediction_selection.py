@@ -244,7 +244,7 @@ def extract_predictions(predictions: List[TArray]):
             temp_predictions_list = numba.typed.List([p.reshape((p.shape[0], -1)) for p in temp_predictions])
             result, weight = _extract_predictions(temp_predictions_list, num_partons, max_jets, batch_size)
             weights[:,:,i+i*j] = np.where(weight == 999., original_weights[:, i+i*j], weight)
-            results[:,:,:,i+i*j] = result
+            results[:,:,:,i+i*j] = result.copy()
     
     max_results = np.zeros_like(result)
     for i in prange(results.shape[1]):
