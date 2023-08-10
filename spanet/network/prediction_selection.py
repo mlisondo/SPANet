@@ -239,6 +239,9 @@ def find_max_and_mask(matrix):
     i, j, k = indices
     symmetric_index = (j, i, k)
     new_matrix[symmetric_index] = 999
+
+    print('new_matrix_index: ', new_matrix[indices])
+    print('new_matrix_symtr: ', new_matrix[symmetric_index])
     
     return new_matrix, i, j, k
 
