@@ -269,6 +269,7 @@ def extract_predictions(predictions: List[TArray]):
         for l in range(targets):
             for m in range(batch_size):
                 weights[l, m, j] = original_weights[l, result[l,m,0], result[l,m,1], result[l,m,2]]
+        print(weights[:,:,j])
         results[:,:,:,j] = result.copy()
     
     max_results = np.zeros_like(result)
