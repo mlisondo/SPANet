@@ -231,17 +231,17 @@ def find_max_and_mask(matrix):
     
     # Convert the flat index back to 3D indices
     indices = np.unravel_index(index, new_matrix.shape)
-    
+    print('new_matrix_index: ', new_matrix[indices])
+ 
     # Replace the found value with 999
     new_matrix[indices] = 999
     
     # Handle the i-j swap symmetry
     i, j, k = indices
     symmetric_index = (j, i, k)
+    print('new_matrix_symtr: ', new_matrix[symmetric_index])
     new_matrix[symmetric_index] = 999
 
-    print('new_matrix_index: ', new_matrix[indices])
-    print('new_matrix_symtr: ', new_matrix[symmetric_index])
     
     return new_matrix, i, j, k
 
