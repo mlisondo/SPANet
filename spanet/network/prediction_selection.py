@@ -270,13 +270,16 @@ def extract_predictions(predictions: List[TArray]):
     max_results = np.zeros_like(result)
     for i in prange(batch_size):
         temp_weight = weights[:,i,:]
-        print('temp_weight: ', temp_weight)
+        print('temp_weight0: ', temp_weight[:,i,0])
+        print('temp_weight1: ', temp_weight[:,i,1])
         new_product = np.prod(np.exp(temp_weight), axis=0)
         print('new_product: ', new_product)
         indx = np.argmax(new_product)
         print('indx: ', indx)
-        print('results: ', results[:,i,:,:])
+        print('results0: ', results[:,i,:,0])
+        print('results1: ', results[:,i,:,1])
         max_results[:,i,:] = results[:,i,:,indx]
-        print('max_results: ', max_results[:,i,:])
+        print('max_results0: ', max_results[:,i,0])
+        print('max_results1: ', max_results[:,i,1])
             
     return [max_result[:, :partons] for max_result, partons in zip(max_results, num_partons)]
