@@ -253,20 +253,20 @@ def extract_predictions(predictions: List[TArray]):
     results = np.zeros((targets, batch_size, max_partons, targets))
     weights = np.zeros((targets, batch_size, targets)) - np.float32(np.inf)
     predictions = np.array(predictions)
-    indices = np.zeros((batch_size, max_partons))
+    # indices = np.zeros((batch_size, max_partons))
     for j in range(targets):
         original_weights = predictions[j,:,:,:,:].copy()
         temp_predictions = predictions.copy()
         for k in range(batch_size):
             parton_slice, indx1, indx2, indx3 = find_max_and_mask(original_weights[k])
-            indices[k] = np.array((indx1, indx2, indx3))
+            # indices[k] = np.array((indx1, indx2, indx3))
             temp_predictions[j,k,:,:,:] = parton_slice
         temp_predictions_list = numba.typed.List([p.reshape((p.shape[0], -1)) for p in temp_predictions])
         result, weight = _extract_predictions(temp_predictions_list, num_partons, max_jets, batch_size)
         weights[:,:,j] = weight.copy()
-        for l in range(batch_size):
-            weights[:, l, j] = np.where(weights[:,l,j] == 999., original_weights[l, indices[k,0], indices[k,1], indices[k,2]], weights[:, l, j])
-                
+        for l in range(targets):
+            for m in range(batch_size):
+                weights[l, m, j] = original_weights[l, result[l,m,0], result[l,m,1], result[l,m,2]]
         results[:,:,:,j] = result.copy()
     
     max_results = np.zeros_like(result)
