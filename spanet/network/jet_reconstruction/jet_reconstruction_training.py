@@ -285,10 +285,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         # ---------------------------------------------------------------------------------------------------
 
         total_loss = torch.cat([loss.view(-1) for loss in total_loss])
-
-        reshaped_loss = total_loss.view(assignment_loss.size(0), -1)
-        product_loss = torch.sqrt(torch.prod(reshaped_loss, dim=0))
         
-        self.log("loss/total_loss", product_loss.sum(), sync_dist=True)
+        self.log("loss/total_loss", total_loss.sum(), sync_dist=True)
 
-        return product_loss.mean()
+        return total_loss.mean()
