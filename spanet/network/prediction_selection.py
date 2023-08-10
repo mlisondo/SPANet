@@ -259,7 +259,7 @@ def extract_predictions(predictions: List[TArray]):
         temp_predictions = predictions.copy()
         for k in range(batch_size):
             parton_slice, indx1, indx2, indx3 = find_max_and_mask(original_weights[k])
-            indices[k] = [indx1, indx2, indx3]
+            indices[k] = np.array(indx1, indx2, indx3)
             temp_predictions[j,k,:,:,:] = parton_slice
         temp_predictions_list = numba.typed.List([p.reshape((p.shape[0], -1)) for p in temp_predictions])
         result, weight = _extract_predictions(temp_predictions_list, num_partons, max_jets, batch_size)
