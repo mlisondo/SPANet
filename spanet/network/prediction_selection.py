@@ -263,27 +263,16 @@ def extract_predictions(predictions: List[TArray]):
             temp_predictions[j,k,:,:,:] = parton_slice
         temp_predictions_list = numba.typed.List([p.reshape((p.shape[0], -1)) for p in temp_predictions])
         result, weight = _extract_predictions(temp_predictions_list, num_partons, max_jets, batch_size)
-        print('result: ', result)
-        print('weight: ', weight)
         weights[:,:,j] = weight.copy()
         for m in range(batch_size):
             weights[j, m, j] = original_weights[m, indices[m,0], indices[m,1], indices[m,2]]
-        print(weights[:,:,j])
         results[:,:,:,j] = result.copy()
     
     max_results = np.zeros_like(result)
     for i in prange(batch_size):
         temp_weight = weights[:,i,:]
-        print('temp_weight0: ', temp_weight[:,0])
-        print('temp_weight1: ', temp_weight[:,1])
         new_product = np.prod(np.exp(temp_weight), axis=0)
-        print('new_product: ', new_product)
         indx = np.argmax(new_product)
-        print('indx: ', indx)
-        print('results0: ', results[:,i,:,0])
-        print('results1: ', results[:,i,:,1])
         max_results[:,i,:] = results[:,i,:,indx]
-        print('max_results0: ', max_results[0,i,:])
-        print('max_results1: ', max_results[1,i,:])
             
     return [max_result[:, :partons] for max_result, partons in zip(max_results, num_partons)]
