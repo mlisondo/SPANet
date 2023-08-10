@@ -231,7 +231,6 @@ def find_max_and_mask(matrix):
     
     # Convert the flat index back to 3D indices
     indices = np.unravel_index(index, new_matrix.shape)
-    print('new_matrix_index: ', new_matrix[indices])
  
     # Replace the found value with 999
     new_matrix[indices] = 999
@@ -239,7 +238,6 @@ def find_max_and_mask(matrix):
     # Handle the i-j swap symmetry
     i, j, k = indices
     symmetric_index = (j, i, k)
-    print('new_matrix_symtr: ', new_matrix[symmetric_index])
     new_matrix[symmetric_index] = 999
 
     
@@ -255,20 +253,21 @@ def extract_predictions(predictions: List[TArray]):
     results = np.zeros((targets, batch_size, max_partons, targets))
     weights = np.zeros((targets, batch_size, targets)) - np.float32(np.inf)
     predictions = np.array(predictions)
+    indices = np.array(batch_size, max_partons)
     for j in range(targets):
         original_weights = predictions[j,:,:,:,:].copy()
         temp_predictions = predictions.copy()
         for k in range(batch_size):
             parton_slice, indx1, indx2, indx3 = find_max_and_mask(original_weights[k])
+            indices[k] = [indx1, indx2, indx3]
             temp_predictions[j,k,:,:,:] = parton_slice
         temp_predictions_list = numba.typed.List([p.reshape((p.shape[0], -1)) for p in temp_predictions])
         result, weight = _extract_predictions(temp_predictions_list, num_partons, max_jets, batch_size)
-        valid_perms = [[indx1, indx2, indx3], [indx2, indx1, indx3]]
-        for l in range(targets):
-            for m in range(batch_size):
-                weights[l, m, j] = original_weights[m, result[l,m,0], result[l,m,1], result[l,m,2]]
+        weights[:,:,j] = weight.copy()
+        for l in range(batch_size):
+            weights[:, l, j] = np.where(weights[:,l,j] == 999., original_weights[l, indices[k,0], indices[k,1], indices[k,2]], weights[:, l, j])
                 
-        results[:,:,:,j] = result
+        results[:,:,:,j] = result.copy()
     
     max_results = np.zeros_like(result)
     for i in prange(batch_size):
