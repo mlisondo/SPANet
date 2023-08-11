@@ -110,15 +110,14 @@ class SymmetricEvaluator:
     def event_purity(self, predictions, target_jets, target_masks):
         target_masks = np.stack(target_masks)
 
-        best_accuracy = np.zeros((len(predictions[0][0][0]), target_masks.shape[1]), dtype=np.int)
+        best_accuracy = np.zeros((predictions[0].shape[-1], target_masks.shape[1]), dtype=np.int)
 
-        for pred_idx in range(len(predictions[0][0][0])):
-            current_prediction = predictions[0][0][0][d_idx]
+        for pred_idx in range(predictions[0].shape[-1]):
             for target_permutation in self.event_info.event_permutation_group:
                 permuted_targets = self.permute_arrays(target_jets, target_permutation)
                 permuted_mask = self.permute_arrays(target_masks, target_permutation)
-                accuracy = np.array([(p == t).all(-1) * m
-                                    for p, t, m in zip(current_prediction, permuted_targets, permuted_mask)])
+                accuracy = np.array([(p[...,pred_idx] == t).all(-1) * m
+                                    for p, t, m in zip(current_prediction[, permuted_targets, permuted_mask)])
                 accuracy = accuracy.sum(0)
     
                 best_accuracy[pred_idx] = np.maximum(accuracy, best_accuracy[pred_idx])
