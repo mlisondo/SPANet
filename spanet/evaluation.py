@@ -156,8 +156,8 @@ def evaluate_on_test_dataset(
             assignment_indices,
             model.event_info.product_symbolic_groups.values()
         ):
-            batch_size = assignment.shape[1]
-            dummy_index = torch.arange(batch_size).unsqueeze(-1).repeat(1, assignment.shape[-1]).unsqueeze(0)
+            batch_size = assignment.shape[0]
+            dummy_index = torch.arange(batch_size).unsqueeze(-1).repeat(1, assignment.shape[-1])
             # Get the probability of the best assignment.
             # Have to use explicit function call here to construct index dynamically.
             assignment_probability = assignment_probability.__getitem__((dummy_index, *assignment.transpose(1, 0, 2)))
