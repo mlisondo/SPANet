@@ -151,7 +151,7 @@ def evaluate_on_test_dataset(
         }
 
         assignment_probabilities = []
-        dummy_index = torch.arange(assignment_indices[0].shape[0]).unsqueeze(0).repeat(1, 0)
+        dummy_index = torch.arange(assignment_indices[0].shape[0]).unsqueeze(-1).repeat(1, assignment_indices[0].shape[-1])
         for assignment_probability, assignment, symmetries in zip(
             outputs.assignments,
             assignment_indices,
