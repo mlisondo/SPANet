@@ -159,6 +159,8 @@ def evaluate_on_test_dataset(
         ):
             # Get the probability of the best assignment.
             # Have to use explicit function call here to construct index dynamically.
+            print('assignment_shape: ', assignment.shape)
+            print('dummy_index_shape: ', dummy_index.shape)
             assignment_probability = assignment_probability.__getitem__((dummy_index, *assignment.transpose(2, 1, 0)))
 
             # Convert from log-probability to probability.
