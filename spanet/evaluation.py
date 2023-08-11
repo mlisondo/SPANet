@@ -159,7 +159,8 @@ def evaluate_on_test_dataset(
         ):
             # Get the probability of the best assignment.
             # Have to use explicit function call here to construct index dynamically.
-            assignment_probability = assignment_probability.__getitem__((dummy_index, *assignment.T))
+            expanded_dummy_index = dummy_index[:, None]
+            assignment_probability = assignment_probability.__getitem__((expanded_dummy_index, *assignment.transpose(1, 2, 0)))
 
             # Convert from log-probability to probability.
             assignment_probability = torch.exp(assignment_probability)
