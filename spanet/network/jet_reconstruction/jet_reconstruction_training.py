@@ -67,7 +67,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         sym_losses = []
         for idx in range(symmetric_losses.size(-1)):
             sym_losses.append(symmetric_losses[...,idx].sum((1, 2)))
-        total_symmetric_loss = torch.vstack((l for l in sym_losses)).max(axis=0)
+        total_symmetric_loss = torch.vstack((l for l in sym_losses)).min(axis=0)
         index = total_symmetric_loss.argmin(0)
 
         combined_loss = torch.gather(symmetric_losses, 0, index.expand_as(symmetric_losses))[0]
