@@ -117,7 +117,7 @@ class SymmetricEvaluator:
                 permuted_targets = self.permute_arrays(target_jets, target_permutation)
                 permuted_mask = self.permute_arrays(target_masks, target_permutation)
                 accuracy = np.array([(p[...,pred_idx] == t).all(-1) * m
-                                    for p, t, m in zip(current_prediction[, permuted_targets, permuted_mask)])
+                                    for p, t, m in zip(predictions, permuted_targets, permuted_mask)])
                 accuracy = accuracy.sum(0)
     
                 best_accuracy[pred_idx] = np.maximum(accuracy, best_accuracy[pred_idx])
