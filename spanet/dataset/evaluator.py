@@ -81,9 +81,9 @@ class SymmetricEvaluator:
             cluster_predictions = np.stack([predictions[i] for i in cluster_indices])
 
             # Keep track of the best accuracy achieved for each event
-            best_accuracy = np.zeros((predictions.shape[-1], cluster_target_masks.shape[1]), dtype=np.int)
+            best_accuracy = np.zeros((predictions[0].shape[-1], cluster_target_masks.shape[1]), dtype=np.int)
     
-            for pred_idx in range(predictions.shape[-1]):
+            for pred_idx in range(predictions[0].shape[-1]):
                 current_prediction = cluster_predictions[..., pred_idx]
                 for target_permutation in permutations(range(len(cluster_indices))):
                     target_permutation = list(target_permutation)
