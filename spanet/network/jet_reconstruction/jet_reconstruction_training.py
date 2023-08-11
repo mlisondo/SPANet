@@ -64,7 +64,10 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         # Default option is to find the minimum loss term of the symmetric options.
         # We also store which permutation we used to achieve that minimal loss.
         # combined_loss, _ = symmetric_losses.min(0)
-        total_symmetric_loss = symmetric_losses.sum((1, 2))
+        sym_losses = []
+        for idx in range(symmetric_losses.size(-1)):
+            sym_losses.append(symmetric_losses[...,idx].sum((1, 2)))
+        total_symmetric_loss = torch.vstack((l for l in sym_losses)).max(axis=0)
         index = total_symmetric_loss.argmin(0)
 
         combined_loss = torch.gather(symmetric_losses, 0, index.expand_as(symmetric_losses))[0]
@@ -96,8 +99,12 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         # Convert the targets into a numpy array of tensors so we can use fancy indexing from numpy
         targets = numpy_tensor_array(targets)
 
-        # Compute the loss on every valid permutation of the targets
-        symmetric_losses = self.compute_symmetric_losses(assignments, detections, targets)
+        symmetric_losses = []
+        for indx in range(assignments.size(-1)):
+            assignment_layer = assignments[...,indx]
+            # Compute the loss on every valid permutation of the targets
+            symmetric_losses.append(self.compute_symmetric_losses(assignment_layer, detections, targets))
+        symmetric_losses = torch.stack((symmetric_loss for symmetric_loss in symmetric_losses), dim=-1)
 
         # Squash the permutation losses into a single value.
         return self.combine_symmetric_losses(symmetric_losses)
