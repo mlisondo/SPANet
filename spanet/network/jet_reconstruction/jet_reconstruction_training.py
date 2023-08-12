@@ -50,7 +50,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         
         # Now, you can combine them as per your requirement. 
         # Assuming you want to multiply the groups:
-        combined_groups = [torch.prod(g, dim=0) for g in groups]
+        combined_groups = [torch.pow(torch.prod(g, dim=0), 1/group_size) for g in groups]
         
         # Stack the combined groups together to get the final tensor
         return torch.stack(combined_groups)
