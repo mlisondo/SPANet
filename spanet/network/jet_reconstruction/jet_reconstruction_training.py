@@ -95,6 +95,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         # regardless of the number of sub-jets in each target particle
         assignments = [prediction + torch.log(torch.scalar_tensor(decoder.num_targets))
                        for prediction, decoder in zip(assignments, self.branch_decoders)]
+        assignments = torch.stack(assignments, dim=-1)
 
         # Convert the targets into a numpy array of tensors so we can use fancy indexing from numpy
         targets = numpy_tensor_array(targets)
