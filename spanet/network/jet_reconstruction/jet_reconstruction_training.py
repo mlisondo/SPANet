@@ -99,6 +99,8 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         # Convert the targets into a numpy array of tensors so we can use fancy indexing from numpy
         targets = numpy_tensor_array(targets)
 
+        print(assignments[0].size())
+        
         symmetric_losses = []
         for indx in range(assignments[0].size(-1)):
             assignment_layer = [tensor[...,indx] for tensor in assignments]
