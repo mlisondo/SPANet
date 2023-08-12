@@ -54,6 +54,9 @@ class JetReconstructionValidation(JetReconstructionNetwork):
         max_jet_accuracies = max_jet_accuracies.sum(1)
         particle_accuracies = particle_accuracies.sum(1)
 
+        print(stacked_masks.shape)
+        print(chosen_permutations.shape)
+
         # Select the primary permutation which we will use for all other metrics.
         chosen_permutations = self.event_permutation_tensor[max_jet_accuracies.argmax(0)].T
         chosen_permutations = chosen_permutations.cpu()
