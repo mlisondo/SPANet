@@ -40,21 +40,6 @@ class JetReconstructionTraining(JetReconstructionNetwork):
             self.options.assignment_loss_scale * assignment_loss,
             self.options.detection_loss_scale * detection_loss
         ))
-
-    def split_and_combine(symmetric_losses: torch.Tensor, num_targets: int) -> torch.Tensor:
-        # Determine the size of each group
-        group_size = len(symmetric_losses) // math.factorial(num_targets)
-        
-        # Split the symmetric_losses tensor along the 0-axis
-        groups = torch.split(symmetric_losses, group_size, dim=0)
-        
-        # Now, you can combine them as per your requirement. 
-        # Assuming you want to multiply the groups:
-        combined_groups = [torch.pow(torch.prod(g, dim=0), 1/group_size) for g in groups]
-        
-        # Stack the combined groups together to get the final tensor
-        return torch.stack(combined_groups)
-
     
     def compute_symmetric_losses(self, assignments: List[Tensor], detections: List[Tensor], targets):
         symmetric_losses = []
@@ -73,8 +58,8 @@ class JetReconstructionTraining(JetReconstructionNetwork):
             symmetric_losses.append(torch.stack(current_permutation_loss))
 
         # Shape: (NUM_PERMUTATIONS, NUM_PARTICLES, 2, BATCH_SIZE)
-        return split_and_combine(torch.stack(symmetric_losses), self.event_permutation_tensor.cpu().numpy().shape[1])
-
+        return torch.stack(symmetric_losses)
+        
     def combine_symmetric_losses(self, symmetric_losses: Tensor) -> Tuple[Tensor, Tensor]:
         # Default option is to find the minimum loss term of the symmetric options.
         # We also store which permutation we used to achieve that minimal loss.
