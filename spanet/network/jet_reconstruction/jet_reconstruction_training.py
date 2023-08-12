@@ -102,6 +102,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         symmetric_losses = []
         for indx in range(assignments[0].size(-1)):
             assignment_layer = [tensor[...,indx] for tensor in assignments]
+            print(assignment_layer[0].size())
             # Compute the loss on every valid permutation of the targets
             symmetric_losses.append(self.compute_symmetric_losses(assignment_layer, detections, targets))
         symmetric_losses = torch.stack((symmetric_loss for symmetric_loss in symmetric_losses), dim=-1)
