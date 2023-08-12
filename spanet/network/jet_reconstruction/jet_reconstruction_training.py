@@ -45,6 +45,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
 
         # TODO think of a way to avoid this memory transfer but keep permutation indices synced with checkpoint
         # Compute a separate loss term for every possible target permutation.
+        print('total shape: ', self.event_permutation_tensor.cpu().numpy().shape)
         for permutation in self.event_permutation_tensor.cpu().numpy():
             print(permutation)
             # Find the assignment loss for each particle in this permutation.
