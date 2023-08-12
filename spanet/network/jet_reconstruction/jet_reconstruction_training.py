@@ -35,7 +35,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         assignment_loss = assignment_cross_entropy_loss(assignment, target, mask, self.options.focal_gamma)
         detection_loss = F.binary_cross_entropy_with_logits(detection, mask.float(), reduction='none')
 
-        print('tgt: ', target)
+        print('tgt: ', target[0])
         return torch.stack((
             self.options.assignment_loss_scale * assignment_loss,
             self.options.detection_loss_scale * detection_loss
