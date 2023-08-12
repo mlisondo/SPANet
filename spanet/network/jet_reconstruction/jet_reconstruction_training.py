@@ -4,6 +4,7 @@ import numpy as np
 import torch
 from torch import Tensor
 from torch.nn import functional as F
+import math
 
 from spanet.options import Options
 from spanet.dataset.types import Batch, Source, AssignmentTargets
@@ -40,14 +41,27 @@ class JetReconstructionTraining(JetReconstructionNetwork):
             self.options.detection_loss_scale * detection_loss
         ))
 
+    def split_and_combine(symmetric_losses: torch.Tensor, num_targets: int) -> torch.Tensor:
+        # Determine the size of each group
+        group_size = len(symmetric_losses) // math.factorial(num_targets)
+        
+        # Split the symmetric_losses tensor along the 0-axis
+        groups = torch.split(symmetric_losses, group_size, dim=0)
+        
+        # Now, you can combine them as per your requirement. 
+        # Assuming you want to multiply the groups:
+        combined_groups = [torch.prod(g, dim=0) for g in groups]
+        
+        # Stack the combined groups together to get the final tensor
+        return torch.stack(combined_groups)
+
+    
     def compute_symmetric_losses(self, assignments: List[Tensor], detections: List[Tensor], targets):
         symmetric_losses = []
 
         # TODO think of a way to avoid this memory transfer but keep permutation indices synced with checkpoint
         # Compute a separate loss term for every possible target permutation.
-        print('total shape: ', self.event_permutation_tensor.cpu().numpy().shape)
         for permutation in self.event_permutation_tensor.cpu().numpy():
-            print(permutation)
             # Find the assignment loss for each particle in this permutation.
             current_permutation_loss = tuple(
                 self.particle_symmetric_loss(assignment, detection, target, mask)
@@ -59,7 +73,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
             symmetric_losses.append(torch.stack(current_permutation_loss))
 
         # Shape: (NUM_PERMUTATIONS, NUM_PARTICLES, 2, BATCH_SIZE)
-        return torch.stack(symmetric_losses)
+        return split_and_combine(torch.stack(symmetric_losses), self.event_permutation_tensor.cpu().numpy().shape[1])
 
     def combine_symmetric_losses(self, symmetric_losses: Tensor) -> Tuple[Tensor, Tensor]:
         # Default option is to find the minimum loss term of the symmetric options.
