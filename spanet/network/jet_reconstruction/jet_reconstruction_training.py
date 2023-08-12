@@ -64,10 +64,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         # Default option is to find the minimum loss term of the symmetric options.
         # We also store which permutation we used to achieve that minimal loss.
         # combined_loss, _ = symmetric_losses.min(0)
-        sym_losses = []
-        for idx in range(symmetric_losses.size(-1)):
-            sym_losses.append(symmetric_losses[...,idx].sum((1, 2)))
-        total_symmetric_loss = torch.vstack((l for l in sym_losses)).min(axis=0)
+        total_symmetric_loss = symmetric_losses.sum((1, 2))
         index = total_symmetric_loss.argmin(0)
 
         combined_loss = torch.gather(symmetric_losses, 0, index.expand_as(symmetric_losses))[0]
@@ -95,19 +92,12 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         # regardless of the number of sub-jets in each target particle
         assignments = [prediction + torch.log(torch.scalar_tensor(decoder.num_targets))
                        for prediction, decoder in zip(assignments, self.branch_decoders)]
-        
+
         # Convert the targets into a numpy array of tensors so we can use fancy indexing from numpy
         targets = numpy_tensor_array(targets)
 
-        print(assignments[0].size())
-        
-        symmetric_losses = []
-        for indx in range(assignments[0].size(-1)):
-            assignment_layer = [tensor[...,indx] for tensor in assignments]
-            print(assignment_layer[0].size())
-            # Compute the loss on every valid permutation of the targets
-            symmetric_losses.append(self.compute_symmetric_losses(assignment_layer, detections, targets))
-        symmetric_losses = torch.stack((symmetric_loss for symmetric_loss in symmetric_losses), dim=-1)
+        # Compute the loss on every valid permutation of the targets
+        symmetric_losses = self.compute_symmetric_losses(assignments, detections, targets)
 
         # Squash the permutation losses into a single value.
         return self.combine_symmetric_losses(symmetric_losses)
@@ -293,9 +283,8 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         # ===================================================================================================
         # Combine and return the loss
         # ---------------------------------------------------------------------------------------------------
-
         total_loss = torch.cat([loss.view(-1) for loss in total_loss])
-        
+
         self.log("loss/total_loss", total_loss.sum(), sync_dist=True)
 
         return total_loss.mean()
