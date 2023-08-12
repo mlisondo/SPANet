@@ -95,14 +95,13 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         # regardless of the number of sub-jets in each target particle
         assignments = [prediction + torch.log(torch.scalar_tensor(decoder.num_targets))
                        for prediction, decoder in zip(assignments, self.branch_decoders)]
-        assignments = torch.stack(assignments, dim=-1)
-
+        
         # Convert the targets into a numpy array of tensors so we can use fancy indexing from numpy
         targets = numpy_tensor_array(targets)
 
         symmetric_losses = []
         for indx in range(assignments[0].size(-1)):
-            assignment_layer = assignments[...,indx]
+            assignment_layer = [tensor[...,indx] for tensor in assignments]
             # Compute the loss on every valid permutation of the targets
             symmetric_losses.append(self.compute_symmetric_losses(assignment_layer, detections, targets))
         symmetric_losses = torch.stack((symmetric_loss for symmetric_loss in symmetric_losses), dim=-1)
