@@ -43,7 +43,7 @@ class JetReconstructionValidation(JetReconstructionNetwork):
         all_jet_accs = []
         jet_accuracies = np.zeros((num_permutations, num_targets, batch_size), dtype=np.bool)
         particle_accuracies = np.zeros((num_permutations, num_targets, batch_size), dtype=np.bool)
-        for pred_idx in range(prediction.shape[-1]):
+        for pred_idx in range(jet_predictions[0].shape[-1]):
             for i, permutation in enumerate(event_permutation_group):
                 for j, (prediction, target) in enumerate(zip(jet_predictions, stacked_targets[permutation])):
                         jet_accuracies[i, j, :] = np.all(prediction[..., pred_idx] == target, axis=1)
