@@ -100,7 +100,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         targets = numpy_tensor_array(targets)
 
         symmetric_losses = []
-        for indx in range(assignments.size(-1)):
+        for indx in range(assignments[0].size(-1)):
             assignment_layer = assignments[...,indx]
             # Compute the loss on every valid permutation of the targets
             symmetric_losses.append(self.compute_symmetric_losses(assignment_layer, detections, targets))
