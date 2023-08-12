@@ -35,7 +35,6 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         assignment_loss = assignment_cross_entropy_loss(assignment, target, mask, self.options.focal_gamma)
         detection_loss = F.binary_cross_entropy_with_logits(detection, mask.float(), reduction='none')
 
-        print('tgt: ', target[0])
         return torch.stack((
             self.options.assignment_loss_scale * assignment_loss,
             self.options.detection_loss_scale * detection_loss
@@ -47,7 +46,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         # TODO think of a way to avoid this memory transfer but keep permutation indices synced with checkpoint
         # Compute a separate loss term for every possible target permutation.
         for permutation in self.event_permutation_tensor.cpu().numpy():
-
+            print(permutation)
             # Find the assignment loss for each particle in this permutation.
             current_permutation_loss = tuple(
                 self.particle_symmetric_loss(assignment, detection, target, mask)
