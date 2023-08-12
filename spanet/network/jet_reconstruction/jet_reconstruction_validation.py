@@ -49,17 +49,15 @@ class JetReconstructionValidation(JetReconstructionNetwork):
                         jet_accuracies[i, j] = np.all(prediction[..., pred_idx] == target, axis=1)
                 particle_accuracies[i] = stacked_masks[permutation] == particle_predictions
             all_jet_accs.append(jet_accuracies.copy())
-        max_jet_accuracies = np.vstack([acc for acc in all_jet_accs]).max(axis=0)
-
+        all_jet_accs_array = np.stack(all_jet_accs, axis=0)  # Shape: (NUM_PREDICTIONS, num_permutations, num_targets, batch_size)
+        max_jet_accuracies = all_jet_accs_array.max(axis=0)
+        
         max_jet_accuracies = max_jet_accuracies.sum(1)
         particle_accuracies = particle_accuracies.sum(1)
 
         # Select the primary permutation which we will use for all other metrics.
         chosen_permutations = self.event_permutation_tensor[max_jet_accuracies.argmax(0)].T
         chosen_permutations = chosen_permutations.cpu()
-        
-        print(stacked_masks.shape)
-        print(chosen_permutations.shape)
 
         permuted_masks = torch.gather(torch.from_numpy(stacked_masks), 0, chosen_permutations).numpy()
 
