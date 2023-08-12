@@ -46,26 +46,26 @@ class JetReconstructionValidation(JetReconstructionNetwork):
         for pred_idx in range(jet_predictions[0].shape[-1]):
             for i, permutation in enumerate(event_permutation_group):
                 for j, (prediction, target) in enumerate(zip(jet_predictions, stacked_targets[permutation])):
-                        jet_accuracies[i, j, :] = np.all(prediction[..., pred_idx] == target, axis=1)
+                        jet_accuracies[i, j] = np.all(prediction[..., pred_idx] == target, axis=1)
                 particle_accuracies[i] = stacked_masks[permutation] == particle_predictions
-            all_jet_accs.append(jet_accuracies)
-        jet_accuracies = np.vstack([acc for acc in all_jet_accs]).max(axis=0)
+            all_jet_accs.append(jet_accuracies.copy())
+        max_jet_accuracies = np.vstack([acc for acc in all_jet_accs]).max(axis=0)
 
-        jet_accuracies = jet_accuracies.sum(1)
+        max_jet_accuracies = max_jet_accuracies.sum(1)
         particle_accuracies = particle_accuracies.sum(1)
 
         # Select the primary permutation which we will use for all other metrics.
-        chosen_permutations = self.event_permutation_tensor[jet_accuracies.argmax(0)].T
+        chosen_permutations = self.event_permutation_tensor[max_jet_accuracies.argmax(0)].T
         chosen_permutations = chosen_permutations.cpu()
         permuted_masks = torch.gather(torch.from_numpy(stacked_masks), 0, chosen_permutations).numpy()
 
         # Compute final accuracy vectors for output
         num_particles = stacked_masks.sum(0)
-        jet_accuracies = jet_accuracies.max(0)
+        max_jet_accuracies = max_jet_accuracies.max(0)
         particle_accuracies = particle_accuracies.max(0)
 
         # Create the logging dictionaries
-        metrics = {f"jet/accuracy_{i}_of_{j}": (jet_accuracies[num_particles == j] >= i).mean()
+        metrics = {f"jet/accuracy_{i}_of_{j}": (max_jet_accuracies[num_particles == j] >= i).mean()
                    for j in range(1, num_targets + 1)
                    for i in range(1, j + 1)}
 
