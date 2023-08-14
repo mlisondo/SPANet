@@ -123,20 +123,35 @@ def mask_jet(data, num_partons, max_jets, index, value):
     #     mask_6(data, max_jets, index, value)
     # elif num_partons == 7:
 
-        best_jets = unravel_index(best_jet, strides[best_prediction])
+    # elif num_partons == 8:
+    #     mask_8(data, max_jets, index, value)
 
-        results[best_prediction, :] = -1
-        results_weights[best_prediction] = best_value
 
-        for i in range(num_partons[best_prediction]):
-            results[best_prediction, i] = best_jets[i]
+@njit("int64[::1](int64, int64)")
+def compute_strides(num_partons, max_jets):
+    strides = np.zeros(num_partons, dtype=np.int64)
+    strides[-1] = 1
+    for i in range(num_partons - 2, -1, -1):
+        strides[i] = strides[i + 1] * max_jets
 
-        predictions[best_prediction][:] = float_negative_inf
-        for i in range(num_targets):
-            for jet in best_jets:
-                mask_jet(predictions[i], num_partons[i], max_jets, jet, float_negative_inf)
+    return strides
 
-    return results, results_weights
+
+@njit(TInt64[::1](TInt64, TInt64[::1]))
+def unravel_index(index, strides):
+    num_partons = strides.shape[0]
+    result = np.zeros(num_partons, dtype=np.int64)
+
+    remainder = index
+    for i in range(num_partons):
+        result[i] = remainder // strides[i]
+        remainder %= strides[i]
+    return result
+
+
+@njit(TInt64(TInt64[::1], TInt64[::1]))
+def ravel_index(index, strides):
+    return (index * strides).sum()
 
 
 @njit(numba.types.Tuple((TIResults, TFResults))(TPredictions, TInt64[::1], TInt64, TInt64), parallel=True)
