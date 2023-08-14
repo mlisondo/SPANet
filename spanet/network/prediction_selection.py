@@ -4,10 +4,14 @@ import numpy as np
 import numba
 from numba import njit, prange
 
+from itertools import permutations
+
 TArray = np.ndarray
 
 TFloat32 = numba.types.float32
 TInt64 = numba.types.int64
+
+TIndices = numba.types.UniTuple(TInt64, 3)
 
 TPrediction = numba.typed.typedlist.ListType(TFloat32[::1])
 TPredictions = numba.typed.typedlist.ListType(TFloat32[:, ::1])
@@ -69,47 +73,6 @@ def mask_3(flat_data, size, index, value):
 #
 # @njit("void(float32[::1], int64, int64, float32)")
 # def mask_6(flat_data, size, index, value):
-#     data = flat_data.reshape((size, size, size, size, size, size))
-#     data[index, :, :, :, :, :] = value
-#     data[:, index, :, :, :, :] = value
-#     data[:, :, index, :, :, :] = value
-#     data[:, :, :, index, :, :] = value
-#     data[:, :, :, :, index, :] = value
-#     data[:, :, :, :, :, index] = value
-
-
-# @njit("void(float32[::1], int64, int64, float32)")
-# def mask_7(flat_data, size, index, value):
-#     data = flat_data.reshape((size, size, size, size, size, size, size))
-#     data[index, :, :, :, :, :, :] = value
-#     data[:, index, :, :, :, :, :] = value
-#     data[:, :, index, :, :, :, :] = value
-#     data[:, :, :, index, :, :, :] = value
-#     data[:, :, :, :, index, :, :] = value
-#     data[:, :, :, :, :, index, :] = value
-#     data[:, :, :, :, :, :, index] = value
-#
-#
-# @njit("void(float32[::1], int64, int64, float32)")
-# def mask_8(flat_data, size, index, value):
-#     data = flat_data.reshape((size, size, size, size, size, size, size, size))
-#     data[index, :, :, :, :, :, :, :] = value
-#     data[:, index, :, :, :, :, :, :] = value
-#     data[:, :, index, :, :, :, :, :] = value
-#     data[:, :, :, index, :, :, :, :] = value
-#     data[:, :, :, :, index, :, :, :] = value
-#     data[:, :, :, :, :, index, :, :] = value
-#     data[:, :, :, :, :, :, index, :] = value
-#     data[:, :, :, :, :, :, :, index] = value
-
-
-@njit("void(float32[::1], int64, int64, int64, float32)")
-def mask_jet(data, num_partons, max_jets, index, value):
-    if num_partons == 1:
-        mask_1(data, max_jets, index, value)
-    elif num_partons == 2:
-        mask_2(data, max_jets, index, value)
-    elif num_partons == 3:
         mask_3(data, max_jets, index, value)
     # elif num_partons == 4:
     #     mask_4(data, max_jets, index, value)
@@ -219,6 +182,25 @@ def _extract_predictions(predictions, num_partons, max_jets, batch_size):
         output[batch, :, :], weight[batch, :] = extract_prediction(current_prediction, num_partons, max_jets)
 
     return np.ascontiguousarray(output.transpose((1, 0, 2))), np.ascontiguousarray(weight.transpose((1, 0)))
+
+
+def find_max_and_mask(matrix):
+    new_matrix = matrix.copy()
+    # Find the index of the maximum value
+    index = np.argmax(new_matrix)
+    
+    # Convert the flat index back to 3D indices
+    indices = np.unravel_index(index, new_matrix.shape)
+ 
+    # Replace the found value with 999
+    new_matrix[indices] = 999
+    
+    # Handle the i-j swap symmetry
+    i, j, k = indices
+    symmetric_index = (j, i, k)
+    new_matrix[symmetric_index] = 999
+    
+    return new_matrix, i, j, k
 
 
 def extract_predictions(predictions: List[TArray]):
