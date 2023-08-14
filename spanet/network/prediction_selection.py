@@ -122,7 +122,7 @@ def mask_jet(data, num_partons, max_jets, index, value):
     # elif num_partons == 6:
     #     mask_6(data, max_jets, index, value)
     # elif num_partons == 7:
-
+    #     mask_7(data, max_jets, index, value)
     # elif num_partons == 8:
     #     mask_8(data, max_jets, index, value)
 
@@ -154,6 +154,64 @@ def ravel_index(index, strides):
     return (index * strides).sum()
 
 
+@njit(numba.types.Tuple((TInt64, TInt64, TFloat32))(TPrediction))
+def maximal_prediction(predictions):
+    best_jet = -1
+    best_prediction = -1
+    best_value = -np.float32(np.inf)
+
+    for i in range(len(predictions)):
+        max_jet = np.argmax(predictions[i])
+        max_value = predictions[i][max_jet]
+
+        if max_value > best_value:
+            best_prediction = i
+            best_value = max_value
+            best_jet = max_jet
+
+    return best_jet, best_prediction, best_value
+
+
+@njit(numba.types.Tuple((TIResult, TFResult))(TPrediction, TInt64[::1], TInt64))
+def extract_prediction(predictions, num_partons, max_jets):
+    float_negative_inf = -np.float32(np.inf)
+    max_partons = num_partons.max()
+    num_targets = len(predictions)
+
+    # Create copies of predictions for safety and calculate the output shapes
+    strides = []
+    for i in range(num_targets):
+        strides.append(compute_strides(num_partons[i], max_jets))
+
+    # Fill up the prediction matrix
+    # -2 : Not yet assigned
+    # -1 : Masked value
+    # else : The actual index value
+    results = np.zeros((num_targets, max_partons), np.int64) - 2
+    results_weights = np.zeros(num_targets, dtype=np.float32) - np.float32(np.inf)
+
+    for _ in range(num_targets):
+        best_jet, best_prediction, best_value = maximal_prediction(predictions)
+
+        if not np.isfinite(best_value):
+            return results, results_weights
+
+        best_jets = unravel_index(best_jet, strides[best_prediction])
+
+        results[best_prediction, :] = -1
+        results_weights[best_prediction] = best_value
+
+        for i in range(num_partons[best_prediction]):
+            results[best_prediction, i] = best_jets[i]
+
+        predictions[best_prediction][:] = float_negative_inf
+        for i in range(num_targets):
+            for jet in best_jets:
+                mask_jet(predictions[i], num_partons[i], max_jets, jet, float_negative_inf)
+
+    return results, results_weights
+
+
 @njit(numba.types.Tuple((TIResults, TFResults))(TPredictions, TInt64[::1], TInt64, TInt64), parallel=True)
 def _extract_predictions(predictions, num_partons, max_jets, batch_size):
     output = np.zeros((batch_size, len(predictions), num_partons.max()), np.int64)
@@ -165,7 +223,6 @@ def _extract_predictions(predictions, num_partons, max_jets, batch_size):
         output[batch, :, :], weight[batch, :] = extract_prediction(current_prediction, num_partons, max_jets)
 
     return np.ascontiguousarray(output.transpose((1, 0, 2))), np.ascontiguousarray(weight.transpose((1, 0)))
-
 
 def find_max_and_mask(matrix):
     new_matrix = matrix.copy()
@@ -182,9 +239,9 @@ def find_max_and_mask(matrix):
     i, j, k = indices
     symmetric_index = (j, i, k)
     new_matrix[symmetric_index] = 999
+
     
     return new_matrix, i, j, k
-
 
 def extract_predictions(predictions: List[TArray]):
     num_partons = np.array([len(p.shape) - 1 for p in predictions])
