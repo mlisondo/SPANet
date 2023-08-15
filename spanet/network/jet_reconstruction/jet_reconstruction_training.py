@@ -35,7 +35,6 @@ class JetReconstructionTraining(JetReconstructionNetwork):
     def particle_symmetric_loss(self, assignment: Tensor, detection: Tensor, target: Tensor, mask: Tensor) -> Tensor:
         assignment_loss = assignment_cross_entropy_loss(assignment, target, mask, self.options.focal_gamma)
         detection_loss = F.binary_cross_entropy_with_logits(detection, mask.float(), reduction='none')
-        print('loss: ', assignment_loss.shape)
         
         return torch.stack((
             self.options.assignment_loss_scale * assignment_loss,
@@ -54,11 +53,10 @@ class JetReconstructionTraining(JetReconstructionNetwork):
                 for assignment, detection, (target, mask)
                 in zip(assignments, detections, targets[permutation])
             )
-            print('targets: ', targets.shape)
-            print('tgt_perm: ', targets[permutation].shape)
 
             # The loss for a single permutation is the sum of particle losses.
             symmetric_losses.append(torch.stack(current_permutation_loss))
+            print(torch.stack(current_permutation_loss).shape)
 
         # Shape: (NUM_PERMUTATIONS, NUM_PARTICLES, 2, BATCH_SIZE)
         return torch.stack(symmetric_losses)
