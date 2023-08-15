@@ -5,6 +5,8 @@ from torch.nn import functional as F
 
 @torch.jit.script
 def assignment_cross_entropy_loss(prediction: Tensor, target_data: Tensor, target_mask: Tensor, gamma: float) -> Tensor:
+    print('pred: ', prediction.shape)
+    print('tgt: ', target.shape)
     batch_size = prediction.shape[0]
     prediction_shape = prediction.shape[1:]
 
