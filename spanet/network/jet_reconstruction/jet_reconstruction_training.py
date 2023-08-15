@@ -55,6 +55,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
             )
 
             # The loss for a single permutation is the product of particle losses using log-sum-exp
+            perm_loss_prod = torch.stack(current_permutation_loss)
             log_perm_loss = torch.log(perm_loss_prod + 1e-10)  # the small term ensures stability
             sum_log_perm_loss = log_perm_loss.sum(dim=0, keepdim=True)
             symmetric_loss = torch.exp(sum_log_perm_loss / len(perm_loss_prod))
