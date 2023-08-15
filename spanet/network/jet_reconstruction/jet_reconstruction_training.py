@@ -55,8 +55,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
             )
 
             # The loss for a single permutation is the sum of particle losses.
-            symmetric_losses.append(torch.stack(current_permutation_loss))
-            print(torch.stack(current_permutation_loss).shape)
+            symmetric_losses.append(torch.stack(current_permutation_loss).prod(dim=0, keepdim=True))
 
         # Shape: (NUM_PERMUTATIONS, NUM_PARTICLES, 2, BATCH_SIZE)
         return torch.stack(symmetric_losses)
