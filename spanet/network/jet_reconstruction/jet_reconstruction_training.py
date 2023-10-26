@@ -46,7 +46,6 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         print('tshape3',targets[0][0].shape)
         print('ashape1',len(assignments))
         print('ashape2',assignments[0].shape)
-        print(
         symmetric_losses = []
         num_iterations = targets.shape[-1]
         
