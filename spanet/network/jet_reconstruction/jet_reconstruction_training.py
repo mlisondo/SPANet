@@ -41,6 +41,12 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         ))
 
     def compute_symmetric_losses(self, assignments: List[Tensor], detections: List[Tensor], targets):
+        print('tshape1',len(targets))
+        print('tshape2',len(targets[0]))
+        print('tshape3',targets[0][0].shape)
+        print(len(assignments))
+        print(assignments[0].shape)
+        print(
         symmetric_losses = []
         num_iterations = targets.shape[-1]
         
