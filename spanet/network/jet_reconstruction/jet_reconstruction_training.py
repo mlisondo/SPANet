@@ -56,12 +56,14 @@ class JetReconstructionTraining(JetReconstructionNetwork):
             for permutation in self.event_permutation_tensor.cpu().numpy():
                 # Compute current_permutation_loss
                 current_permutation_loss = tuple(
-                    self.particle_symmetric_loss(assignment, detection, target, mask)
-                    for assignment, detection, (target, mask)
+                    self.particle_symmetric_loss(assignment, detection, target_item, mask)
+                    for assignment, detection, (target_item, mask)
                     in zip(assignments, detections, targets[permutation])
                 )
-                # Create a mask based on whether the argmax of `assignments` matches `targets[permutation]`.
-                argmax_matches = [torch.eq(assignment.argmax(dim=-1), target) for assignment, target in zip(assignments, targets[permutation])]
+                
+                # Create a mask based on whether the argmax of `assignments` matches the tensors within `targets[permutation]`.
+                argmax_matches = [torch.eq(assignment.argmax(dim=-1), target_item) for assignment, target_item in zip(assignments, [target for target, _ in targets[permutation]])]
+                
                 for match, loss in zip(argmax_matches, current_permutation_loss):
                     loss[match] = 0  # Set the loss to 0 for matching argmax
                 symmetric_losses.append(torch.stack(current_permutation_loss))
