@@ -40,58 +40,33 @@ class JetReconstructionTraining(JetReconstructionNetwork):
             self.options.detection_loss_scale * detection_loss
         ))
 
-    def compute_symmetric_losses(self, assignments: List[Tensor], detections: List[Tensor], targets):
-        print('tshape1',len(targets))
-        print('tshape2',len(targets[0]))
-        print('tshape3',targets[0][0].shape)
-        print('ashape1',len(assignments))
-        print('ashape2',assignments[0].shape)
+    def compute_symmetric_losses(self, assignments: Tuple[torch.Tensor], detections: List[torch.Tensor], targets: Tuple[Tuple[torch.Tensor]]):
+        num_iterations = targets[0][0].size(-1)
         symmetric_losses = []
-        num_iterations = targets.shape[-1]
-        
-        # Create a mask for each tensor in assignments
-        assignments_masks = [torch.ones_like(assignment) for assignment in assignments]
-        
-        for _ in range(num_iterations):
-            
-            iteration_losses = []
-            
-            # Apply the mask to each tensor in assignments
-            masked_assignments = [assignment * mask for assignment, mask in zip(assignments, assignments_masks)]
-            
+    
+        for iteration in range(num_iterations):
+            # For each iteration after the first, mask the largest value in `assignments` using the smallest value
+            # for each item in the batch.
+            if iteration > 0:
+                max_val_indices = [assignment.argmax(dim=-1) for assignment in assignments]
+                min_val = min([assignment.min() for assignment in assignments])
+                for assignment, max_idx in zip(assignments, max_val_indices):
+                    assignment.scatter_(-1, max_idx.unsqueeze(-1), min_val)
+    
             for permutation in self.event_permutation_tensor.cpu().numpy():
-                # Create a mask to identify where argmax of assignments matches targets[permutation]
-                matched_masks = [(assignment.argmax(dim=-1) == targets[permutation]).type(torch.float32) for assignment in masked_assignments]
-                
+                # Compute current_permutation_loss
                 current_permutation_loss = tuple(
                     self.particle_symmetric_loss(assignment, detection, target, mask)
-                    for assignment, detection, (target, mask), matched_mask
-                    in zip(masked_assignments, detections, targets[permutation], matched_masks)
+                    for assignment, detection, (target, mask)
+                    in zip(assignments, detections, targets[permutation])
                 )
-                
-                # Apply matched_mask to set losses to 0 where they matched
-                current_permutation_loss = tuple(
-                    loss * (1 - matched_mask) + matched_mask * 0
-                    for loss, matched_mask in zip(current_permutation_loss, matched_masks)
-                )
-                
-                iteration_losses.append(torch.stack(current_permutation_loss))
-            
-            symmetric_losses.append(torch.stack(iteration_losses))
-            
-            # Update the assignments mask for the next iteration for each tensor in assignments
-            new_masks = []
-            for assignment in masked_assignments:
-                largest_values_mask = (assignment == assignment.max(dim=-1, keepdim=True)[0]).type(torch.float32)
-                smallest_value = assignment.min(dim=-1, keepdim=True)[0]
-                new_mask = (1 - largest_values_mask) + largest_values_mask * smallest_value
-                new_masks.append(new_mask)
-            assignments_masks = new_masks
-        
-        # Reshape to combine iterations and permutations into a single dimension
-        symmetric_losses = torch.stack(symmetric_losses).view(num_iterations * len(self.event_permutation_tensor), *symmetric_losses[0].shape[1:])
-        
-        return symmetric_losses
+                # Create a mask based on whether the argmax of `assignments` matches `targets[permutation]`.
+                argmax_matches = [torch.eq(assignment.argmax(dim=-1), target) for assignment, target in zip(assignments, targets[permutation])]
+                for match, loss in zip(argmax_matches, current_permutation_loss):
+                    loss[match] = 0  # Set the loss to 0 for matching argmax
+                symmetric_losses.append(torch.stack(current_permutation_loss))
+    
+        return torch.stack(symmetric_losses)
 
     def combine_symmetric_losses(self, symmetric_losses: Tensor) -> Tuple[Tensor, Tensor]:
         # Default option is to find the minimum loss term of the symmetric options.
