@@ -40,12 +40,12 @@ class JetReconstructionTraining(JetReconstructionNetwork):
             self.options.detection_loss_scale * detection_loss
         ))
 
-    def max_over_dims(tensor, start_dim=1):
+    def max_over_dims(self, tensor, start_dim=1):
         for dim in range(start_dim, tensor.dim()):
             tensor, _ = torch.max(tensor, dim=dim, keepdim=True)
         return torch.squeeze(tensor)
 
-    def min_over_dims(tensor, start_dim=1):
+    def min_over_dims(self, tensor, start_dim=1):
         for dim in range(start_dim, tensor.dim()):
             tensor, _ = torch.min(tensor, dim=dim, keepdim=True)
         return torch.squeeze(tensor)
