@@ -69,7 +69,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
                     if iteration > 0:
                         indices = torch.where(maxval)
                         check_list = torch.stack([target_item[i] for i in range(target_item.dim())], dim=1)
-                        mask = torch.all(check_list[:,1:] == indices, dim=1)
+                        mask = torch.all(check_list == indices, dim=1)
                         current_permutation_loss[0] *= mask
                     symmetric_losses.append(torch.stack(current_permutation_loss))
     
