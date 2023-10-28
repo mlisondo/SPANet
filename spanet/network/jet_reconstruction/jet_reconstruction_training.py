@@ -60,8 +60,8 @@ class JetReconstructionTraining(JetReconstructionNetwork):
             for permutation in self.event_permutation_tensor.cpu().numpy():
                 for assignment, detection, (target_item, mask) in zip(assignments, detections, targets[permutation]):
                     if iteration > 0:
-                        minval = min_over_dims(assignment)
-                        maxval = max_over_dims(assignment).view(batch_size, 1, 1, 1).expand_as(assignment)
+                        minval = self.min_over_dims(assignment)
+                        maxval = self.max_over_dims(assignment).view(batch_size, 1, 1, 1).expand_as(assignment)
                         where = assigment == maxval
                         assignment = assignment - (where * maxval) + (where * minval)
                     current_permutation_loss = tuple(
