@@ -60,7 +60,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
                     print(type(assignment))
                     if iteration > 0:
                         minval = self.min_over_dims(assignment)
-                        maxval = self.max_over_dims(assignment).view(batch_size, 1, 1, 1).expand_as(assignment)
+                        maxval = self.max_over_dims(assignment).view(assignment.size(0), 1, 1, 1).expand_as(assignment)
                         where = assigment == maxval
                         assignment = assignment - (where * maxval) + (where * minval)
                     current_permutation_loss = tuple(
