@@ -67,8 +67,8 @@ class JetReconstructionTraining(JetReconstructionNetwork):
                         self.particle_symmetric_loss(assignment, detection, target_item, mask)   
                     )
                     if iteration > 0:
-                        check_list_broadcast = check_list[:, None, :]
-                        non_zero_indices = non_zero_indices[:, 1:]
+                        non_zero_indices = torch.nonzero(maxval)[:, 1:]
+                        check_list_broadcast = target[:, None, :]
                         matches_broadcast = torch.all(non_zero_indices[None, :, :] == check_list_broadcast, dim=2)
                         mask_broadcast = matches_broadcast.any(dim=1).float()
                         current_permutation_loss[0] *= mask
