@@ -55,10 +55,9 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         symmetric_losses = []
     
         for iteration in range(num_iterations):
-            # For each iteration after the first, mask the largest value in `assignments` using the smallest value
-            # for each item in the batch.
             for permutation in self.event_permutation_tensor.cpu().numpy():
                 for assignment, detection, (target_item, mask) in zip(assignments, detections, targets[permutation]):
+                    print(type(assignment))
                     if iteration > 0:
                         minval = self.min_over_dims(assignment)
                         maxval = self.max_over_dims(assignment).view(batch_size, 1, 1, 1).expand_as(assignment)
