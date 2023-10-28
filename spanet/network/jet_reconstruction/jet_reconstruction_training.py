@@ -67,10 +67,11 @@ class JetReconstructionTraining(JetReconstructionNetwork):
                     current_permutation_loss = tuple(
                         self.particle_symmetric_loss(assignment, detection, target_item, mask)   
                     )
-                    indices = torch.where(maxval)
-                    check_list = torch.stack([target[i] for i in range(target.dim())], dim=1)
-                    mask = torch.all(check_list[:,1:] == indices, dim=1)
-                    current_permutation_loss[0] *= mask
+                    if iteration > 0:
+                        indices = torch.where(maxval)
+                        check_list = torch.stack([target[i] for i in range(target.dim())], dim=1)
+                        mask = torch.all(check_list[:,1:] == indices, dim=1)
+                        current_permutation_loss[0] *= mask
                     symmetric_losses.append(torch.stack(current_permutation_loss))
     
         return torch.stack(symmetric_losses)
