@@ -61,7 +61,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
                     if iteration > 0:
                         minval = self.min_over_dims(assignment)
                         maxval = self.max_over_dims(assignment).view(assignment.size(0), 1, 1, 1).expand_as(assignment)
-                        where = assigment == maxval
+                        where = assignment == maxval
                         assignment = assignment - (where * maxval) + (where * minval)
                     current_permutation_loss = tuple(
                         self.particle_symmetric_loss(assignment, detection, target_item, mask)   
