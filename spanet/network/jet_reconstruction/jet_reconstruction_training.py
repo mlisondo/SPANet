@@ -69,7 +69,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
                         check_list_broadcast = target[:, None, :]
                         matches_broadcast = torch.all(non_zero_indices[None, :, :] == check_list_broadcast, dim=2)
                         mask_broadcast = matches_broadcast.any(dim=1).float()
-                        assignment_loss = assigmnent_loss * mask_broadcast
+                        assignment_loss = assignment_loss * mask_broadcast
                         
                     symmetric_losses.append(torch.stack([torch.stack((assignment_loss, detection_loss))]))
     
