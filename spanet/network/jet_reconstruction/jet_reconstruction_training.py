@@ -56,14 +56,14 @@ class JetReconstructionTraining(JetReconstructionNetwork):
     
         for iteration in range(num_iterations):
             for permutation in self.event_permutation_tensor.cpu().numpy():
-                for assignment, detection, (target_item, mask) in zip(assignments, detections, targets[permutation]):
+                for assignment, detection, (target, mask) in zip(assignments, detections, targets[permutation]):
                     if iteration > 0:
                         minval = self.min_over_dims(assignment).view(assignment.size(0), 1, 1, 1)
                         maxval = self.max_over_dims(assignment).view(assignment.size(0), 1, 1, 1).expand_as(assignment)
                         where = assignment == maxval
                         assignment = assignment - (where * maxval) + (where * minval)
                     current_permutation_loss = tuple(
-                        self.particle_symmetric_loss(assignment, detection, target_item, mask)   
+                        self.particle_symmetric_loss(assignment, detection, target, mask)   
                     )
                     if iteration > 0:
                         non_zero_indices = torch.nonzero(maxval)[:, 1:]
