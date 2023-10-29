@@ -35,10 +35,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         assignment_loss = assignment_cross_entropy_loss(assignment, target, mask, self.options.focal_gamma)
         detection_loss = F.binary_cross_entropy_with_logits(detection, mask.float(), reduction='none')
 
-        return torch.stack((
-            self.options.assignment_loss_scale * assignment_loss,
-            self.options.detection_loss_scale * detection_loss
-        ))
+        return self.options.assignment_loss_scale * assignment_loss, self.options.detection_loss_scale * detection_loss
 
     def max_over_dims(self, tensor, start_dim=1):
         for dim in range(start_dim, tensor.dim()):
@@ -63,7 +60,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
                         where = assignment == maxval
                         assignment = assignment - (where * maxval) + (where * minval)
                         
-                    current_permutation_loss = tuple(
+                    assignment_loss, detection_loss = tuple(
                         self.particle_symmetric_loss(assignment, detection, target, mask)   
                     )
                     
@@ -72,9 +69,9 @@ class JetReconstructionTraining(JetReconstructionNetwork):
                         check_list_broadcast = target[:, None, :]
                         matches_broadcast = torch.all(non_zero_indices[None, :, :] == check_list_broadcast, dim=2)
                         mask_broadcast = matches_broadcast.any(dim=1).float()
-                        current_permutation_loss[0] = current_permutation_loss[0] * mask_broadcast
+                        assignment_loss = assigmnent_loss * mask_broadcast
                         
-                    symmetric_losses.append(torch.stack(current_permutation_loss))
+                    symmetric_losses.append(torch.stack([torch.stack((assignment_loss, detection_loss))]))
     
         return torch.stack(symmetric_losses)
 
