@@ -72,7 +72,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
                         check_list_broadcast = target[:, None, :]
                         matches_broadcast = torch.all(non_zero_indices[None, :, :] == check_list_broadcast, dim=2)
                         mask_broadcast = matches_broadcast.any(dim=1).float()
-                        current_permutation_loss[0] = current_permutation_loss[0] * mask
+                        current_permutation_loss[0] = current_permutation_loss[0] * mask_broadcast
                         
                     symmetric_losses.append(torch.stack(current_permutation_loss))
     
