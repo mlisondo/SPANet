@@ -62,15 +62,18 @@ class JetReconstructionTraining(JetReconstructionNetwork):
                         maxval = self.max_over_dims(assignment).view(assignment.size(0), 1, 1, 1).expand_as(assignment)
                         where = assignment == maxval
                         assignment = assignment - (where * maxval) + (where * minval)
+                        
                     current_permutation_loss = tuple(
                         self.particle_symmetric_loss(assignment, detection, target, mask)   
                     )
+                    
                     if iteration > 0:
                         non_zero_indices = torch.nonzero(maxval)[:, 1:]
                         check_list_broadcast = target[:, None, :]
                         matches_broadcast = torch.all(non_zero_indices[None, :, :] == check_list_broadcast, dim=2)
                         mask_broadcast = matches_broadcast.any(dim=1).float()
-                        current_permutation_loss[0] *= mask
+                        current_permutation_loss[0] = current_permutation_loss[0] * mask
+                        
                     symmetric_losses.append(torch.stack(current_permutation_loss))
     
         return torch.stack(symmetric_losses)
