@@ -60,9 +60,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
                         where = assignment == maxval
                         assignment = assignment - (where * maxval) + (where * minval)
                         
-                    assignment_loss, detection_loss = tuple(
-                        self.particle_symmetric_loss(assignment, detection, target, mask)   
-                    )
+                    assignment_loss, detection_loss = self.particle_symmetric_loss(assignment, detection, target, mask)
                     
                     if iteration > 0:
                         non_zero_indices = torch.nonzero(maxval)[:, 1:]
