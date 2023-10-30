@@ -69,6 +69,8 @@ class JetReconstructionTraining(JetReconstructionNetwork):
                         matches_broadcast = torch.all(non_zero_indices[None, :, :] == check_list_broadcast, dim=2)
                         mask_broadcast = matches_broadcast.any(dim=1).float()
                         assignment_loss = assignment_loss * mask_broadcast
+                    print(assignment_loss.device)
+                    print(detection_loss.device)
                     prepro_losses.append(torch.stack((assignment_loss, detection_loss)))
                         
                 symmetric_losses.append(torch.stack(prepro_losses))
