@@ -50,7 +50,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
     def compute_symmetric_losses(self, assignments: Tuple[torch.Tensor], detections: List[torch.Tensor], targets: Tuple[Tuple[torch.Tensor]]):
         num_iterations = 2
         symmetric_losses = []
-    
+        prepro_losses = []
         for iteration in range(num_iterations):
             for permutation in self.event_permutation_tensor.cpu().numpy():
                 for assignment, detection, (target, mask) in zip(assignments, detections, targets[permutation]):
@@ -70,8 +70,9 @@ class JetReconstructionTraining(JetReconstructionNetwork):
                         matches_broadcast = torch.all(non_zero_indices[None, :, :] == check_list_broadcast, dim=2)
                         mask_broadcast = matches_broadcast.any(dim=1).float()
                         assignment_loss = assignment_loss * mask_broadcast
+                    prepro_losses.append(torch.stack((assignment_loss, detection_loss)))
                         
-                    symmetric_losses.append(torch.stack(tuple(torch.stack((assignment_loss, detection_loss)))))
+            symmetric_losses.append(torch.stack(prepro_losses))
     
         return torch.stack(symmetric_losses)
 
