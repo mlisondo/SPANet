@@ -1,5 +1,6 @@
 from typing import Tuple, Dict, List
-
+import os
+os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 import numpy as np
 import torch
 from torch import Tensor
