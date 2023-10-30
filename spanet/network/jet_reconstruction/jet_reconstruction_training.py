@@ -71,7 +71,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
                         mask_broadcast = matches_broadcast.any(dim=1).float()
                         assignment_loss = assignment_loss * mask_broadcast
                         
-                    symmetric_losses.append(torch.stack([torch.stack((assignment_loss, detection_loss))]))
+                    symmetric_losses.append(torch.stack(tuple(torch.stack((assignment_loss, detection_loss)))))
     
         return torch.stack(symmetric_losses)
 
