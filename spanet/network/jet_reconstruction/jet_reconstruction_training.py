@@ -68,7 +68,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
                     
                     if iteration > 0:
                         x_idx, y_idx, z_idx = torch.nonzero(maxval, as_tuple=True)
-                        non_zero_indices = = torch.stack((x_idx, y_idx, z_idx), dim=-1)
+                        non_zero_indices = torch.stack((x_idx, y_idx, z_idx), dim=-1)
                         print(non_zero_indices.size())
                         check_list_broadcast = target[:, :, None]
                         print(check_list_broadcast.size())
