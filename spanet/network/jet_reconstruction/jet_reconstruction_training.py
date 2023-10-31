@@ -67,7 +67,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
                         non_zero_indices = torch.nonzero(maxval)
                         check_list_broadcast = target[:, None, :]
                         print(check_list_broadcast.size())
-                        print(nonzer_indices.size())
+                        print(non_zero_indices.size())
                         print(non_zero_indices[None,:,:].size())
                         matches_broadcast = torch.all(non_zero_indices[None, :, :] == check_list_broadcast, dim=2)
                         print(matches_broadcast.size())
