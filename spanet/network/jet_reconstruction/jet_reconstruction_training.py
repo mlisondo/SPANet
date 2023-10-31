@@ -64,21 +64,18 @@ class JetReconstructionTraining(JetReconstructionNetwork):
                     assignment_loss, detection_loss = self.particle_symmetric_loss(assignment, detection, target, mask)
                     
                     if iteration > 0:
-                        non_zero_indices = maxval != 0
-                        print(target.size())
-                        x_indices = targets[:, :, 0]
-                        y_indices = targets[:, :, 1]
-                        z_indices = targets[:, :, 2]
-                        print(x_indices.size())
-                        print(y_indices.size())
-                        j = assignment.size(1)
-                        encoded = torch.zeros((2, batch_size, j, j, j))
-                        encoded[b_indices, batch_indices, x_indices, y_indices, z_indices] = 1
-                        
-                        print(matches_broadcast.size())
-                        mask_broadcast = matches_broadcast.any(dim=0).float()
-                        print(mask_broadcast.size())
-                        assignment_loss = assignment_loss * mask_broadcast
+                        nonzero_indices = torch.argwhere(where)
+                        batch_indices = nonzero_indices[:, 0]
+                        jet_indices = nonzero_indices[:, 1:]
+                        N = jet_indices.size(0) // where.size(0)
+                        index_tensor = torch.zeros((N, where.size(0), 3), dtype=int)
+                        index_tensor[:, batch_indices, :] = jet_indices
+                        target_tensor = torch.stack(target, dim=0)
+                        target_exp = target_tensor[:, :, None, :]
+                        index_tensor_exp = index_tensor[None, ...]
+                        all_mask = torch.all(target_exp == index_tensor_exp, axis=-1)
+                        any_mask = torch.any(mask, axis=-1)
+                        assignment_loss = assignment_loss * any_mask
                     prepro_losses.append(torch.stack((assignment_loss, detection_loss)))
                         
                 symmetric_losses.append(torch.stack(prepro_losses))
