@@ -67,14 +67,14 @@ class JetReconstructionTraining(JetReconstructionNetwork):
                     assignment_loss, detection_loss = self.particle_symmetric_loss(assignment, detection, target, mask)
                     
                     if iteration > 0:
-                        non_zero_indices = torch.nonzero(maxval)
-                        check_list_broadcast = target[:, None, :]
-                        print(check_list_broadcast.size())
+                        x_idx, y_idx, z_idx = torch.nonzero(maxval, as_tuple=True)
+                        non_zero_indices = = torch.stack((x_idx, y_idx, z_idx), dim=-1)
                         print(non_zero_indices.size())
-                        print(non_zero_indices[None,:,:].size())
-                        matches_broadcast = torch.all(non_zero_indices[None, :, :] == check_list_broadcast, dim=2)
+                        check_list_broadcast = target[:, :, None]
+                        print(check_list_broadcast.size())
+                        matches_broadcast = torch.all(non_zero_indices == check_list_broadcast, dim=2)
                         print(matches_broadcast.size())
-                        mask_broadcast = matches_broadcast.any(dim=1).float()
+                        mask_broadcast = matches_broadcast.any(dim=0).float()
                         print(mask_broadcast.size())
                         assignment_loss = assignment_loss * mask_broadcast
                     prepro_losses.append(torch.stack((assignment_loss, detection_loss)))
