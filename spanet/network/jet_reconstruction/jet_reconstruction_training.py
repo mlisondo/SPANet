@@ -264,6 +264,9 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         # ---------------------------------------------------------------------------------------------------
         with torch.no_grad():
             for name, l in zip(self.training_dataset.assignments, assignment_loss):
+                print(l.size())
+                print(l.dtype)
+                print(l.device)
                 self.log(f"loss/{name}/assignment_loss", l, sync_dist=True)
 
             for name, l in zip(self.training_dataset.assignments, detection_loss):
