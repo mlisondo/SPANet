@@ -58,21 +58,23 @@ class JetReconstructionTraining(JetReconstructionNetwork):
                     if iteration > 0:
                         minval = self.min_over_dims(assignment).view(assignment.size(0), 1, 1, 1)
                         maxval = self.max_over_dims(assignment).view(assignment.size(0), 1, 1, 1).expand_as(assignment)
-                        print(minval.size())
-                        print(maxval.size())
                         where = assignment == maxval
-                        print(where.size())
                         assignment = assignment - (where * maxval) + (where * minval)
                         
                     assignment_loss, detection_loss = self.particle_symmetric_loss(assignment, detection, target, mask)
                     
                     if iteration > 0:
-                        x_idx, y_idx, z_idx = torch.nonzero(maxval, as_tuple=True)
-                        non_zero_indices = torch.stack((x_idx, y_idx, z_idx), dim=-1)
-                        print(non_zero_indices.size())
-                        check_list_broadcast = target[:, :, None]
-                        print(check_list_broadcast.size())
-                        matches_broadcast = torch.all(non_zero_indices == check_list_broadcast, dim=2)
+                        non_zero_indices = maxval != 0
+                        print(target.size())
+                        x_indices = targets[:, :, 0]
+                        y_indices = targets[:, :, 1]
+                        z_indices = targets[:, :, 2]
+                        print(x_indices.size())
+                        print(y_indices.size())
+                        j = assignment.size(1)
+                        encoded = torch.zeros((2, batch_size, j, j, j))
+                        encoded[b_indices, batch_indices, x_indices, y_indices, z_indices] = 1
+                        
                         print(matches_broadcast.size())
                         mask_broadcast = matches_broadcast.any(dim=0).float()
                         print(mask_broadcast.size())
