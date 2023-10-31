@@ -240,9 +240,6 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         masks = masks.unsqueeze(1)
         symmetric_losses = (weights * symmetric_losses).sum(-1) / masks.sum(-1)
         assignment_loss, detection_loss = torch.unbind(symmetric_losses, 1)
-        print('a',assignment_loss.size())
-        print('d',detection_loss.size())
-        exit
 
         # ===================================================================================================
         # Some basic logging
