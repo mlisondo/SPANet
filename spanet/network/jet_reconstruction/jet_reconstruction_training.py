@@ -58,7 +58,10 @@ class JetReconstructionTraining(JetReconstructionNetwork):
                     if iteration > 0:
                         minval = self.min_over_dims(assignment).view(assignment.size(0), 1, 1, 1)
                         maxval = self.max_over_dims(assignment).view(assignment.size(0), 1, 1, 1).expand_as(assignment)
+                        print(minval.size())
+                        print(maxval.size())
                         where = assignment == maxval
+                        print(where.size())
                         assignment = assignment - (where * maxval) + (where * minval)
                         
                     assignment_loss, detection_loss = self.particle_symmetric_loss(assignment, detection, target, mask)
