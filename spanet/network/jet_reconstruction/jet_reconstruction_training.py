@@ -68,7 +68,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
                         batch_indices = nonzero_indices[:, 0]
                         jet_indices = nonzero_indices[:, 1:]
                         N = jet_indices.size(0) // where.size(0)
-                        index_tensor = torch.zeros((N, where.size(0), 3), dtype=int)
+                        index_tensor = torch.zeros((N, where.size(0), 3), dtype=int, device=where.device)
                         index_tensor[:, batch_indices, :] = jet_indices
                         target_tensor = torch.stack(target, dim=0)
                         target_exp = target_tensor[:, :, None, :]
