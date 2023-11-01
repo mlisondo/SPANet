@@ -53,7 +53,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
                 for assignment, detection, (target, mask)
                 in zip(assignments, detections, targets[permutation])
             )
-
+            print(current_permutation_loss[0].size())
             # The loss for a single permutation is the sum of particle losses.
             symmetric_losses.append(torch.stack(current_permutation_loss))
 
