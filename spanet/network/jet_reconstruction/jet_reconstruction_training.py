@@ -73,9 +73,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
                         target_exp = target[None, :, :]
                         all_mask = torch.all(target_exp == index_tensor, axis=-1)
                         any_mask = torch.any(mask, axis=-1)
-                        print(assignment_loss.size())
                         assignment_loss = assignment_loss * any_mask
-                        print(assignment_loss.size())
                     prepro_losses.append(torch.stack((assignment_loss, detection_loss)))
                         
                 symmetric_losses.append(torch.stack(prepro_losses))
