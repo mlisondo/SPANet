@@ -85,12 +85,16 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         # We also store which permutation we used to achieve that minimal loss.
         # combined_loss, _ = symmetric_losses.min(0)
         num_iterations = 2
+        print(symmetric_losses.size())
         symmetric_losses_reshaped = symmetric_losses.view(num_iterations, symmetric_losses.size(-4)//num_iterations, symmetric_losses.size(-3), symmetric_losses.size(-2), symmetric_losses.size(-1))
         sums = symmetric_losses_reshaped.sum(dim=(1,2,3))
         min_index = sums.argmin(dim=0)
         new_symmetric_losses = symmetric_losses_reshaped[min_index]
+        print(symmetric_losses_reshaped.size())
         total_symmetric_loss = symmetric_losses_reshaped.sum((1, 2))
+        print(total_symmetric_loss.size())
         index = total_symmetric_loss.argmin(0)
+        print(index.size())
 
         combined_loss = torch.gather(symmetric_losses, 0, index.expand_as(symmetric_losses))[0]
 
