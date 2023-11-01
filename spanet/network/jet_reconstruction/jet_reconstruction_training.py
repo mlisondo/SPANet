@@ -87,7 +87,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         num_iterations = 2
         print(symmetric_losses.size())
         symmetric_losses_reshaped = symmetric_losses.view(num_iterations, symmetric_losses.size(-4)//num_iterations, symmetric_losses.size(-3), symmetric_losses.size(-2), symmetric_losses.size(-1))
-        sums = symmetric_losses_reshaped.sum(dim=(1,2,3))
+        sums = symmetric_losses_reshaped.sum(dim=(1,2,3,4))
         min_index = sums.argmin(dim=0)
         new_symmetric_losses = symmetric_losses_reshaped[min_index]
         print(symmetric_losses_reshaped.size())
