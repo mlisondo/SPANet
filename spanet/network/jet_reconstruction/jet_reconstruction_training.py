@@ -84,6 +84,11 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         # Default option is to find the minimum loss term of the symmetric options.
         # We also store which permutation we used to achieve that minimal loss.
         # combined_loss, _ = symmetric_losses.min(0)
+        symmetric_losses = symmetric_losses.view(num_iterations, -1, symmetric_losses.shape[-3], symmetric_losses.shape[-2], symmetric_losses.shape[-1])
+        total_loss_per_iteration = symmetric_losses.sum(dim=(2, 3, 4))
+        min_loss_indices = total_loss_per_iteration.argmin(dim=0)
+        min_loss_indices = min_loss_indices.unsqueeze(0).unsqueeze(-1).unsqueeze(-1).unsqueeze(-1).expand_as(symmetric_losses[0])
+        symmetric_losses = torch.gather(symmetric_losses, 0, min_loss_indices).squeeze(0)
         total_symmetric_loss = symmetric_losses.sum((1, 2))
         index = total_symmetric_loss.argmin(0)
 
