@@ -55,11 +55,13 @@ class JetReconstructionTraining(JetReconstructionNetwork):
             for permutation in self.event_permutation_tensor.cpu().numpy():
                 prepro_losses = []
                 for assignment, detection, (target, mask) in zip(assignments, detections, targets[permutation]):
+                    print(assignment.size())
                     if iteration > 0:
                         minval = self.min_over_dims(assignment).view(assignment.size(0), 1, 1, 1)
                         maxval = self.max_over_dims(assignment).view(assignment.size(0), 1, 1, 1).expand_as(assignment)
                         where = assignment == maxval
                         assignment = assignment - (where * maxval) + (where * minval)
+                        print(assignment.size())
                         
                     assignment_loss, detection_loss = self.particle_symmetric_loss(assignment, detection, target, mask)
                     
