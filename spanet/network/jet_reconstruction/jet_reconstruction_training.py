@@ -71,6 +71,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
                         index_tensor = torch.zeros((N, where.size(0), 3), dtype=int, device=where.device)
                         index_tensor[:, batch_indices, :] = jet_indices
                         target_exp = target[None, :, :]
+                        print(index_tensor.size())
                         print(target_exp.size())
                         all_mask = torch.all(target_exp == index_tensor, axis=-1)
                         print(all_mask.size())
