@@ -89,7 +89,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         sums = symmetric_losses_reshaped.sum(dim=(1,2,3))
         min_index = sums.argmin(dim=0)
         new_symmetric_losses = symmetric_losses_reshaped[min_index]
-        total_symmetric_loss = symmetric_losses.sum((1, 2))
+        total_symmetric_loss = symmetric_losses_reshaped.sum((1, 2))
         index = total_symmetric_loss.argmin(0)
 
         combined_loss = torch.gather(symmetric_losses, 0, index.expand_as(symmetric_losses))[0]
