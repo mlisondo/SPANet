@@ -57,6 +57,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
                 for assignment, detection, (target, mask) in zip(assignments, detections, targets[permutation]):
                     if iteration > 0:
                         minval = self.min_over_dims(assignment).view(assignment.size(0), 1, 1, 1)
+                        print(minval)
                         maxval = self.max_over_dims(assignment).view(assignment.size(0), 1, 1, 1).expand_as(assignment)
                         where = assignment == maxval
                         assignment = assignment - (where * maxval) + (where * minval)
