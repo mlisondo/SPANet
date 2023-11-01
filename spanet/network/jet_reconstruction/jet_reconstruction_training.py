@@ -242,6 +242,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         assignment_loss, detection_loss = torch.unbind(symmetric_losses, 1)
 
         print(assignment_loss)
+        print(detection_loss)
         
         # ===================================================================================================
         # Some basic logging
