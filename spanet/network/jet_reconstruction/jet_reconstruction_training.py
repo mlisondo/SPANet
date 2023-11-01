@@ -101,7 +101,6 @@ class JetReconstructionTraining(JetReconstructionNetwork):
             weights = F.softmin(total_symmetric_loss, 0)
             weights = weights.unsqueeze(1).unsqueeze(1)
             combined_loss = (weights * symmetric_losses).sum(0)
-        print(index.size())
 
         return combined_loss, index
 
