@@ -241,8 +241,6 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         # Construct the newly permuted masks based on the minimal permutation found during NLL loss.
         permutations = self.event_permutation_tensor[best_indices].T
         masks = torch.stack([target.mask for target in batch.assignment_targets])
-        print(masks.size())
-        print(permutations.size())
         masks = torch.gather(masks, 0, permutations)
 
         # ===================================================================================================
