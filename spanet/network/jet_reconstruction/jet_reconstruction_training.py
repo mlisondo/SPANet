@@ -45,7 +45,13 @@ class JetReconstructionTraining(JetReconstructionNetwork):
 
     def min_over_dims(self, tensor, start_dim=1):
         for dim in range(start_dim, tensor.dim()):
-            tensor, _ = torch.min(tensor, dim=dim, keepdim=True)
+            # Create a mask where tensor is not -inf
+            valid_mask = tensor != float('-inf')
+            
+            # Use the mask to replace -inf with a large positive value, then compute the minimum
+            replaced_tensor = torch.where(valid_mask, tensor, torch.tensor(float('inf')).to(tensor.device))
+            tensor, _ = torch.min(replaced_tensor, dim=dim, keepdim=True)
+            
         return torch.squeeze(tensor)
     
     def compute_symmetric_losses(self, assignments: Tuple[torch.Tensor], detections: List[torch.Tensor], targets: Tuple[Tuple[torch.Tensor]]):
