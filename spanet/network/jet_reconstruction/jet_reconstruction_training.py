@@ -88,8 +88,10 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         symmetric_losses = symmetric_losses.view(num_iterations, -1, symmetric_losses.shape[-3], symmetric_losses.shape[-2], symmetric_losses.shape[-1])
         total_loss_per_iteration = symmetric_losses.sum(dim=(2, 3, 4))
         min_loss_indices = total_loss_per_iteration.argmin(dim=0)
-        min_loss_indices = min_loss_indices.unsqueeze(0).unsqueeze(-1).unsqueeze(-1).unsqueeze(-1).expand_as(symmetric_losses[0])
-        symmetric_losses = torch.gather(symmetric_losses, 0, min_loss_indices).squeeze(0)
+        for _ in range(3):  # add three singleton dimensions at the end
+            min_loss_indices = min_loss_indices.unsqueeze(-1)
+    
+        symmetric_losses = torch.gather(symmetric_losses, 0, min_loss_indices.expand_as(symmetric_losses)).squeeze(0)
         total_symmetric_loss = symmetric_losses.sum((1, 2))
         index = total_symmetric_loss.argmin(0)
 
