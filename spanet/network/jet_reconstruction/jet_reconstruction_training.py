@@ -77,7 +77,6 @@ class JetReconstructionTraining(JetReconstructionNetwork):
             weights = F.softmin(total_symmetric_loss, 0)
             weights = weights.unsqueeze(1).unsqueeze(1)
             combined_loss = (weights * symmetric_losses).sum(0)
-        print(index.size())
 
         return combined_loss, index
 
@@ -240,9 +239,6 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         masks = masks.unsqueeze(1)
         symmetric_losses = (weights * symmetric_losses).sum(-1) / masks.sum(-1)
         assignment_loss, detection_loss = torch.unbind(symmetric_losses, 1)
-
-        print(assignment_loss)
-        print(detection_loss)
         
         # ===================================================================================================
         # Some basic logging
