@@ -69,17 +69,17 @@ class JetReconstructionTraining(JetReconstructionNetwork):
                         
                     assignment_loss, detection_loss = self.particle_symmetric_loss(assignment, detection, target, mask)
                     
-                    if iteration > 0:
-                        nonzero_indices = torch.argwhere(where)
-                        batch_indices = nonzero_indices[:, 0]
-                        jet_indices = nonzero_indices[:, 1:]
-                        N = jet_indices.size(0) // where.size(0)
-                        index_tensor = torch.zeros((N, where.size(0), 3), dtype=int, device=where.device)
-                        index_tensor[:, batch_indices, :] = jet_indices
-                        target_exp = target[None, :, :]
-                        all_mask = torch.all(target_exp == index_tensor, axis=-1)
-                        any_mask = torch.any(mask, axis=-1)
-                        assignment_loss = assignment_loss * any_mask
+                    # if iteration > 0:
+                    #     nonzero_indices = torch.argwhere(where)
+                    #     batch_indices = nonzero_indices[:, 0]
+                    #     jet_indices = nonzero_indices[:, 1:]
+                    #     N = jet_indices.size(0) // where.size(0)
+                    #     index_tensor = torch.zeros((N, where.size(0), 3), dtype=int, device=where.device)
+                    #     index_tensor[:, batch_indices, :] = jet_indices
+                    #     target_exp = target[None, :, :]
+                    #     all_mask = torch.all(target_exp == index_tensor, axis=-1)
+                    #     any_mask = torch.any(mask, axis=-1)
+                    #     assignment_loss = assignment_loss * any_mask
                     prepro_losses.append(torch.stack((assignment_loss, detection_loss)))
                         
                 symmetric_losses.append(torch.stack(prepro_losses))
