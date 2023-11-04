@@ -1,6 +1,4 @@
 from typing import Tuple, Dict, List
-import os
-os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 import numpy as np
 import torch
 from torch import Tensor
@@ -66,6 +64,8 @@ class JetReconstructionTraining(JetReconstructionNetwork):
                         maxval = self.max_over_dims(assignment).view(assignment.size(0), 1, 1, 1).expand_as(assignment)
                         where = assignment == maxval
                         assignment = assignment - (where * maxval) + (where * minval)
+                        print(mask.size())
+                        break
                         
                     assignment_loss, detection_loss = self.particle_symmetric_loss(assignment, detection, target, mask)
                     
