@@ -1,7 +1,7 @@
 from typing import Tuple, Dict, List
 import numpy as np
 import torch
-from torch import Tensor
+from torch import Tensor, Size
 from torch.nn import functional as F
 
 from spanet.options import Options
