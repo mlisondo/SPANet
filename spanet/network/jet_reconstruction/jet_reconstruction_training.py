@@ -52,7 +52,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
             
         return torch.squeeze(tensor)
 
-    def mask_tensor(self, tensor, minval):
+    def mask_tensor(self, tensor):
         batch_size = tensor.shape[0]
     
         # Compute argmax
@@ -76,12 +76,10 @@ class JetReconstructionTraining(JetReconstructionNetwork):
             masks.append(mask)
     
         # Apply the mask to the original tensor
-        mask_3d = torch.zeros_like(tensor, device=tensor.device)
         for i in range(3):  # Apply each mask along each axis
-            mask_3d = tensor.masked_fill(masks[i].unsqueeze(1).unsqueeze(2) if i == 0 else
+            tensor = tensor.masked_fill(masks[i].unsqueeze(1).unsqueeze(2) if i == 0 else
                                          masks[i].unsqueeze(1).unsqueeze(3) if i == 1 else
-                                         masks[i].unsqueeze(2).unsqueeze(3), 1)
-        tensor = (1 - mask_3d) * tensor + mask_3d * minval
+                                         masks[i].unsqueeze(2).unsqueeze(3), 0)
     
         return tensor, a_b_c_indices
     
@@ -93,15 +91,15 @@ class JetReconstructionTraining(JetReconstructionNetwork):
                 prepro_losses = []
                 for assignment, detection, (target, mask) in zip(assignments, detections, targets[permutation]):
                     if iteration > 0:
-                        minval = self.min_over_dims(assignment).view(assignment.size(0), 1, 1, 1)
-                        assignment, flattened_index = self.mask_tensor(assignment, minval)
+                        #minval = self.min_over_dims(assignment).view(assignment.size(0), 1, 1, 1)
+                        assignment, flattened_index = self.mask_tensor(assignment)
                         
                     assignment_loss, detection_loss = self.particle_symmetric_loss(assignment, detection, target, mask)
                     
-                    if iteration > 0:
-                        where_mask = target == flattened_index
-                        any_mask = where_mask.any(dim=1)
-                        assignment_loss = assignment_loss * any_mask
+                    # if iteration > 0:
+                        # where_mask = target == flattened_index
+                        # any_mask = where_mask.any(dim=1)
+                        # assignment_loss = assignment_loss * any_mask
                     prepro_losses.append(torch.stack((assignment_loss, detection_loss)))
                         
                 symmetric_losses.append(torch.stack(prepro_losses))
