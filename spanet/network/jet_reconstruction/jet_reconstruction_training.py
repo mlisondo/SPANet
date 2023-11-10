@@ -51,25 +51,6 @@ class JetReconstructionTraining(JetReconstructionNetwork):
             tensor, _ = torch.min(replaced_tensor, dim=dim, keepdim=True)
             
         return torch.squeeze(tensor)
-
-    def unravel_index(self, indices: Tensor, shape: Size) -> Tensor:
-        r"""source: https://github.com/francois-rozet/torchist/tree/master
-        Converts a tensor of flat indices into a tensor of coordinate vectors.
-    
-        This is a `torch` implementation of `numpy.unravel_index`.
-    
-        Args:
-            indices: A tensor of flat indices, (*,).
-            shape: The target shape.
-    
-        Returns:
-            The unraveled coordinates, (*, D).
-        """
-    
-        shape = indices.new_tensor(shape + (1,))
-        coefs = shape[1:].flipud().cumprod(dim=0).flipud()
-    
-        return torch.div(indices[..., None], coefs, rounding_mode='trunc') % shape[:-1]
     
     def compute_symmetric_losses(self, assignments: Tuple[torch.Tensor], detections: List[torch.Tensor], targets: Tuple[Tuple[torch.Tensor]]):
         num_iterations = 2
@@ -81,7 +62,9 @@ class JetReconstructionTraining(JetReconstructionNetwork):
                     if iteration > 0:
                         minval = self.min_over_dims(assignment).view(assignment.size(0), 1, 1, 1)
                         flattened_index = torch.argmax(assignment, dim=0)
-                        a, b, c = self.unravel_index(flattened_index, flattened_index.shape)
+                        a = flattened_index // (10 * 10)
+                        b = (flattened_index % (10 * 10)) // 10
+                        c = (flattened_index % (10 * 10)) % 10
                         assignment_mask = torch.ones_like(assignment, dtype=torch.bool, device=assignment.device())
 
                         # Mask the corresponding indices along each axis
