@@ -81,7 +81,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
                     if iteration > 0:
                         minval = self.min_over_dims(assignment).view(assignment.size(0), 1, 1, 1)
                         flattened_index = torch.argmax(assignment, dim=0)
-                        a, b, c = self.unravel_index(flattened_index, tensor.shape)
+                        a, b, c = self.unravel_index(flattened_index, flattened_index.shape)
                         assignment_mask = torch.ones_like(assignment, dtype=torch.bool, device=assignment.device())
 
                         # Mask the corresponding indices along each axis
