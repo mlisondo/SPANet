@@ -61,7 +61,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
                 for assignment, detection, (target, mask) in zip(assignments, detections, targets[permutation]):
                     if iteration > 0:
                         minval = self.min_over_dims(assignment).view(assignment.size(0), 1, 1, 1)
-                        print('assigment: ', assigment.size())
+                        print('assignment: ', assignment.size())
                         flattened_index = torch.argmax(assignment, dim=0)
                         print('flat: ', flattened_index.size())
                         a = flattened_index // (10 * 10)
