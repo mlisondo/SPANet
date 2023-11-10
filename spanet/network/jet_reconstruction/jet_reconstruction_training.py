@@ -65,7 +65,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
                         a = flattened_index // (10 * 10)
                         b = (flattened_index % (10 * 10)) // 10
                         c = (flattened_index % (10 * 10)) % 10
-                        assignment_mask = torch.ones_like(assignment, dtype=torch.bool, device=assignment.device())
+                        assignment_mask = torch.ones_like(assignment, dtype=torch.bool, device=assignment.device)
 
                         # Mask the corresponding indices along each axis
                         assignment_mask[a, :, :] = False
