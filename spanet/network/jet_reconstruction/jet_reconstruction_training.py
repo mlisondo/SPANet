@@ -51,6 +51,37 @@ class JetReconstructionTraining(JetReconstructionNetwork):
             tensor, _ = torch.min(replaced_tensor, dim=dim, keepdim=True)
             
         return torch.squeeze(tensor)
+
+    def mask_tensor(self, tensor, minval):
+        batch_size = tensor.shape[0]
+    
+        # Compute argmax
+        flat_indices = torch.argmax(tensor.view(batch_size, -1), dim=1)
+    
+        # Convert flat indices to 3D indices
+        indices_3d = torch.stack(torch.meshgrid(
+            torch.arange(10),
+            torch.arange(10),
+            torch.arange(10),
+            indexing='ij'
+        ), dim=-1).reshape(-1, 3)
+        a_b_c_indices = indices_3d[flat_indices]  # Shape: (batch_size, 3)
+    
+        # Create masks
+        masks = []
+        for i in range(3):  # For each axis
+            mask = torch.ones((batch_size, 10), dtype=bool)  # Start with a mask of ones
+            for j in range(batch_size):
+                mask[j, a_b_c_indices[j, i]] = False  # Set the corresponding indices to False
+            masks.append(mask)
+    
+        # Apply the mask to the original tensor
+        for i in range(3):  # Apply each mask along each axis
+            tensor = tensor.masked_fill(masks[i].unsqueeze(1).unsqueeze(2) if i == 0 else
+                                        masks[i].unsqueeze(1).unsqueeze(3) if i == 1 else
+                                        masks[i].unsqueeze(2).unsqueeze(3), minval)
+    
+        return tensor, a_b_c_indices
     
     def compute_symmetric_losses(self, assignments: Tuple[torch.Tensor], detections: List[torch.Tensor], targets: Tuple[Tuple[torch.Tensor]]):
         num_iterations = 2
@@ -60,21 +91,9 @@ class JetReconstructionTraining(JetReconstructionNetwork):
                 prepro_losses = []
                 for assignment, detection, (target, mask) in zip(assignments, detections, targets[permutation]):
                     if iteration > 0:
-                        minval = self.min_over_dims(assignment).view(assignment.size(0), 1, 1, 1)
-                        print('assignment: ', assignment.size())
-                        flattened_index = torch.argmax(assignment, dim=(1,2,3))
-                        print('flat: ', flattened_index.size())
-                        a = flattened_index // (10 * 10)
-                        b = (flattened_index % (10 * 10)) // 10
-                        c = (flattened_index % (10 * 10)) % 10
-                        assignment_mask = torch.ones_like(assignment, dtype=torch.bool, device=assignment.device)
-
-                        # Mask the corresponding indices along each axis
-                        assignment_mask[a, :, :] = False
-                        assignment_mask[:, b, :] = False
-                        assignment_mask[:, :, c] = False
+                        minval = self.min_over_dims(assignment)
+                        masked_assignment, flattened_index = self.mask_tensor(assignment, minval)
                         
-                        # Apply the mask to the tensor
                         not_mask = ~assignment_mask
                         assignment = assignment * assignment_mask + not_mask * minval
                         
