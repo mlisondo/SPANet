@@ -94,9 +94,9 @@ class JetReconstructionTraining(JetReconstructionNetwork):
                 for assignment, detection, (target, mask) in zip(assignments, detections, targets[permutation]):
                     if iteration > 0:
                         minval = self.min_over_dims(assignment).view(assignment.size(0), 1, 1, 1)
-                        masked_assignment, flattened_index = self.mask_tensor(assignment, minval)
+                        assignment, flattened_index = self.mask_tensor(assignment, minval)
                         
-                    assignment_loss, detection_loss = self.particle_symmetric_loss(masked_assignment, detection, target, mask)
+                    assignment_loss, detection_loss = self.particle_symmetric_loss(assignment, detection, target, mask)
                     
                     if iteration > 0:
                         any_mask = target != flattened_index
