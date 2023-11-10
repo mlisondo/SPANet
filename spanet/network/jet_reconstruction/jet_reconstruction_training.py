@@ -62,7 +62,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
                     if iteration > 0:
                         minval = self.min_over_dims(assignment).view(assignment.size(0), 1, 1, 1)
                         print('assignment: ', assignment.size())
-                        flattened_index = torch.argmax(assignment, dim=0)
+                        flattened_index = torch.argmax(assignment, dim=(1,2,3))
                         print('flat: ', flattened_index.size())
                         a = flattened_index // (10 * 10)
                         b = (flattened_index % (10 * 10)) // 10
