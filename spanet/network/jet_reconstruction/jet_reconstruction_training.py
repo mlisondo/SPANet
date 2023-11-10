@@ -99,7 +99,10 @@ class JetReconstructionTraining(JetReconstructionNetwork):
                     assignment_loss, detection_loss = self.particle_symmetric_loss(assignment, detection, target, mask)
                     
                     if iteration > 0:
+                        print(target.size())
+                        print(flattened_index.size())
                         any_mask = target != flattened_index
+                        print(any_mask.size())
                         assignment_loss = assignment_loss * any_mask
                     prepro_losses.append(torch.stack((assignment_loss, detection_loss)))
                         
