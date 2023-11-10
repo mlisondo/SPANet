@@ -76,10 +76,12 @@ class JetReconstructionTraining(JetReconstructionNetwork):
             masks.append(mask)
     
         # Apply the mask to the original tensor
+        mask_3d = torch.zeros_like(tensor, device=tensor.device)
         for i in range(3):  # Apply each mask along each axis
-            tensor = tensor.masked_fill(masks[i].unsqueeze(1).unsqueeze(2) if i == 0 else
-                                        masks[i].unsqueeze(1).unsqueeze(3) if i == 1 else
-                                        masks[i].unsqueeze(2).unsqueeze(3), minval)
+            mask_3d = tensor.masked_fill(masks[i].unsqueeze(1).unsqueeze(2) if i == 0 else
+                                         masks[i].unsqueeze(1).unsqueeze(3) if i == 1 else
+                                         masks[i].unsqueeze(2).unsqueeze(3), 1)
+        tensor = (1 - mask_3d) * tensor + mask_3d * minval
     
         return tensor, a_b_c_indices
     
@@ -91,7 +93,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
                 prepro_losses = []
                 for assignment, detection, (target, mask) in zip(assignments, detections, targets[permutation]):
                     if iteration > 0:
-                        minval = self.min_over_dims(assignment)
+                        minval = self.min_over_dims(assignment).view(assignment.size(0), 1, 1, 1)
                         masked_assignment, flattened_index = self.mask_tensor(assignment, minval)
                         
                         not_mask = ~assignment_mask
