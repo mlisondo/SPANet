@@ -60,9 +60,9 @@ class JetReconstructionTraining(JetReconstructionNetwork):
     
         # Convert flat indices to 3D indices
         indices_3d = torch.stack(torch.meshgrid(
-            torch.arange(10),
-            torch.arange(10),
-            torch.arange(10),
+            torch.arange(10, device=tensor.device),
+            torch.arange(10, device=tensor.device),
+            torch.arange(10, device=tensor.device),
             indexing='ij'
         ), dim=-1).reshape(-1, 3)
         a_b_c_indices = indices_3d[flat_indices]  # Shape: (batch_size, 3)
@@ -70,7 +70,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         # Create masks
         masks = []
         for i in range(3):  # For each axis
-            mask = torch.ones((batch_size, 10), dtype=bool)  # Start with a mask of ones
+            mask = torch.ones((batch_size, 10), dtype=bool, device=tensor.device)  # Start with a mask of ones
             for j in range(batch_size):
                 mask[j, a_b_c_indices[j, i]] = False  # Set the corresponding indices to False
             masks.append(mask)
