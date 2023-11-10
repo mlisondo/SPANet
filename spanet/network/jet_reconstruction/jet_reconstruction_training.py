@@ -100,8 +100,8 @@ class JetReconstructionTraining(JetReconstructionNetwork):
                     
                     if iteration > 0:
                         where_mask = target == flattened_index
-                        where_mask = where_mask.any(dim=1)
-                        assignment_loss = assignment_loss * all_mask
+                        any_mask = where_mask.any(dim=1)
+                        assignment_loss = assignment_loss * any_mask
                     prepro_losses.append(torch.stack((assignment_loss, detection_loss)))
                         
                 symmetric_losses.append(torch.stack(prepro_losses))
