@@ -51,6 +51,25 @@ class JetReconstructionTraining(JetReconstructionNetwork):
             tensor, _ = torch.min(replaced_tensor, dim=dim, keepdim=True)
             
         return torch.squeeze(tensor)
+
+    def unravel_index(self, indices: Tensor, shape: Size) -> Tensor:
+        r"""source: https://github.com/francois-rozet/torchist/tree/master
+        Converts a tensor of flat indices into a tensor of coordinate vectors.
+    
+        This is a `torch` implementation of `numpy.unravel_index`.
+    
+        Args:
+            indices: A tensor of flat indices, (*,).
+            shape: The target shape.
+    
+        Returns:
+            The unraveled coordinates, (*, D).
+        """
+    
+        shape = indices.new_tensor(shape + (1,))
+        coefs = shape[1:].flipud().cumprod(dim=0).flipud()
+    
+        return torch.div(indices[..., None], coefs, rounding_mode='trunc') % shape[:-1]
     
     def compute_symmetric_losses(self, assignments: Tuple[torch.Tensor], detections: List[torch.Tensor], targets: Tuple[Tuple[torch.Tensor]]):
         num_iterations = 2
@@ -59,25 +78,25 @@ class JetReconstructionTraining(JetReconstructionNetwork):
             for permutation in self.event_permutation_tensor.cpu().numpy():
                 prepro_losses = []
                 for assignment, detection, (target, mask) in zip(assignments, detections, targets[permutation]):
-                    print(mask)
                     if iteration > 0:
                         minval = self.min_over_dims(assignment).view(assignment.size(0), 1, 1, 1)
-                        maxval = self.max_over_dims(assignment).view(assignment.size(0), 1, 1, 1).expand_as(assignment)
-                        where = assignment == maxval
-                        assignment = assignment - (where * maxval) + (where * minval)
+                        flattened_index = torch.argmax(assignment, dim=0)
+                        a, b, c = self.unravel_index(flattened_index, tensor.shape)
+                        assignment_mask = torch.ones_like(assignment, dtype=torch.bool, device=assignment.device())
+
+                        # Mask the corresponding indices along each axis
+                        assignment_mask[a, :, :] = False
+                        assignment_mask[:, b, :] = False
+                        assignment_mask[:, :, c] = False
+                        
+                        # Apply the mask to the tensor
+                        not_mask = ~assignment_mask
+                        assignment = assignment * assignment_mask + not_mask * minval
                         
                     assignment_loss, detection_loss = self.particle_symmetric_loss(assignment, detection, target, mask)
                     
                     if iteration > 0:
-                        nonzero_indices = torch.argwhere(where)
-                        batch_indices = nonzero_indices[:, 0]
-                        jet_indices = nonzero_indices[:, 1:]
-                        N = jet_indices.size(0) // where.size(0)
-                        index_tensor = torch.zeros((N, where.size(0), 3), dtype=int, device=where.device)
-                        index_tensor[:, batch_indices, :] = jet_indices
-                        target_exp = target[None, :, :]
-                        all_mask = torch.all(target_exp == index_tensor, axis=-1)
-                        any_mask = torch.any(mask, axis=-1)
+                        any_mask = target != flattened_index
                         assignment_loss = assignment_loss * any_mask
                     prepro_losses.append(torch.stack((assignment_loss, detection_loss)))
                         
