@@ -86,21 +86,17 @@ class JetReconstructionTraining(JetReconstructionNetwork):
     def compute_symmetric_losses(self, assignments: Tuple[torch.Tensor], detections: List[torch.Tensor], targets: Tuple[Tuple[torch.Tensor]]):
         num_iterations = 2
         symmetric_losses = []
-        print(targets)
+        masks = [target_mask for _, target_mask in targets[0]] + [target_mask for _, target_mask in targets[1]]
+        iteration_mask &= torch.stack(masks).all(dim=0)
+        
         for iteration in range(num_iterations):
             for permutation in self.event_permutation_tensor.cpu().numpy():
                 prepro_losses = []
                 for assignment, detection, (target, mask) in zip(assignments, detections, targets[permutation]):
-                    if iteration > 0:
-                        #minval = self.min_over_dims(assignment).view(assignment.size(0), 1, 1, 1)
-                        assignment, flattened_index = self.mask_tensor(assignment)
-                        
+                    if iteration > 0 and iter_mask:
+                        masked_assignment, flattened_index = self.mask_tensor(assignment)
+                        assignment = torch.where(iteration_mask, masked_assignment, assignment)
                     assignment_loss, detection_loss = self.particle_symmetric_loss(assignment, detection, target, mask)
-                    
-                    # if iteration > 0:
-                        # where_mask = target == flattened_index
-                        # any_mask = where_mask.any(dim=1)
-                        # assignment_loss = assignment_loss * any_mask
                     prepro_losses.append(torch.stack((assignment_loss, detection_loss)))
                         
                 symmetric_losses.append(torch.stack(prepro_losses))
