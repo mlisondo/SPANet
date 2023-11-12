@@ -88,7 +88,8 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         symmetric_losses = []
         for permutation in self.event_permutation_tensor.cpu().numpy():
             masks = [mask for (_, mask) in targets[permutation]]
-            iteration_mask = torch.stack(masks).all(dim=0).view(iteration_mask.size(0), 1, 1, 1)
+            iteration_mask = torch.stack(masks).all(dim=0)
+            iteration_mask = iteration_mask.view(iteration_mask.size(0), 1, 1, 1)
         
         for iteration in range(num_iterations):
             for permutation in self.event_permutation_tensor.cpu().numpy():
