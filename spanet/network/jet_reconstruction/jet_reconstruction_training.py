@@ -90,7 +90,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
             for permutation in self.event_permutation_tensor.cpu().numpy():
                 prepro_losses = []
                 for assignment, detection, (target, mask) in zip(assignments, detections, targets[permutation]):
-                    print(target)
+                    print(target, mask)
                     if iteration > 0:
                         #minval = self.min_over_dims(assignment).view(assignment.size(0), 1, 1, 1)
                         assignment, flattened_index = self.mask_tensor(assignment)
