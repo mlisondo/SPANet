@@ -112,17 +112,17 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         total_symmetric_loss = symmetric_losses_reduced2.sum((1))
         index = total_symmetric_loss.argmin(0)
 
-        combined_loss = torch.gather(symmetric_losses, 0, index.expand_as(total_symmetric_loss))[0]
+        combined_loss = torch.gather(symmetric_losses_reduced, 0, index.expand_as(symmetric_losses_reduced))[0]
 
         # Simple average of all losses as a baseline.
         if self.options.combine_pair_loss.lower() == "mean":
-            combined_loss = symmetric_losses.mean(0)
+            combined_loss = symmetric_losses_reduced.mean(0)
 
         # Soft minimum function to smoothly fuse all loss function weighted by their size.
         if self.options.combine_pair_loss.lower() == "softmin":
             weights = F.softmin(total_symmetric_loss, 0)
             weights = weights.unsqueeze(1).unsqueeze(1)
-            combined_loss = (weights * symmetric_losses).sum(0)
+            combined_loss = (weights * symmetric_losses_reduced).sum(0)
 
         return combined_loss, index
 
