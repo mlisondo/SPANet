@@ -105,20 +105,23 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         # Default option is to find the minimum loss term of the symmetric options.
         # We also store which permutation we used to achieve that minimal loss.
         # combined_loss, _ = symmetric_losses.min(0)
-        total_symmetric_loss = symmetric_losses.sum((1, 2))
+        num_iterations = 2
+        symmetric_losses_reshaped = symmetric_losses.view(num_iterations, -1, symmetric_losses.size(-3), symmetric_losses.size(-2), symmetric_losses.size(-1))
+        symmetric_losses_reduced = symmetric_losses_reshaped.sum(axis=0)
+        total_symmetric_loss = symmetric_losses_reduced.sum((1, 2))
         index = total_symmetric_loss.argmin(0)
 
-        combined_loss = torch.gather(symmetric_losses, 0, index.expand_as(symmetric_losses))[0]
+        combined_loss = torch.gather(symmetric_losses_reduced, 0, index.expand_as(symmetric_losses_reduced))[0]
 
         # Simple average of all losses as a baseline.
         if self.options.combine_pair_loss.lower() == "mean":
-            combined_loss = symmetric_losses.mean(0)
+            combined_loss = symmetric_losses_reduced.mean(0)
 
         # Soft minimum function to smoothly fuse all loss function weighted by their size.
         if self.options.combine_pair_loss.lower() == "softmin":
             weights = F.softmin(total_symmetric_loss, 0)
             weights = weights.unsqueeze(1).unsqueeze(1).unsqueeze(1)
-            combined_loss = (weights * symmetric_losses).sum(0)
+            combined_loss = (weights * symmetric_losses_reduced).sum(0)
 
         return combined_loss, index
 
