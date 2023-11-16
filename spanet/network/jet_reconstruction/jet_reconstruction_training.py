@@ -107,25 +107,20 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         # combined_loss, _ = symmetric_losses.min(0)
         num_iterations = 2
         symmetric_losses_reshaped = symmetric_losses.view(num_iterations, -1, symmetric_losses.size(-3), symmetric_losses.size(-2), symmetric_losses.size(-1))
-        symmetric_losses_reduced = torch.sqrt(torch.clamp(symmetric_losses_reshaped.prod(axis=0), 0))
-        print('reduced1: ', symmetric_losses_reduced)
-        symmetric_losses_reduced2 = torch.sqrt(torch.clamp(symmetric_losses_reduced.prod(axis=1), 0))
-        print('reduced2: ', symmetric_losses_reduced2)
-        total_symmetric_loss = symmetric_losses_reduced2.sum((1))
-        print('total: ', total_symmetric_loss)
+        total_symmetric_loss = symmetric_losses_reshaped.sum((0, 1, 2))
         index = total_symmetric_loss.argmin(0)
 
-        combined_loss = torch.gather(symmetric_losses_reduced2, 0, index.expand_as(symmetric_losses_reduced2))[0]
+        combined_loss = torch.gather(symmetric_losses_reshaped, 0, index.expand_as(symmetric_losses_reshaped))[0]
 
         # Simple average of all losses as a baseline.
         if self.options.combine_pair_loss.lower() == "mean":
-            combined_loss = symmetric_losses_reduced2.mean(0)
+            combined_loss = symmetric_losses_reshaped.mean(0)
 
         # Soft minimum function to smoothly fuse all loss function weighted by their size.
         if self.options.combine_pair_loss.lower() == "softmin":
             weights = F.softmin(total_symmetric_loss, 0)
             weights = weights.unsqueeze(1).unsqueeze(1)
-            combined_loss = (weights * symmetric_losses_reduced2).sum(0)
+            combined_loss = (weights * symmetric_losses_reshaped).sum(0)
 
         return combined_loss, index
 
