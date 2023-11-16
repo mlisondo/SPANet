@@ -91,15 +91,10 @@ class JetReconstructionTraining(JetReconstructionNetwork):
                 prepro_losses = []
                 for assignment, detection, (target, mask) in zip(assignments, detections, targets[permutation]):
                     if iteration > 0:
-                        #minval = self.min_over_dims(assignment).view(assignment.size(0), 1, 1, 1)
                         assignment, flattened_index = self.mask_tensor(assignment)
                         
                     assignment_loss, detection_loss = self.particle_symmetric_loss(assignment, detection, target, mask)
                     
-                    # if iteration > 0:
-                        # where_mask = target == flattened_index
-                        # any_mask = where_mask.any(dim=1)
-                        # assignment_loss = assignment_loss * any_mask
                     prepro_losses.append(torch.stack((assignment_loss, detection_loss)))
                         
                 symmetric_losses.append(torch.stack(prepro_losses))
@@ -113,8 +108,8 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         num_iterations = 2
         symmetric_losses_reshaped = symmetric_losses.view(num_iterations, -1, symmetric_losses.size(-3), symmetric_losses.size(-2), symmetric_losses.size(-1))
         symmetric_losses_reduced = torch.sqrt(symmetric_losses_reshaped.prod(axis=0))
-        print(symmetric_losses_reduced.size())
-        total_symmetric_loss = symmetric_losses_reduced.sum((1, 2))
+        symmetric_losses_reduced2 = torch.sqrt(symmetric_losses_reshaped.prod(axis=1))
+        total_symmetric_loss = symmetric_losses_reduced.sum((1))
         index = total_symmetric_loss.argmin(0)
 
         combined_loss = torch.gather(symmetric_losses, 0, index.expand_as(symmetric_losses_reduced))[0]
