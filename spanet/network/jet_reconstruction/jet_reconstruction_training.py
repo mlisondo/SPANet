@@ -113,6 +113,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         num_iterations = 2
         symmetric_losses_reshaped = symmetric_losses.view(num_iterations, -1, symmetric_losses.size(-3), symmetric_losses.size(-2), symmetric_losses.size(-1))
         symmetric_losses_reduced = torch.sqrt(symmetric_losses_reshaped.prod(axis=0))
+        print(symmetric_losses_reduced.size())
         total_symmetric_loss = symmetric_losses_reduced.sum((1, 2))
         index = total_symmetric_loss.argmin(0)
 
