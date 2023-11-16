@@ -9,7 +9,7 @@ from spanet.dataset.types import Batch, Source, AssignmentTargets
 from spanet.dataset.regressions import regression_loss
 from spanet.network.jet_reconstruction.jet_reconstruction_network import JetReconstructionNetwork
 from spanet.network.utilities.divergence_losses import assignment_cross_entropy_loss, jensen_shannon_divergence
-
+CUDA_LAUNCH_BLOCKING=1
 
 def numpy_tensor_array(tensor_list):
     output = np.empty(len(tensor_list), dtype=np.object)
