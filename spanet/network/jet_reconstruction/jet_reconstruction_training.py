@@ -119,7 +119,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         # Soft minimum function to smoothly fuse all loss function weighted by their size.
         if self.options.combine_pair_loss.lower() == "softmin":
             weights = F.softmin(total_symmetric_loss, 0)
-            weights = weights.unsqueeze(1).unsqueeze(1)
+            weights = weights.unsqueeze(1).unsqueeze(1).unsqueeze(1)
             combined_loss = (weights * symmetric_losses_reshaped).sum(0)
 
         return combined_loss, index
