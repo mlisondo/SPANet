@@ -52,36 +52,34 @@ class JetReconstructionTraining(JetReconstructionNetwork):
             
         return torch.squeeze(tensor)
 
-    def mask_tensor(self, tensor):
-        batch_size = tensor.shape[0]
-    
-        # Compute argmax
-        flat_indices = torch.argmax(tensor.view(batch_size, -1), dim=1)
-    
-        # Convert flat indices to 3D indices
-        indices_3d = torch.stack(torch.meshgrid(
-            torch.arange(10, device=tensor.device),
-            torch.arange(10, device=tensor.device),
-            torch.arange(10, device=tensor.device),
-            indexing='ij'
-        ), dim=-1).reshape(-1, 3)
-        a_b_c_indices = indices_3d[flat_indices]  # Shape: (batch_size, 3)
-    
-        # Create masks
-        masks = []
-        for i in range(3):  # For each axis
-            mask = torch.ones((batch_size, 10), dtype=bool, device=tensor.device)  # Start with a mask of ones
-            for j in range(batch_size):
-                mask[j, a_b_c_indices[j, i]] = False  # Set the corresponding indices to False
-            masks.append(mask)
-    
-        # Apply the mask to the original tensor
-        for i in range(3):  # Apply each mask along each axis
-            tensor = tensor.masked_fill(masks[i].unsqueeze(1).unsqueeze(2) if i == 0 else
-                                         masks[i].unsqueeze(1).unsqueeze(3) if i == 1 else
-                                         masks[i].unsqueeze(2).unsqueeze(3), 0)
-    
-        return tensor, a_b_c_indices
+def mask_tensor(self, tensor):
+    batch_size = tensor.shape[0]
+
+    # Compute argmax
+    flat_indices = torch.argmax(tensor.view(batch_size, -1), dim=1)
+
+    # Convert flat indices to 3D indices
+    indices_3d = torch.stack(torch.meshgrid(
+        torch.arange(10, device=tensor.device),
+        torch.arange(10, device=tensor.device),
+        torch.arange(10, device=tensor.device),
+        indexing='ij'
+    ), dim=-1).reshape(-1, 3)
+    a_b_c_indices = indices_3d[flat_indices]  # Shape: (batch_size, 3)
+
+    # Create masks for axis 0 and 1
+    masks = []
+    for i in range(2):  # Only for axis 0 and 1
+        mask = torch.ones((batch_size, 10), dtype=bool, device=tensor.device)  # Start with a mask of ones
+        for j in range(batch_size):
+            mask[j, a_b_c_indices[j, i]] = False  # Set the corresponding indices to False
+        masks.append(mask)
+
+    # Apply the mask to the original tensor along axis 0 and 1
+    tensor = tensor.masked_fill(masks[0].unsqueeze(1).unsqueeze(2), 0)  # Apply mask along axis 0
+    tensor = tensor.masked_fill(masks[1].unsqueeze(1).unsqueeze(3), 0)  # Apply mask along axis 1
+
+    return tensor, a_b_c_indices
     
     def compute_symmetric_losses(self, assignments: Tuple[torch.Tensor], detections: List[torch.Tensor], targets: Tuple[Tuple[torch.Tensor]]):
         num_iterations = 2
