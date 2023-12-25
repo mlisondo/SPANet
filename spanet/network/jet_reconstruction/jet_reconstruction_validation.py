@@ -1,4 +1,5 @@
 from typing import Dict, Callable
+import warnings
 
 import numpy as np
 import torch
@@ -40,8 +41,8 @@ class JetReconstructionValidation(JetReconstructionNetwork):
         # Compute all possible target permutations and take the best performing permutation
         # First compute raw_old accuracy so that we can get an accuracy score for each event
         # This will also act as the method for choosing the best permutation to compare for the other metrics.
-        jet_accuracies = np.zeros((num_permutations, num_targets, batch_size), dtype=np.bool)
-        particle_accuracies = np.zeros((num_permutations, num_targets, batch_size), dtype=np.bool)
+        jet_accuracies = np.zeros((num_permutations, num_targets, batch_size), dtype=bool)
+        particle_accuracies = np.zeros((num_permutations, num_targets, batch_size), dtype=bool)
         for i, permutation in enumerate(event_permutation_group):
             for j, (prediction, target) in enumerate(zip(jet_predictions, stacked_targets[permutation])):
                 jet_accuracies[i, j] = np.all(prediction == target, axis=1)
@@ -62,13 +63,16 @@ class JetReconstructionValidation(JetReconstructionNetwork):
         particle_accuracies = particle_accuracies.max(0)
 
         # Create the logging dictionaries
-        metrics = {f"jet/accuracy_{i}_of_{j}": (jet_accuracies[num_particles == j] >= i).mean()
-                   for j in range(1, num_targets + 1)
-                   for i in range(1, j + 1)}
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+    
+            metrics = {f"jet/accuracy_{i}_of_{j}": (jet_accuracies[num_particles == j] >= i).mean()
+                    for j in range(1, num_targets + 1)
+                    for i in range(1, j + 1)}
 
-        metrics.update({f"particle/accuracy_{i}_of_{j}": (particle_accuracies[num_particles == j] >= i).mean()
-                        for j in range(1, num_targets + 1)
-                        for i in range(1, j + 1)})
+            metrics.update({f"particle/accuracy_{i}_of_{j}": (particle_accuracies[num_particles == j] >= i).mean()
+                            for j in range(1, num_targets + 1)
+                            for i in range(1, j + 1)})
 
         particle_scores = particle_scores.ravel()
         particle_targets = permuted_masks.ravel()
@@ -96,7 +100,7 @@ class JetReconstructionValidation(JetReconstructionNetwork):
 
         # Stack all of the targets into single array, we will also move to numpy for easier the numba computations.
         stacked_targets = np.zeros(num_targets, dtype=object)
-        stacked_masks = np.zeros((num_targets, batch_size), dtype=np.bool)
+        stacked_masks = np.zeros((num_targets, batch_size), dtype=bool)
         for i, (target, mask) in enumerate(targets):
             stacked_targets[i] = target.detach().cpu().numpy()
             stacked_masks[i] = mask.detach().cpu().numpy()

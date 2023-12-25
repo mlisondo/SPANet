@@ -11,7 +11,7 @@ from spanet.network.jet_reconstruction.jet_reconstruction_network import JetReco
 from spanet.network.utilities.divergence_losses import assignment_cross_entropy_loss, jensen_shannon_divergence
 
 def numpy_tensor_array(tensor_list):
-    output = np.empty(len(tensor_list), dtype=np.object)
+    output = np.empty(len(tensor_list), dtype=object)
     output[:] = tensor_list
 
     return output
@@ -279,7 +279,7 @@ def mask_tensor(self, tensor):
 
         # Take the weighted average of the symmetric loss terms.
         masks = masks.unsqueeze(1)
-        symmetric_losses = (weights * symmetric_losses).sum(-1) / masks.sum(-1)
+        symmetric_losses = (weights * symmetric_losses).sum(-1) / torch.clamp(masks.sum(-1), 1, None)
         assignment_loss, detection_loss = torch.unbind(symmetric_losses, 1)
 
 
