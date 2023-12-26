@@ -68,15 +68,18 @@ class JetReconstructionTraining(JetReconstructionNetwork):
     
         # Create masks for axis 0 and 1
         masks = []
-        for i in range(2):  # Only for axis 0 and 1
-            mask = torch.ones((batch_size, 10), dtype=bool, device=tensor.device)  # Start with a mask of ones
+        for i in range(2):  # Creating masks for axis i and j
+            mask = torch.ones((batch_size, 10, 10, 10), dtype=bool, device=tensor.device)  # Start with a mask of ones
             for j in range(batch_size):
-                mask[j, a_b_c_indices[j, i]] = False  # Set the corresponding indices to False
+                if i == 0:
+                    mask[j, a_b_c_indices[j, i], :, :] = False  # Set the entire i axis to False
+                else:
+                    mask[j, :, a_b_c_indices[j, i], :] = False  # Set the entire j axis to False
             masks.append(mask)
-    
-        # Apply the mask to the original tensor along axis 0 and 1
-        tensor = tensor.masked_fill(masks[0].unsqueeze(1).unsqueeze(2), 0)  # Apply mask along axis 0
-        tensor = tensor.masked_fill(masks[1].unsqueeze(1).unsqueeze(3), 0)  # Apply mask along axis 1
+        
+        # Apply the mask to the original tensor
+        for mask in masks:
+            tensor = tensor.masked_fill(mask, 0)
     
         return tensor, a_b_c_indices
     
