@@ -67,17 +67,13 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         a_b_c_indices = indices_3d[flat_indices]  # Shape: (batch_size, 3)
     
         # Create masks for axis 0 and 1
-        masks = []
-        for i in range(2):  # Creating masks for axis i and j
-            mask = torch.ones((batch_size, 10, 10, 10), dtype=bool, device=tensor.device)  # Start with a mask of ones
-            for j in range(batch_size):
-                mask[j, a_b_c_indices[j, i], :, :] = False  # Set the entire i axis to False
-                mask[j, :, a_b_c_indices[j, i], :] = False  # Set the entire j axis to False
-            masks.append(mask)
+        mask = torch.ones((batch_size, 10, 10, 10), dtype=bool, device=tensor.device)  # Start with a mask of ones
+        for j in range(batch_size):
+            mask[j, a_b_c_indices[j, 0], a_b_c_indices[j, 1], :] = False  # Set the entire i axis to False
+            mask[j, a_b_c_indices[j, 1], a_b_c_indices[j, 0], :] = False  # Set the entire j axis to False
         
         # Apply the mask to the original tensor
-        for mask in masks:
-            tensor = tensor.masked_fill(~mask, 0)
+        tensor = tensor.masked_fill(~mask, 0)
     
         return tensor, a_b_c_indices
     
