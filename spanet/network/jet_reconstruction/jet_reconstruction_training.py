@@ -77,7 +77,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         
         # Apply the mask to the original tensor
         for mask in masks:
-            tensor = tensor.masked_fill(mask, 0)
+            tensor = tensor.masked_fill(~mask, 0)
     
         return tensor, a_b_c_indices
     
