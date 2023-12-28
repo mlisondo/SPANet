@@ -85,7 +85,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         for permutation in self.event_permutation_tensor.cpu().numpy():
             for _, mask in targets[permutation]:
                 masks.append(mask)
-            double_masks.append(torch.stack(masks))
+            both_masks.append(torch.stack(masks))
         
         double_mask = torch.logical_and(both_masks[0], both_masks[1])
         
