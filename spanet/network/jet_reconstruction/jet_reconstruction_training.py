@@ -80,12 +80,14 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         return tensor, a_b_c_indices
     
     def compute_symmetric_losses(self, assignments: Tuple[torch.Tensor], detections: List[torch.Tensor], targets: Tuple[Tuple[torch.Tensor]]):
+        both_masks = []
         masks = []
         for permutation in self.event_permutation_tensor.cpu().numpy():
-            _, mask = targets[permutation]
-            masks.append(mask)
+            for _, mask in targets[permutation]:
+                masks.append(mask)
+            double_masks.append(torch.stack(masks))
         
-        double_mask = torch.logical_and(masks[0], masks[1])
+        double_mask = torch.logical_and(both_masks[0], both_masks[1])
         
         num_iterations = 2
         symmetric_losses = []
