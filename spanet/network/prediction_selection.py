@@ -233,12 +233,15 @@ def find_max_and_mask(matrix):
     indices = np.unravel_index(index, new_matrix.shape)
  
     # Replace the found value with 999
-    new_matrix[indices] = 999
+    new_matrix[indices[0], :, :] = 999
+    new_matrix[indices[1], :, :] = 999
+    new_matrix[:, indices[0], :] = 999
+    new_matrix[:, indices[1], :] = 999
     
-    # Handle the i-j swap symmetry
-    i, j, k = indices
-    symmetric_index = (j, i, k)
-    new_matrix[symmetric_index] = 999
+    # # Handle the i-j swap symmetry
+    # i, j, k = indices
+    # symmetric_index = (j, i, k)
+    # new_matrix[symmetric_index] = 999
 
     
     return new_matrix, i, j, k
@@ -271,8 +274,8 @@ def extract_predictions(predictions: List[TArray]):
     max_results = np.zeros_like(result)
     for i in prange(batch_size):
         temp_weight = weights[:,i,:]
-        new_prod = np.prod(np.exp(temp_weight), axis=0)
-        indx = np.argmax(new_prod)
+        new_sum = np.sum(np.exp(temp_weight), axis=0)
+        indx = np.argmax(new_sum)
         max_results[:,i,:] = results[:,i,:,indx]
 
     return [max_result[:, :partons] for max_result, partons in zip(max_results, num_partons)]
