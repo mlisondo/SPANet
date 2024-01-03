@@ -109,9 +109,9 @@ class JetReconstructionTraining(JetReconstructionNetwork):
                         
                         prepro_losses.append(torch.stack((assignment_loss, detection_loss)))
                     
-                    single_masks.append(masks[0])
+                    single_masks.append([masks[1], masks[0]])
                 else:
-                    for assignment, detection, (target, mask), single_mask in zip(assignments, detections, targets[permutation], single_masks):
+                    for assignment, detection, (target, mask), single_mask in zip(assignments, detections, targets[permutation], single_masks[permutation]):
                         assignment2, flattened_index = self.mask_tensor(assignment)
                         all_mask = torch.logical_and(mask, single_mask).unsqueeze(1).unsqueeze(1).unsqueeze(1)
                         assignment = torch.where(all_mask, assignment2, assignment)
