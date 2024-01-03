@@ -100,14 +100,16 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         single_masks = []
         for iteration in range(num_iterations):
             for permutation in self.event_permutation_tensor.cpu().numpy():
-                masks = []
                 prepro_losses = []
                 if iteration == 0:
+                    masks = []
                     for assignment, detection, (target, mask) in zip(assignments, detections, targets[permutation]):
                         masks.append(mask)
                         assignment_loss, detection_loss = self.particle_symmetric_loss(assignment, detection, target, mask)
                         
                         prepro_losses.append(torch.stack((assignment_loss, detection_loss)))
+                    
+                    single_masks.append(masks[0])
                 else:
                     for assignment, detection, (target, mask), single_mask in zip(assignments, detections, targets[permutation], single_masks):
                         assignment2, flattened_index = self.mask_tensor(assignment)
@@ -118,7 +120,6 @@ class JetReconstructionTraining(JetReconstructionNetwork):
                         
                         prepro_losses.append(torch.stack((assignment_loss, detection_loss)))
                 
-                single_masks.append(masks[0])
                 symmetric_losses.append(torch.stack(prepro_losses))
     
         return torch.stack(symmetric_losses)
