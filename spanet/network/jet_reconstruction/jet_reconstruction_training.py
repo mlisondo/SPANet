@@ -88,12 +88,14 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         #     for _, mask in targets[permutation]:
         #         masks.append(mask)
         #     double_masks.append(torch.logical_and(masks[0], masks[1]))
-        single_masks = []
-        for permutation in self.event_permutation_tensor.cpu().numpy():
-            masks = []
-            for _, mask in targets[permutation]:
-                masks.append(mask)
-            single_masks.append(masks[0])
+        # single_masks = []
+        # for permutation in self.event_permutation_tensor.cpu().numpy():
+        #     masks = []
+        #     for _, mask in targets[permutation]:
+        #         masks.append(mask)
+        #     single_masks.append(masks[0])
+        first_masks = [t[0][1] for t in targets]
+        single_masks = [first_masks[i] for i in event_permutation_tensor]
         
         num_iterations = 2
         symmetric_losses = []
