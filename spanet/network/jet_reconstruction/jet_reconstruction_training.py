@@ -82,36 +82,26 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         return tensor, a_b_c_indices
     
     def compute_symmetric_losses(self, assignments: Tuple[torch.Tensor], detections: List[torch.Tensor], targets: Tuple[Tuple[torch.Tensor]]):
-        # double_masks = []
+        # single_masks = []
         # for permutation in self.event_permutation_tensor.cpu().numpy():
         #     masks = []
         #     for _, mask in targets[permutation]:
         #         masks.append(mask)
-        #     double_masks.append(torch.logical_and(masks[0], masks[1]))
-        single_masks = []
-        for permutation in self.event_permutation_tensor.cpu().numpy():
-            masks = []
-            for _, mask in targets[permutation]:
-                masks.append(mask)
-            single_masks.append(masks[0])
+        #     single_masks.append(masks[permutation.T])
         
         num_iterations = 2
         symmetric_losses = []
-        single_masks = []
         for iteration in range(num_iterations):
             for permutation in self.event_permutation_tensor.cpu().numpy():
                 prepro_losses = []
                 if iteration == 0:
                     masks = []
                     for assignment, detection, (target, mask) in zip(assignments, detections, targets[permutation]):
-                        masks.append(mask)
                         assignment_loss, detection_loss = self.particle_symmetric_loss(assignment, detection, target, mask)
                         
                         prepro_losses.append(torch.stack((assignment_loss, detection_loss)))
-                    
-                    single_masks.append([masks[1], masks[0]])
                 else:
-                    for assignment, detection, (target, mask), single_mask in zip(assignments, detections, targets[permutation], single_masks[permutation]):
+                    for assignment, detection, (target, mask), (_,single_mask) in zip(assignments, detections, targets[permutation], targets[permutation.T]):
                         assignment2, flattened_index = self.mask_tensor(assignment)
                         all_mask = torch.logical_and(mask, single_mask).unsqueeze(1).unsqueeze(1).unsqueeze(1)
                         assignment = torch.where(all_mask, assignment2, assignment)
