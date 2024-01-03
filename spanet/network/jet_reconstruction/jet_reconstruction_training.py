@@ -95,7 +95,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         #         masks.append(mask)
         #     single_masks.append(masks[0])
         first_masks = [t[0][1] for t in targets]
-        single_masks = [first_masks[i] for i in event_permutation_tensor]
+        single_masks = [first_masks[i] for i in self.event_permutation_tensor.cpu().numpy()]
         
         num_iterations = 2
         symmetric_losses = []
