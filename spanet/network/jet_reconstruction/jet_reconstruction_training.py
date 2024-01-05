@@ -53,33 +53,27 @@ class JetReconstructionTraining(JetReconstructionNetwork):
 
     def mask_tensor(self, tensor):
         batch_size = tensor.shape[0]
-    
-        # Compute argmax
-        flat_indices = torch.argmax(tensor.view(batch_size, -1), dim=1)
-    
-        # Convert flat indices to 3D indices
-        indices_3d = torch.stack(torch.meshgrid(
-            torch.arange(10, device=tensor.device),
-            torch.arange(10, device=tensor.device),
-            torch.arange(10, device=tensor.device),
-            indexing='ij'
-        ), dim=-1).reshape(-1, 3)
-        a_b_c_indices = indices_3d[flat_indices]  # Shape: (batch_size, 3)
-    
+
+        # Compute argmax along each axis
+        i_max_indices = torch.argmax(tensor.max(dim=3).values.max(dim=2).values, dim=1)
+        j_max_indices = torch.argmax(tensor.max(dim=3).values.max(dim=1).values, dim=1)
+
         # Create masks for axis 0 and 1
-        mask = torch.zeros((batch_size, 10, 10, 10), dtype=bool, device=tensor.device)  # Start with a mask of ones
+        mask = torch.zeros_like(tensor, dtype=bool)
         for j in range(batch_size):
-            # mask[j, a_b_c_indices[j, 1], a_b_c_indices[j, 0], :] = True
-            # mask[j, a_b_c_indices[j, 0], a_b_c_indices[j, 1], :] = True
-            mask[j, a_b_c_indices[j, 1], :, :] = True
-            mask[j, a_b_c_indices[j, 0], :, :] = True
-            mask[j, :, a_b_c_indices[j, 1], :] = True
-            mask[j, :, a_b_c_indices[j, 0], :] = True
-        
+            i_max = i_max_indices[j]
+            j_max = j_max_indices[j]
+
+            mask[j, i_max, :, :] = True
+            mask[j, :, j_max, :] = True
+            mask[j, j_max, :, :] = True
+            mask[j, :, i_max, :] = True
+
         # Apply the mask to the original tensor
         tensor = tensor.masked_fill(mask, float('-inf'))
-    
-        return tensor, a_b_c_indices
+
+        return tensor
+
     
     def compute_symmetric_losses(self, assignments: Tuple[torch.Tensor], detections: List[torch.Tensor], targets: Tuple[Tuple[torch.Tensor]]):        
         num_iterations = 2
@@ -91,15 +85,15 @@ class JetReconstructionTraining(JetReconstructionNetwork):
                     masks = []
                     for assignment, detection, (target, mask) in zip(assignments, detections, targets[permutation]):
                         assignment_loss, detection_loss = self.particle_symmetric_loss(assignment, detection, target, mask)
-                        
+
                         prepro_losses.append(torch.stack((assignment_loss, detection_loss)))
                 else:
                     for assignment, detection, (target, mask), (_, single_mask) in zip(assignments, detections, targets[permutation], targets[np.flip(permutation)]):
-                        assignment2, flattened_index = self.mask_tensor(assignment)
+                        assignment2 = self.mask_tensor(assignment)
                         double_mask = torch.logical_and(mask, single_mask)
                         assignment3 = torch.where(double_mask.unsqueeze(1).unsqueeze(1).unsqueeze(1), assignment2, assignment)
                         assignment_loss, detection_loss = self.particle_symmetric_loss(assignment3, detection, target, double_mask)
-
+      
                         inf_mask = torch.isinf(assignment_loss)
                         assignment_loss = assignment_loss.masked_fill_(inf_mask, 0)
 
