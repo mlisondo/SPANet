@@ -234,11 +234,11 @@ def find_max_and_mask(matrix):
     i, j, k = indices
  
     # Replace the found value with 999
-    new_matrix[i, j, :] = 999
+    new_matrix[i, j, k] = 999
     
     # Handle the i-j swap symmetry
     symmetric_index = (j, i, k)
-    new_matrix[j, i, :] = 999
+    new_matrix[j, i, k] = 999
 
     
     return new_matrix, i, j, k
