@@ -231,12 +231,12 @@ def find_max_and_mask(matrix):
     
     # Convert the flat index back to 3D indices
     indices = np.unravel_index(index, new_matrix.shape)
+    i, j, k = indices
  
     # Replace the found value with 999
     new_matrix[i, j, :] = 999
     
     # Handle the i-j swap symmetry
-    i, j, k = indices
     symmetric_index = (j, i, k)
     new_matrix[j, i, :] = 999
 
