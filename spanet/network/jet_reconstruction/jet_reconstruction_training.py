@@ -67,17 +67,17 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         a_b_c_indices = indices_3d[flat_indices]  # Shape: (batch_size, 3)
     
         # Create masks for axis 0 and 1
-        mask = torch.ones((batch_size, 10, 10, 10), dtype=bool, device=tensor.device)  # Start with a mask of ones
+        mask = torch.zeros((batch_size, 10, 10, 10), dtype=bool, device=tensor.device)  # Start with a mask of ones
         for j in range(batch_size):
-            # mask[j, a_b_c_indices[j, 1], a_b_c_indices[j, 0], :] = False
-            # mask[j, a_b_c_indices[j, 0], a_b_c_indices[j, 1], :] = False
-            mask[j, a_b_c_indices[j, 1], :, :] = False
-            mask[j, a_b_c_indices[j, 0], :, :] = False
-            mask[j, :, a_b_c_indices[j, 1], :] = False
-            mask[j, :, a_b_c_indices[j, 0], :] = False
+            # mask[j, a_b_c_indices[j, 1], a_b_c_indices[j, 0], :] = True
+            # mask[j, a_b_c_indices[j, 0], a_b_c_indices[j, 1], :] = True
+            mask[j, a_b_c_indices[j, 1], :, :] = True
+            mask[j, a_b_c_indices[j, 0], :, :] = True
+            mask[j, :, a_b_c_indices[j, 1], :] = True
+            mask[j, :, a_b_c_indices[j, 0], :] = True
         
         # Apply the mask to the original tensor
-        tensor = tensor.masked_fill(~mask, float('-inf'))
+        tensor = tensor.masked_fill(mask, float('-inf'))
     
         return tensor, a_b_c_indices
     
@@ -98,11 +98,13 @@ class JetReconstructionTraining(JetReconstructionNetwork):
                         assignment2, flattened_index = self.mask_tensor(assignment)
                         double_mask = torch.logical_and(mask, single_mask)
                         assignment3 = torch.where(double_mask.unsqueeze(1).unsqueeze(1).unsqueeze(1), assignment2, assignment)
-                                                        
                         assignment_loss, detection_loss = self.particle_symmetric_loss(assignment3, detection, target, double_mask)
-                        
+
+                        inf_mask = torch.isinf(assignment_loss)
+                        assignment_loss = assignment_loss.masked_fill_(inf_mask, 0)
+
                         prepro_losses.append(torch.stack((assignment_loss, detection_loss)))
-                
+
                 symmetric_losses.append(torch.stack(prepro_losses))
     
         return torch.stack(symmetric_losses)
