@@ -69,12 +69,12 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         # Create masks for axis 0 and 1
         mask = torch.ones((batch_size, 10, 10, 10), dtype=bool, device=tensor.device)  # Start with a mask of ones
         for j in range(batch_size):
-            mask[j, a_b_c_indices[j, 1], a_b_c_indices[j, 0], :] = False
-            mask[j, a_b_c_indices[j, 0], a_b_c_indices[j, 1], :] = False
-            # mask[j, a_b_c_indices[j, 1], :, :] = False
-            # mask[j, a_b_c_indices[j, 0], :, :] = False
-            # mask[j, :, a_b_c_indices[j, 1], :] = False
-            # mask[j, :, a_b_c_indices[j, 0], :] = False
+            # mask[j, a_b_c_indices[j, 1], a_b_c_indices[j, 0], :] = False
+            # mask[j, a_b_c_indices[j, 0], a_b_c_indices[j, 1], :] = False
+            mask[j, a_b_c_indices[j, 1], :, :] = False
+            mask[j, a_b_c_indices[j, 0], :, :] = False
+            mask[j, :, a_b_c_indices[j, 1], :] = False
+            mask[j, :, a_b_c_indices[j, 0], :] = False
         
         # Apply the mask to the original tensor
         tensor = tensor.masked_fill(~mask, float('-inf'))
@@ -96,9 +96,10 @@ class JetReconstructionTraining(JetReconstructionNetwork):
                 else:
                     for assignment, detection, (target, mask), (_, single_mask) in zip(assignments, detections, targets[permutation], targets[np.flip(permutation)]):
                         assignment2, flattened_index = self.mask_tensor(assignment)
-                        assignment = torch.where(single_mask.unsqueeze(1).unsqueeze(1).unsqueeze(1), assignment2, assignment)
+                        double_mask = torch.logical_and(mask, single_mask)
+                        assignment3 = torch.where(double_mask.unsqueeze(1).unsqueeze(1).unsqueeze(1), assignment2, assignment)
                                                         
-                        assignment_loss, detection_loss = self.particle_symmetric_loss(assignment, detection, target, mask)
+                        assignment_loss, detection_loss = self.particle_symmetric_loss(assignment3, detection, target, double_mask)
                         
                         prepro_losses.append(torch.stack((assignment_loss, detection_loss)))
                 
