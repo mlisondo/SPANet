@@ -77,7 +77,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
             mask[j, :, a_b_c_indices[j, 0], :] = False
         
         # Apply the mask to the original tensor
-        tensor = tensor.masked_fill(~mask, 0)
+        tensor = tensor.masked_fill(~mask, float('-inf'))
     
         return tensor, a_b_c_indices
     
