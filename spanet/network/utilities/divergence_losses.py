@@ -22,7 +22,7 @@ def assignment_cross_entropy_loss(prediction: Tensor, target_data: Tensor, targe
     ravel_prediction = prediction.reshape(batch_size, -1).contiguous()
     ravel_prediction_mask = prediction_mask.reshape(batch_size, -1).contiguous()
 
-    ravel_prediction = ravel_prediction.masked_fill(~ravel_prediction_mask, 0.0)
+    ravel_prediction = ravel_prediction.masked_fill(ravel_prediction_mask, 0.0)
 
     log_probability = ravel_prediction.gather(-1, ravel_target.view(-1, 1)).squeeze()
     log_probability = log_probability.masked_fill(~target_mask, 0.0)
