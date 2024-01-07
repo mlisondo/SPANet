@@ -29,27 +29,11 @@ class JetReconstructionTraining(JetReconstructionNetwork):
             for particle in self.event_particle_names
         }
 
-    def particle_symmetric_loss(self, assignment: Tensor, detection: Tensor, target: Tensor, mask: Tensor) -> Tensor:
-        assignment_loss = assignment_cross_entropy_loss(assignment, target, mask, self.options.focal_gamma)
+    def particle_symmetric_loss(self, assignment: Tensor, detection: Tensor, target: Tensor, mask: Tensor, prediction_mask: Tensor) -> Tensor:
+        assignment_loss = assignment_cross_entropy_loss(assignment, target, mask, prediction_mask, self.options.focal_gamma)
         detection_loss = F.binary_cross_entropy_with_logits(detection, mask.float(), reduction='none')
 
         return self.options.assignment_loss_scale * assignment_loss, self.options.detection_loss_scale * detection_loss
-
-    def max_over_dims(self, tensor, start_dim=1):
-        for dim in range(start_dim, tensor.dim()):
-            tensor, _ = torch.max(tensor, dim=dim, keepdim=True)
-        return torch.squeeze(tensor)
-
-    def min_over_dims(self, tensor, start_dim=1):
-        for dim in range(start_dim, tensor.dim()):
-            # Create a mask where tensor is not -inf
-            valid_mask = tensor != float('-inf')
-            
-            # Use the mask to replace -inf with a large positive value, then compute the minimum
-            replaced_tensor = torch.where(valid_mask, tensor, torch.tensor(float('inf')).to(tensor.device))
-            tensor, _ = torch.min(replaced_tensor, dim=dim, keepdim=True)
-            
-        return torch.squeeze(tensor)
 
     def mask_tensor(self, tensor):
         batch_size = tensor.shape[0]
@@ -57,7 +41,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         # Compute argmax along each axis
         i_max_indices = torch.argmax(tensor.max(dim=3).values.max(dim=2).values, dim=1)
         j_max_indices = torch.argmax(tensor.max(dim=3).values.max(dim=1).values, dim=1)
-        k_max_indices = torch.argmax(tensor.max(dim=2).values.max(dim=1).values, dim=1)
+        k_max_indices = torch.argmax(tensor.max(dim=1).values.max(dim=1).values, dim=1)
 
         # Create masks for axis 0 and 1
         mask = torch.zeros_like(tensor, dtype=bool)
@@ -72,10 +56,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
             mask[j, :, i_max, :] = True
             mask[j, :, :, k_max] = True
 
-        # Apply the mask to the original tensor
-        tensor = tensor.masked_fill(mask, float('-inf'))
-
-        return tensor
+        return mask
 
     
     def compute_symmetric_losses(self, assignments: Tuple[torch.Tensor], detections: List[torch.Tensor], targets: Tuple[Tuple[torch.Tensor]]):        
@@ -87,17 +68,18 @@ class JetReconstructionTraining(JetReconstructionNetwork):
                 if iteration == 0:
                     masks = []
                     for assignment, detection, (target, mask) in zip(assignments, detections, targets[permutation]):
-                        assignment_loss, detection_loss = self.particle_symmetric_loss(assignment, detection, target, mask)
+                        assignment_loss, detection_loss = self.particle_symmetric_loss(assignment, detection, target, mask, torch.ones_like(assignment, dtype=torch.bool))
 
                         prepro_losses.append(torch.stack((assignment_loss, detection_loss)))
                 else:
                     for assignment, detection, (target, mask), (_, single_mask) in zip(assignments, detections, targets[permutation], targets[np.flip(permutation)]):
-                        assignment2 = self.mask_tensor(assignment)
-                        assignment3 = torch.where(single_mask.unsqueeze(1).unsqueeze(1).unsqueeze(1), assignment2, assignment)
-                        assignment_loss, detection_loss = self.particle_symmetric_loss(assignment3, detection, target, mask)
+                        prediction_mask = self.mask_tensor(assignment)
+                        assignment_loss, detection_loss = self.particle_symmetric_loss(assignment, detection, target, mask, prediction_mask)
+
+                        # whereinf = torch.where(torch.isinf(assignment_loss))[0]
       
-                        inf_mask = torch.isinf(assignment_loss)
-                        assignment_loss = assignment_loss.masked_fill_(inf_mask, 0)
+                        # inf_mask = torch.isinf(assignment_loss)
+                        # assignment_loss = assignment_loss.masked_fill_(inf_mask, 0)
 
                         prepro_losses.append(torch.stack((assignment_loss, detection_loss)))
 
