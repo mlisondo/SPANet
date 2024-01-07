@@ -1,278 +1,62 @@
-from typing import List
-import numpy as np
+import torch
+from torch import Tensor
+from torch.nn import functional as F
 
-import numba
-from numba import njit, prange
+@torch.jit.script
+def assignment_cross_entropy_loss(prediction: Tensor, target_data: Tensor, target_mask: Tensor, prediction_mask: Tensor, gamma: float) -> Tensor:
+    batch_size = prediction.shape[0]
+    prediction_shape = prediction.shape[1:]
 
-from itertools import permutations
+    # Remove missing jets
+    target_data = target_data.clamp(0, None)
 
-TArray = np.ndarray
+    # Find the unravelling shape required to flatten the target indices
+    ravel_sizes = torch.tensor(prediction_shape).flip(0)
+    ravel_sizes = torch.cumprod(ravel_sizes, 0)
+    ravel_sizes = torch.div(ravel_sizes, ravel_sizes[0], rounding_mode='floor')
+    ravel_sizes = ravel_sizes.flip(0).unsqueeze(0)
+    ravel_sizes = ravel_sizes.to(target_data.device)
 
-TFloat32 = numba.types.float32
-TInt64 = numba.types.int64
+    # Flatten the target and predicted data to be one dimensional
+    ravel_target = (target_data * ravel_sizes).sum(1)
+    ravel_prediction = prediction.reshape(batch_size, -1).contiguous()
+    ravel_prediction_mask = prediction_mask.reshape(batch_size, -1).contiguous()
 
-TIndices = numba.types.UniTuple(TInt64, 3)
+    ravel_prediction = ravel_prediction.masked_fill(ravel_prediction_mask, 0.0)
 
-TPrediction = numba.typed.typedlist.ListType(TFloat32[::1])
-TPredictions = numba.typed.typedlist.ListType(TFloat32[:, ::1])
+    log_probability = ravel_prediction.gather(-1, ravel_target.view(-1, 1)).squeeze()
+    log_probability = log_probability.masked_fill(~target_mask, 0.0)
 
-TIResult = TInt64[:, ::1]
-TIResults = TInt64[:, :, ::1]
+    focal_scale = (1 - torch.exp(log_probability)) ** gamma
 
-TFResult = TFloat32[::1]
-TFResults = TFloat32[:, ::1]
-
-NUMBA_DEBUG = False
-
-
-if NUMBA_DEBUG:
-    def njit(*args, **kwargs):
-        def wrapper(function):
-            return function
-        return wrapper
-
-
-@njit("void(float32[::1], int64, int64, float32)")
-def mask_1(data, size, index, value):
-    data[index] = value
+    return -log_probability * focal_scale
 
 
-@njit("void(float32[::1], int64, int64, float32)")
-def mask_2(flat_data, size, index, value):
-    data = flat_data.reshape((size, size))
-    data[index, :] = value
-    data[:, index] = value
+@torch.jit.script
+def kl_divergence_old(p: Tensor, log_p: Tensor, log_q: Tensor) -> Tensor:
+    sum_dim = [i for i in range(1, p.ndim)]
+    return torch.sum(p * log_p - p * log_q, sum_dim)
 
 
-@njit("void(float32[::1], int64, int64, float32)")
-def mask_3(flat_data, size, index, value):
-    data = flat_data.reshape((size, size, size))
-    data[index, :, :] = value
-    data[:, index, :] = value
-    data[:, :, index] = value
+@torch.jit.script
+def kl_divergence(log_prediction: Tensor, log_target: Tensor) -> Tensor:
+    sum_dim = [i for i in range(1, log_prediction.ndim)]
+    return torch.nansum(F.kl_div(log_prediction, log_target, reduction='none', log_target=True), dim=sum_dim)
 
 
-# @njit("void(float32[::1], int64, int64, float32)")
-# def mask_4(flat_data, size, index, value):
-#     data = flat_data.reshape((size, size, size, size))
-#     data[index, :, :, :] = value
-#     data[:, index, :, :] = value
-#     data[:, :, index, :] = value
-#     data[:, :, :, index] = value
+@torch.jit.script
+def jensen_shannon_divergence(log_p: Tensor, log_q: Tensor) -> Tensor:
+    sum_dim = [i for i in range(1, log_p.ndim)]
 
+    # log_m = log( (exp(log_p) + exp(log_q)) / 2 )
+    log_m = torch.logsumexp(torch.stack((log_p, log_q)), dim=0) - 0.69314718056
 
-# @njit("void(float32[::1], int64, int64, float32)")
-# def mask_5(flat_data, size, index, value):
-#     data = flat_data.reshape((size, size, size, size, size))
-#     data[index, :, :, :, :] = value
-#     data[:, index, :, :, :] = value
-#     data[:, :, index, :, :] = value
-#     data[:, :, :, index, :] = value
-#     data[:, :, :, :, index] = value
-#
-#
-# @njit("void(float32[::1], int64, int64, float32)")
-# def mask_6(flat_data, size, index, value):
-#     data = flat_data.reshape((size, size, size, size, size, size))
-#     data[index, :, :, :, :, :] = value
-#     data[:, index, :, :, :, :] = value
-#     data[:, :, index, :, :, :] = value
-#     data[:, :, :, index, :, :] = value
-#     data[:, :, :, :, index, :] = value
-#     data[:, :, :, :, :, index] = value
+    # TODO play around with gradient
+    # log_m = log_m.detach()
+    log_p = log_p.detach()
+    log_q = log_q.detach()
 
+    kl_p = F.kl_div(log_m, log_p, reduction='none', log_target=True)
+    kl_q = F.kl_div(log_m, log_q, reduction='none', log_target=True)
 
-# @njit("void(float32[::1], int64, int64, float32)")
-# def mask_7(flat_data, size, index, value):
-#     data = flat_data.reshape((size, size, size, size, size, size, size))
-#     data[index, :, :, :, :, :, :] = value
-#     data[:, index, :, :, :, :, :] = value
-#     data[:, :, index, :, :, :, :] = value
-#     data[:, :, :, index, :, :, :] = value
-#     data[:, :, :, :, index, :, :] = value
-#     data[:, :, :, :, :, index, :] = value
-#     data[:, :, :, :, :, :, index] = value
-#
-#
-# @njit("void(float32[::1], int64, int64, float32)")
-# def mask_8(flat_data, size, index, value):
-#     data = flat_data.reshape((size, size, size, size, size, size, size, size))
-#     data[index, :, :, :, :, :, :, :] = value
-#     data[:, index, :, :, :, :, :, :] = value
-#     data[:, :, index, :, :, :, :, :] = value
-#     data[:, :, :, index, :, :, :, :] = value
-#     data[:, :, :, :, index, :, :, :] = value
-#     data[:, :, :, :, :, index, :, :] = value
-#     data[:, :, :, :, :, :, index, :] = value
-#     data[:, :, :, :, :, :, :, index] = value
-
-
-@njit("void(float32[::1], int64, int64, int64, float32)")
-def mask_jet(data, num_partons, max_jets, index, value):
-    if num_partons == 1:
-        mask_1(data, max_jets, index, value)
-    elif num_partons == 2:
-        mask_2(data, max_jets, index, value)
-    elif num_partons == 3:
-        mask_3(data, max_jets, index, value)
-    # elif num_partons == 4:
-    #     mask_4(data, max_jets, index, value)
-    # elif num_partons == 5:
-    #     mask_5(data, max_jets, index, value)
-    # elif num_partons == 6:
-    #     mask_6(data, max_jets, index, value)
-    # elif num_partons == 7:
-    #     mask_7(data, max_jets, index, value)
-    # elif num_partons == 8:
-    #     mask_8(data, max_jets, index, value)
-
-
-@njit("int64[::1](int64, int64)")
-def compute_strides(num_partons, max_jets):
-    strides = np.zeros(num_partons, dtype=np.int64)
-    strides[-1] = 1
-    for i in range(num_partons - 2, -1, -1):
-        strides[i] = strides[i + 1] * max_jets
-
-    return strides
-
-
-@njit(TInt64[::1](TInt64, TInt64[::1]))
-def unravel_index(index, strides):
-    num_partons = strides.shape[0]
-    result = np.zeros(num_partons, dtype=np.int64)
-
-    remainder = index
-    for i in range(num_partons):
-        result[i] = remainder // strides[i]
-        remainder %= strides[i]
-    return result
-
-
-@njit(TInt64(TInt64[::1], TInt64[::1]))
-def ravel_index(index, strides):
-    return (index * strides).sum()
-
-
-@njit(numba.types.Tuple((TInt64, TInt64, TFloat32))(TPrediction))
-def maximal_prediction(predictions):
-    best_jet = -1
-    best_prediction = -1
-    best_value = -np.float32(np.inf)
-
-    for i in range(len(predictions)):
-        max_jet = np.argmax(predictions[i])
-        max_value = predictions[i][max_jet]
-
-        if max_value > best_value:
-            best_prediction = i
-            best_value = max_value
-            best_jet = max_jet
-
-    return best_jet, best_prediction, best_value
-
-
-@njit(numba.types.Tuple((TIResult, TFResult))(TPrediction, TInt64[::1], TInt64))
-def extract_prediction(predictions, num_partons, max_jets):
-    float_negative_inf = -np.float32(np.inf)
-    max_partons = num_partons.max()
-    num_targets = len(predictions)
-
-    # Create copies of predictions for safety and calculate the output shapes
-    strides = []
-    for i in range(num_targets):
-        strides.append(compute_strides(num_partons[i], max_jets))
-
-    # Fill up the prediction matrix
-    # -2 : Not yet assigned
-    # -1 : Masked value
-    # else : The actual index value
-    results = np.zeros((num_targets, max_partons), np.int64) - 2
-    results_weights = np.zeros(num_targets, dtype=np.float32) - np.float32(np.inf)
-
-    for _ in range(num_targets):
-        best_jet, best_prediction, best_value = maximal_prediction(predictions)
-
-        if not np.isfinite(best_value):
-            return results, results_weights
-
-        best_jets = unravel_index(best_jet, strides[best_prediction])
-
-        results[best_prediction, :] = -1
-        results_weights[best_prediction] = best_value
-
-        for i in range(num_partons[best_prediction]):
-            results[best_prediction, i] = best_jets[i]
-
-        predictions[best_prediction][:] = float_negative_inf
-        for i in range(num_targets):
-            for jet in best_jets:
-                mask_jet(predictions[i], num_partons[i], max_jets, jet, float_negative_inf)
-
-    return results, results_weights
-
-
-@njit(numba.types.Tuple((TIResults, TFResults))(TPredictions, TInt64[::1], TInt64, TInt64), parallel=True)
-def _extract_predictions(predictions, num_partons, max_jets, batch_size):
-    output = np.zeros((batch_size, len(predictions), num_partons.max()), np.int64)
-    weight = np.zeros((batch_size, len(predictions)), np.float32)
-    predictions = [p.copy() for p in predictions]
-
-    for batch in numba.prange(batch_size):
-        current_prediction = numba.typed.List([prediction[batch] for prediction in predictions])
-        output[batch, :, :], weight[batch, :] = extract_prediction(current_prediction, num_partons, max_jets)
-
-    return np.ascontiguousarray(output.transpose((1, 0, 2))), np.ascontiguousarray(weight.transpose((1, 0)))
-
-def find_max_and_mask(matrix):
-    new_matrix = matrix.copy()
-    # Find the index of the maximum value
-    index = np.argmax(new_matrix)
-    
-    # Convert the flat index back to 3D indices
-    indices = np.unravel_index(index, new_matrix.shape)
-    i, j, k = indices
- 
-    # Replace the found value with 999
-    new_matrix[i, j, k] = 999
-    
-    # Handle the i-j swap symmetry
-    symmetric_index = (j, i, k)
-    new_matrix[j, i, k] = 999
-
-    
-    return new_matrix, i, j, k
-
-def extract_predictions(predictions: List[TArray]):
-    num_partons = np.array([len(p.shape) - 1 for p in predictions])
-    max_jets = max(max(p.shape[1:]) for p in predictions)
-    batch_size = max(p.shape[0] for p in predictions)
-
-    targets = len(predictions)
-    max_partons = np.max(num_partons)
-    results = np.zeros((targets, batch_size, max_partons, targets))
-    weights = np.zeros((targets, batch_size, targets)) - np.float32(np.inf)
-    predictions = np.array(predictions)
-    indices = np.zeros((batch_size, max_partons), dtype=np.int32)
-    for j in range(targets):
-        original_weights = predictions[j,:,:,:,:].copy()
-        temp_predictions = predictions.copy()
-        for k in range(batch_size):
-            parton_slice, indx1, indx2, indx3 = find_max_and_mask(original_weights[k])
-            indices[k,:] = np.array((indx1, indx2, indx3))
-            temp_predictions[j,k,:,:,:] = parton_slice
-        temp_predictions_list = numba.typed.List([p.reshape((p.shape[0], -1)) for p in temp_predictions])
-        result, weight = _extract_predictions(temp_predictions_list, num_partons, max_jets, batch_size)
-        weights[:,:,j] = weight.copy()
-        for m in range(batch_size):
-            weights[j, m, j] = original_weights[m, indices[m,0], indices[m,1], indices[m,2]]
-        results[:,:,:,j] = result.copy()
-            
-    max_results = np.zeros_like(result)
-    for i in prange(batch_size):
-        temp_weight = weights[:,i,:]
-        new_prod = np.sum(temp_weight, axis=0)
-        indx = np.argmax(new_prod)
-        max_results[:,i,:] = results[:,i,:,indx]
-
-    return [max_result[:, :partons] for max_result, partons in zip(max_results, num_partons)]
+    return torch.nansum(kl_p + kl_q, dim=sum_dim) / 2.0
