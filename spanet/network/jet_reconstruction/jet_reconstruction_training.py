@@ -93,9 +93,8 @@ class JetReconstructionTraining(JetReconstructionNetwork):
                 else:
                     for assignment, detection, (target, mask), (_, single_mask) in zip(assignments, detections, targets[permutation], targets[np.flip(permutation)]):
                         assignment2 = self.mask_tensor(assignment)
-                        double_mask = torch.logical_and(mask, single_mask)
-                        assignment3 = torch.where(double_mask.unsqueeze(1).unsqueeze(1).unsqueeze(1), assignment2, assignment)
-                        assignment_loss, detection_loss = self.particle_symmetric_loss(assignment3, detection, target, double_mask)
+                        assignment3 = torch.where(single_mask.unsqueeze(1).unsqueeze(1).unsqueeze(1), assignment2, assignment)
+                        assignment_loss, detection_loss = self.particle_symmetric_loss(assignment3, detection, target, mask)
       
                         inf_mask = torch.isinf(assignment_loss)
                         assignment_loss = assignment_loss.masked_fill_(inf_mask, 0)
