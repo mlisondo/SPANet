@@ -71,10 +71,9 @@ class JetReconstructionTraining(JetReconstructionNetwork):
 
                         prepro_losses.append(torch.stack((assignment_loss, detection_loss)))
                 else:
-                    for assignment, detection, (target, mask), (_, single_mask) in zip(assignments, detections, targets[permutation], targets[np.flip(permutation)]):
+                    for assignment, detection, (target, mask) in zip(assignments, detections, targets[permutation]):
                         prediction_mask = self.mask_tensor(assignment)
-                        double_mask = torch.logical_and(mask, single_mask)
-                        assignment_loss, detection_loss = self.particle_symmetric_loss(assignment, detection, target, double_mask, prediction_mask)
+                        assignment_loss, detection_loss = self.particle_symmetric_loss(assignment, detection, target, mask, prediction_mask)
 
                         prepro_losses.append(torch.stack((assignment_loss, detection_loss)))
 
