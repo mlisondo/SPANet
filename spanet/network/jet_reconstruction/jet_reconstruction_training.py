@@ -43,7 +43,6 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         j_max_indices = torch.argmax(tensor.max(dim=3).values.max(dim=1).values, dim=1)
         k_max_indices = torch.argmax(tensor.max(dim=1).values.max(dim=1).values, dim=1)
 
-        # Create masks for axis 0 and 1
         mask = torch.zeros_like(tensor, dtype=bool)
         for j in range(batch_size):
             i_max = i_max_indices[j]
@@ -74,12 +73,8 @@ class JetReconstructionTraining(JetReconstructionNetwork):
                 else:
                     for assignment, detection, (target, mask), (_, single_mask) in zip(assignments, detections, targets[permutation], targets[np.flip(permutation)]):
                         prediction_mask = self.mask_tensor(assignment)
-                        assignment_loss, detection_loss = self.particle_symmetric_loss(assignment, detection, target, mask, prediction_mask)
-
-                        # whereinf = torch.where(torch.isinf(assignment_loss))[0]
-      
-                        # inf_mask = torch.isinf(assignment_loss)
-                        # assignment_loss = assignment_loss.masked_fill_(inf_mask, 0)
+                        double_mask = torch.logical_and(mask, single_mask)
+                        assignment_loss, detection_loss = self.particle_symmetric_loss(assignment, detection, target, double_mask, prediction_mask)
 
                         prepro_losses.append(torch.stack((assignment_loss, detection_loss)))
 
