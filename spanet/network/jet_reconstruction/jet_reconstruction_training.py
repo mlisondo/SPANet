@@ -57,17 +57,20 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         # Compute argmax along each axis
         i_max_indices = torch.argmax(tensor.max(dim=3).values.max(dim=2).values, dim=1)
         j_max_indices = torch.argmax(tensor.max(dim=3).values.max(dim=1).values, dim=1)
+        k_max_indices = torch.argmax(tensor.max(dim=2).values.max(dim=1).values, dim=1)
 
         # Create masks for axis 0 and 1
         mask = torch.zeros_like(tensor, dtype=bool)
         for j in range(batch_size):
             i_max = i_max_indices[j]
             j_max = j_max_indices[j]
+            k_max = k_max_indices[j]
 
             mask[j, i_max, :, :] = True
             mask[j, :, j_max, :] = True
             mask[j, j_max, :, :] = True
             mask[j, :, i_max, :] = True
+            mask[j, :, :, k_max] = True
 
         # Apply the mask to the original tensor
         tensor = tensor.masked_fill(mask, float('-inf'))
