@@ -66,7 +66,8 @@ class JetReconstructionTraining(JetReconstructionNetwork):
                 if iteration == 0:
                     masks = []
                     for assignment, detection, (target, mask), (_, single_mask) in zip(assignments, detections, targets[permutation], targets[np.flip(permutation)]):
-                        prediction_mask = ~self.mask_tensor(assignment)
+                        # prediction_mask = ~self.mask_tensor(assignment)
+                        prediction_mask = torch.zeros_like(assignment, dtype=torch.bool)
                         assignment_loss, detection_loss = self.particle_symmetric_loss(assignment, detection, target, mask, prediction_mask)
 
                         prepro_losses.append(torch.stack((assignment_loss, detection_loss)))
