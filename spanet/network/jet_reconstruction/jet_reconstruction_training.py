@@ -61,24 +61,36 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         num_iterations = 2
         symmetric_losses = []
         for iteration in range(num_iterations):
-            for permutation in self.event_permutation_tensor.cpu().numpy():
+            for permnum, permutation in enumerate(self.event_permutation_tensor.cpu().numpy()):
                 prepro_losses = []
                 if iteration == 0:
                     masks = []
                     for assignment, detection, (target, mask), (_, single_mask) in zip(assignments, detections, targets[permutation], targets[np.flip(permutation)]):
                         # prediction_mask = ~self.mask_tensor(assignment)
-                        prediction_mask = torch.zeros_like(assignment, dtype=torch.bool)
+                        prediction_mask = torch.zeros_like(assignment, dtype=bool)
                         assignment_loss, detection_loss = self.particle_symmetric_loss(assignment, detection, target, mask, prediction_mask)
 
                         prepro_losses.append(torch.stack((assignment_loss, detection_loss)))
                 else:
-                    for assignment, detection, (target, mask), (_, single_mask) in zip(assignments, detections, targets[permutation], targets[np.flip(permutation)]):
-                        double_mask = torch.logical_and(mask, single_mask)
-                        prediction_mask = self.mask_tensor(assignment)
-                        triple_mask = torch.logical_and(prediction_mask, double_mask.unsqueeze(1).unsqueeze(1).unsqueeze(1))
-                        assignment_loss, detection_loss = self.particle_symmetric_loss(assignment, detection, target, mask, triple_mask)
+                    if permnum == 0:
+                        for assignment, detection, (target, mask), (_, single_mask) in zip(assignments, detections, targets[permutation], targets[np.flip(permutation)]):
+                            double_mask = torch.logical_and(mask, single_mask)
+                            prediction_mask = self.mask_tensor(assignment)
+                            assignment2 = torch.clone(assignment)
+                            assignment2[prediction_mask] = -999
+                            prediction_mask2 = ~self.mask_tensor(assignment2)
+                            triple_mask = torch.logical_and(prediction_mask2, double_mask.unsqueeze(1).unsqueeze(1).unsqueeze(1))
+                            assignment_loss, detection_loss = self.particle_symmetric_loss(assignment, detection, target, mask, triple_mask)
 
-                        prepro_losses.append(torch.stack((assignment_loss, detection_loss)))
+                            prepro_losses.append(torch.stack((assignment_loss, detection_loss)))
+                    else:
+                        for assignment, detection, (target, mask), (_, single_mask) in zip(assignments, detections, targets[permutation], targets[np.flip(permutation)]):
+                            double_mask = torch.logical_and(mask, single_mask)
+                            prediction_mask = ~self.mask_tensor(assignment)
+                            triple_mask = torch.logical_and(prediction_mask, double_mask.unsqueeze(1).unsqueeze(1).unsqueeze(1))
+                            assignment_loss, detection_loss = self.particle_symmetric_loss(assignment, detection, target, mask, triple_mask)
+
+                            prepro_losses.append(torch.stack((assignment_loss, detection_loss)))
 
                 symmetric_losses.append(torch.stack(prepro_losses))
     
