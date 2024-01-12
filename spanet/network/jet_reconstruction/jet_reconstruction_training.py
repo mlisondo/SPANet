@@ -68,7 +68,10 @@ class JetReconstructionTraining(JetReconstructionNetwork):
             for assignment, detection, (target, mask), (_, flip_mask), assignment_mask in zip(assignments, detections, targets[permutation], targets[np.flip(permutation)], assignments_mask):
                 if second_pass:
                     double_mask = torch.logical_and(mask, flip_mask)
-                    assignment_loss, detection_loss = self.particle_symmetric_loss(assignment, detection, target, double_mask, assignment_mask)
+                    assignment2 = torch.clone(assignment)
+                    assignment2[assignment_mask] == -float('inf')
+                    new_mask = ~self.mask_tensor(assignment2)
+                    assignment_loss, detection_loss = self.particle_symmetric_loss(assignment, detection, target, double_mask, new_mask)
                     assignment_loss *= 7/10.
                 else:
                     assignment_loss, detection_loss = self.particle_symmetric_loss(assignment, detection, target, mask, assignment_mask)
