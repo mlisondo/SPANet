@@ -16,6 +16,7 @@ def numpy_tensor_array(tensor_list):
 
     return output
 
+torch.autograd.set_detect_anomaly(True)
 
 class JetReconstructionTraining(JetReconstructionNetwork):
     def __init__(self, options: Options, torch_script: bool = False):
