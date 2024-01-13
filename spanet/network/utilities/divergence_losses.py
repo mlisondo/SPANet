@@ -3,33 +3,35 @@ from torch import Tensor
 from torch.nn import functional as F
 
 @torch.jit.script
-def assignment_cross_entropy_loss(prediction: Tensor, target_data: Tensor, target_mask: Tensor, prediction_mask: Tensor, gamma: float) -> Tensor:
-    batch_size = prediction.shape[0]
-    prediction_shape = prediction.shape[1:]
-
-    # Remove missing jets
-    target_data = target_data.clamp(0, None)
-
-    # Find the unravelling shape required to flatten the target indices
-    ravel_sizes = torch.tensor(prediction_shape).flip(0)
-    ravel_sizes = torch.cumprod(ravel_sizes, 0)
-    ravel_sizes = torch.div(ravel_sizes, ravel_sizes[0], rounding_mode='floor')
-    ravel_sizes = ravel_sizes.flip(0).unsqueeze(0)
-    ravel_sizes = ravel_sizes.to(target_data.device)
-
-    # Flatten the target and predicted data to be one dimensional
-    ravel_target = (target_data * ravel_sizes).sum(1)
-    ravel_prediction = prediction.reshape(batch_size, -1).contiguous()
-    ravel_prediction_mask = prediction_mask.reshape(batch_size, -1).contiguous()
-
-    ravel_prediction = ravel_prediction.masked_fill(ravel_prediction_mask, 0.0)
-
-    log_probability = ravel_prediction.gather(-1, ravel_target.view(-1, 1)).squeeze()
-    log_probability = log_probability.masked_fill(~target_mask, 0.0)
-
+def focal_loss(log_probability: Tensor, gamma: float):
     focal_scale = (1 - torch.exp(log_probability)) ** gamma
+    foc_loss = -log_probability * focal_scale
+    return torch.mean(foc_loss, dim=1)
 
-    return -log_probability * focal_scale
+@torch.jit.script
+def assignment_cross_entropy_loss(prediction: Tensor, target_data: Tensor, target_mask: Tensor, prediction_mask: Tensor, gamma: float) -> Tensor:
+    batch_size, i, j, k = prediction.shape
+    prediction = prediction.masked_fill(prediction_mask, 0.0)
+
+    # Reshape target_data if necessary (assuming it's already [batch_size, 3])
+    i_tgt, j_tgt, k_tgt = target_data[:, 0], target_data[:, 1], target_data[:, 2]
+
+    # Index predictions along each axis
+    log_prob_i1 = prediction[torch.arange(batch_size), i_tgt, :, :].reshape(batch_size, -1)
+    log_prob_i2 = prediction[torch.arange(batch_size), j_tgt, :, :].reshape(batch_size, -1)
+    log_prob_j1 = prediction[torch.arange(batch_size), :, j_tgt, :].reshape(batch_size, -1)
+    log_prob_j2 = prediction[torch.arange(batch_size), :, i_tgt, :].reshape(batch_size, -1)
+    log_prob_k = prediction[torch.arange(batch_size), :, :, k_tgt].reshape(batch_size, -1)
+
+    foc_loss = torch.stack([focal_loss(log_prob_i1, gamma), \
+                            focal_loss(log_prob_i2, gamma), \
+                            focal_loss(log_prob_j1, gamma), \
+                            focal_loss(log_prob_j2, gamma), \
+                            focal_loss(log_prob_k, gamma)], dim=0).mean(dim=0)
+    
+    foc_loss = foc_loss.masked_fill(target_mask, 0.0)
+
+    return foc_loss
 
 
 @torch.jit.script
