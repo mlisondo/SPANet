@@ -5,8 +5,7 @@ from torch.nn import functional as F
 @torch.jit.script
 def focal_loss(log_probability: Tensor, gamma: float):
     focal_scale = (1 - torch.exp(log_probability)) ** gamma
-    foc_loss = -log_probability * focal_scale
-    return torch.mean(foc_loss, dim=1)
+    return -log_probability * focal_scale
 
 @torch.jit.script
 def assignment_cross_entropy_loss(prediction: Tensor, target_data: Tensor, target_mask: Tensor, prediction_mask: Tensor, gamma: float) -> Tensor:
@@ -15,22 +14,38 @@ def assignment_cross_entropy_loss(prediction: Tensor, target_data: Tensor, targe
 
     # Reshape target_data if necessary (assuming it's already [batch_size, 3])
     i_tgt, j_tgt, k_tgt = target_data[:, 0], target_data[:, 1], target_data[:, 2]
+    i_tgt = torch.where(i_tgt == -1, torch.zeros_like(i_tgt), i_tgt)
+    j_tgt = torch.where(j_tgt == -1, torch.zeros_like(j_tgt), j_tgt)
+    k_tgt = torch.where(k_tgt == -1, torch.zeros_like(k_tgt), k_tgt)
+
+    batch_range = torch.arange(batch_size)
 
     # Index predictions along each axis
-    log_prob_i1 = prediction[torch.arange(batch_size), i_tgt, :, :].reshape(batch_size, -1)
-    log_prob_i2 = prediction[torch.arange(batch_size), j_tgt, :, :].reshape(batch_size, -1)
-    log_prob_j1 = prediction[torch.arange(batch_size), :, j_tgt, :].reshape(batch_size, -1)
-    log_prob_j2 = prediction[torch.arange(batch_size), :, i_tgt, :].reshape(batch_size, -1)
-    log_prob_k = prediction[torch.arange(batch_size), :, :, k_tgt].reshape(batch_size, -1)
+    log_prob_i = prediction[batch_range, i_tgt, :, :]
+    log_prob_j = prediction[batch_range, :, j_tgt, :]
+    log_prob_k = prediction[batch_range, :, :, k_tgt]
 
-    foc_loss = torch.stack([focal_loss(log_prob_i1, gamma), \
-                            focal_loss(log_prob_i2, gamma), \
-                            focal_loss(log_prob_j1, gamma), \
-                            focal_loss(log_prob_j2, gamma), \
-                            focal_loss(log_prob_k, gamma)], dim=0).mean(dim=0)
+    fli = focal_loss(log_prob_i, gamma)
+    flj = focal_loss(log_prob_j, gamma)
+    flk = focal_loss(log_prob_k, gamma)
+
+    fli2 = torch.clone(fli)
+    flj2 = torch.clone(flj)
+    flk2 = torch.clone(flk)
+
+    fli2[batch_range, :,k_tgt] = fli2[batch_range, :,k_tgt] + flk[batch_range, i_tgt,:]
+    fli2[batch_range, j_tgt,:] = fli2[batch_range, j_tgt,:] + flj[batch_range, i_tgt,:]
+    flj2[batch_range, i_tgt,:] = flj2[batch_range, i_tgt,:] + fli[batch_range, j_tgt,:]
+    flj2[batch_range, :,k_tgt] = flj2[batch_range, :,k_tgt] + flk[batch_range, :,j_tgt]
+    flk2[batch_range, i_tgt,:] = flk2[batch_range, i_tgt,:] + fli[batch_range, :,k_tgt]
+    flk2[batch_range, :,j_tgt] = flk2[batch_range, :,j_tgt] + flj[batch_range, :,k_tgt]
+
+    mean_fli2 = fli2.mean(dim=[1, 2])
+    mean_flj2 = flj2.mean(dim=[1, 2])
+    mean_flk2 = flk2.mean(dim=[1, 2])
+
+    foc_loss = (mean_fli2 + mean_flj2 + mean_flk2) / 3
     
-    foc_loss = foc_loss.masked_fill(target_mask, 0.0)
-
     return foc_loss
 
 
