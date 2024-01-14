@@ -17,7 +17,7 @@ def focal_loss(log_probability: Tensor, weight_tensor: Tensor, gamma: float):
         torch.where(weight_tensor == 0, focal_loss_incorrect, focal_loss_correct)
     )
 
-    return focal_scale * (weight_tensor) ** 2
+    return focal_scale * weight_tensor
 
 @torch.jit.script
 def assignment_cross_entropy_loss(prediction: Tensor, target_data: Tensor, target_mask: Tensor, prediction_mask: Tensor, gamma: float) -> Tensor:
@@ -25,9 +25,6 @@ def assignment_cross_entropy_loss(prediction: Tensor, target_data: Tensor, targe
     prediction = prediction.masked_fill(prediction_mask, 0.0)
     prediction = prediction.masked_fill(~target_mask.unsqueeze(1).unsqueeze(1).unsqueeze(1), 0.0)
 
-    pred_count = torch.count_nonzero(prediction, dim=[1,2,3])
-
-    # Reshape target_data if necessary (assuming it's already [batch_size, 3])
     i_tgt, j_tgt, k_tgt = target_data[:, 0], target_data[:, 1], target_data[:, 2]
     i_tgt = torch.where(i_tgt == -1, torch.zeros_like(i_tgt), i_tgt)
     j_tgt = torch.where(j_tgt == -1, torch.zeros_like(j_tgt), j_tgt)
@@ -48,7 +45,7 @@ def assignment_cross_entropy_loss(prediction: Tensor, target_data: Tensor, targe
     nz_count = torch.count_nonzero(nz, dim=[1, 2, 3])
     nz_sum = torch.sum(fl * nz, dim=[1, 2, 3])
     
-    return nz_sum / nz_count.clamp(min=1) * pred_count / 720
+    return nz_sum / 270 #nz_count.clamp(min=1) #* pred_count / 720
 
 
 
