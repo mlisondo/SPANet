@@ -127,9 +127,9 @@ class JetReconstructionTraining(JetReconstructionNetwork):
 
 
         assignments2, assignments_mask2 = zip(*[(prediction + torch.log(torch.scalar_tensor(decoder.num_targets)), 
-               torch.logical_or(torch.isinf(prediction), self.mask_tensor(prediction)) 
-                                                for prediction, decoder in zip(assignments, self.branch_decoders)
-               ])
+               torch.logical_or(torch.isinf(prediction), self.mask_tensor(prediction))
+                                                for prediction, decoder in zip(assignments, self.branch_decoders
+                                                                               ])
 
         symmetric_losses2 = self.compute_symmetric_losses(assignments2, detections, targets, assignments_mask2, True) 
 
