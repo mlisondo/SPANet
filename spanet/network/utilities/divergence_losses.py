@@ -41,14 +41,10 @@ def assignment_cross_entropy_loss(prediction: Tensor, target_data: Tensor, targe
     weight_tensor[batch_range, :, :, k_tgt] += 1
 
     fl = focal_loss(prediction, weight_tensor, gamma)  
-    # print(fl)
 
     nz = fl != 0
-    # print(nz)
     nz_count = torch.count_nonzero(nz, dim=[1, 2, 3])
-    # print(nz_count)
     nz_sum = torch.sum(fl * nz, dim=[1, 2, 3])
-    # print(nz_sum)
     
     return nz_sum / nz_count.clamp(min=1)
 
