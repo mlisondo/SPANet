@@ -17,7 +17,7 @@ def focal_loss(log_probability: Tensor, weight_tensor: Tensor, gamma: float):
         torch.where(weight_tensor == 0, focal_loss_incorrect, focal_loss_correct)
     )
 
-    return focal_scale * (weight_tensor)
+    return focal_scale * (weight_tensor) ** 2
 
 @torch.jit.script
 def assignment_cross_entropy_loss(prediction: Tensor, target_data: Tensor, target_mask: Tensor, prediction_mask: Tensor, gamma: float) -> Tensor:
