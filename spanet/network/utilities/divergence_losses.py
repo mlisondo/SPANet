@@ -46,9 +46,9 @@ def assignment_cross_entropy_loss(prediction: Tensor, target_data: Tensor, targe
 
     nz = fl != 0
     nz_count = torch.count_nonzero(nz, dim=[1, 2, 3])
-    nz_sum = torch.sum(fl * nz * pred_count / 720, dim=[1, 2, 3])
+    nz_sum = torch.sum(fl * nz, dim=[1, 2, 3])
     
-    return nz_sum / nz_count.clamp(min=1)
+    return nz_sum / nz_count.clamp(min=1) * pred_count / 720
 
 
 
