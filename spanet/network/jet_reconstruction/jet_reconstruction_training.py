@@ -72,7 +72,6 @@ class JetReconstructionTraining(JetReconstructionNetwork):
                     assignment_mask2 = torch.logical_or(assignment_mask, self.mask_tensor(assignment))
                     assignment_mask = torch.where(double_mask.unsqueeze(1).unsqueeze(1).unsqueeze(1), assignment_mask2, assignment_mask)
                     assignment_loss, detection_loss = self.particle_symmetric_loss(assignment, detection, target, mask, assignment_mask)
-                    assignment_loss *= .49
                 else:
                     assignment_loss, detection_loss = self.particle_symmetric_loss(assignment, detection, target, mask, assignment_mask)
 
@@ -89,7 +88,6 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         # combined_loss, _ = symmetric_losses.min(0)
         num_iterations = 2
         symmetric_losses_reshaped = symmetric_losses.view(num_iterations, -1, symmetric_losses.size(-3), symmetric_losses.size(-2), symmetric_losses.size(-1))
-        # symmetric_losses_reshaped = symmetric_losses_reshaped * 2
         symmetric_losses_reduced = symmetric_losses_reshaped.sum(0) / 2
         total_symmetric_loss = symmetric_losses_reduced.sum((1,2))
         index = total_symmetric_loss.argmin(0)
