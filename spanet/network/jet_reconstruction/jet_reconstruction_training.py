@@ -127,7 +127,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         # Compute the loss on every valid permutation of the targets
         symmetric_losses = self.compute_symmetric_losses(assignments, detections, targets, assignments_mask, False) 
 
-        symmetric_losses2 = self.compute_symmetric_losses(assignments, detections, targets, assignments_mask, True) 
+        symmetric_losses2 = self.compute_symmetric_losses(assignments, detections, targets, assignments_mask, False) 
 
         # Squash the permutation losses into a single value.
         return self.combine_symmetric_losses(torch.stack((symmetric_losses, symmetric_losses2)))
