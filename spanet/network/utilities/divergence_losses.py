@@ -14,7 +14,7 @@ def focal_loss(log_probability: Tensor, weight_tensor: Tensor, gamma: float):
 
     focal_scale = torch.where(
         zero_mask, 0,
-        torch.where(weight_tensor == 0, (3 - weight_tensor) * focal_loss_incorrect, weight_tensor * focal_loss_correct)
+        (3 - weight_tensor) * focal_loss_incorrect + weight_tensor * focal_loss_correct
     )
 
     return focal_scale * weight_tensor
