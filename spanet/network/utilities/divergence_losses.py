@@ -41,11 +41,12 @@ def assignment_cross_entropy_loss(prediction: Tensor, target_data: Tensor, targe
 
     fl = focal_loss(prediction, weight_tensor, gamma)  
 
-    nz = fl != 0
-    nz_count = torch.count_nonzero(nz, dim=[1, 2, 3])
-    nz_sum = torch.sum(fl * nz, dim=[1, 2, 3])
+    nz = fl == 0
+    weight_tensor = weight_tensor.masked_fill(nz, 0)
+    weight_sum = torch.sum(weight_tensor, dim=[1, 2, 3])
+    nz_sum = torch.sum(fl, dim=[1, 2, 3])
     
-    return nz_sum / 270 #nz_count.clamp(min=1) #* pred_count / 720
+    return nz_sum * weight_sum.clamp(min=1) / (270*270) #270
 
 
 
@@ -77,3 +78,4 @@ def jensen_shannon_divergence(log_p: Tensor, log_q: Tensor) -> Tensor:
     kl_q = F.kl_div(log_m, log_q, reduction='none', log_target=True)
 
     return torch.nansum(kl_p + kl_q, dim=sum_dim) / 2.0
+    
