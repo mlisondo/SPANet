@@ -54,7 +54,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
 
         return mask
     
-    def compute_symmetric_losses(self, assignments: List[Tensor], detections: List[Tensor], targets, assignments_mask, second_pass):
+    def compute_symmetric_losses(self, assignments: List[Tensor], detections: List[Tensor], targets, assignments_mask, pass_num):
         symmetric_losses = []
         
         # TODO think of a way to avoid this memory transfer but keep permutation indices synced with checkpoint
@@ -63,12 +63,19 @@ class JetReconstructionTraining(JetReconstructionNetwork):
             perm_losses = []
             # Find the assignment loss for each particle in this permutation.
             for assignment, detection, (target, mask), (_, flip_mask), assignment_mask in zip(assignments, detections, targets[permutation], targets[np.flip(permutation)], assignments_mask):
-                if second_pass:
+                if pass_num == 1:
                     double_mask = torch.logical_and(mask, flip_mask)
                     assignment_mask2 = torch.logical_or(assignment_mask, self.mask_tensor(assignment))
                     assignment_mask = torch.where(double_mask.unsqueeze(1).unsqueeze(1).unsqueeze(1), assignment_mask2, assignment_mask)
                     assignment_loss, detection_loss = self.particle_symmetric_loss(assignment, detection, target, mask, assignment_mask)
-                else:
+                elif pass_num == 2:
+                    double_mask = torch.logical_and(mask, flip_mask)
+                    assignment_mask2 = self.mask_tensor(assignment)
+                    assignment_mask2 = self.mask_tensor(assignment.masked_fill(assignment_mask2, float('-inf')))
+                    assignment_mask3 = torch.logical_or(assignment_mask, assignment_mask2)
+                    assignment_mask = torch.where(double_mask.unsqueeze(1).unsqueeze(1).unsqueeze(1), assignment_mask3, assignment_mask)
+                    assignment_loss, detection_loss = self.particle_symmetric_loss(assignment, detection, target, mask, assignment_mask)
+                elif pass_num == 0:
                     assignment_loss, detection_loss = self.particle_symmetric_loss(assignment, detection, target, mask, assignment_mask)
 
                 perm_losses.append(torch.stack((assignment_loss, detection_loss)))
@@ -82,9 +89,9 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         # Default option is to find the minimum loss term of the symmetric options.
         # We also store which permutation we used to achieve that minimal loss.
         # combined_loss, _ = symmetric_losses.min(0)
-        num_iterations = 2
+        num_iterations = 3
         symmetric_losses_reshaped = symmetric_losses.view(num_iterations, -1, symmetric_losses.size(-3), symmetric_losses.size(-2), symmetric_losses.size(-1))
-        symmetric_losses_reduced = symmetric_losses_reshaped.sum(0) / 2
+        symmetric_losses_reduced = symmetric_losses_reshaped.sum(0) / 3
         total_symmetric_loss = symmetric_losses_reduced.sum((1,2))
         index = total_symmetric_loss.argmin(0)
 
@@ -119,12 +126,14 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         targets = numpy_tensor_array(targets)
 
         # Compute the loss on every valid permutation of the targets
-        symmetric_losses = self.compute_symmetric_losses(assignments, detections, targets, assignments_mask, False) 
+        symmetric_losses = self.compute_symmetric_losses(assignments, detections, targets, assignments_mask, 0) 
 
-        symmetric_losses2 = self.compute_symmetric_losses(assignments, detections, targets, assignments_mask, True) 
+        symmetric_losses2 = self.compute_symmetric_losses(assignments, detections, targets, assignments_mask, 1) 
+
+        symmetric_losses3 = self.compute_symmetric_losses(assignments, detections, targets, assignments_mask, 2) 
 
         # Squash the permutation losses into a single value.
-        return self.combine_symmetric_losses(torch.stack((symmetric_losses, symmetric_losses2)))
+        return self.combine_symmetric_losses(torch.stack((symmetric_losses, symmetric_losses2, symmetric_losses3)))
 
     def symmetric_divergence_loss(self, predictions: List[Tensor], masks: Tensor) -> Tensor:
         divergence_loss = []
