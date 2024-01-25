@@ -11,25 +11,15 @@ def unravel_index(indices: Tensor, shape: List[int]):
     return r, c, d
 
 @torch.jit.script
-def find_and_extract_max_values(tensor: Tensor):
-    # Find the maximum values along the last three axes
-    max_vals = tensor.max(dim=-1, keepdim=True)[0].max(dim=-2, keepdim=True)[0].max(dim=-3, keepdim=True)[0]
-
-    # Create a mask for the max values and mask other values with -inf
-    mask = tensor == max_vals
-    masked_tensor = torch.where(mask, tensor, torch.tensor(float('-inf')).to(tensor.device))
-
+def find_and_extract_max_idx(tensor: Tensor):
     # Compute the argmax along the last three axes
-    flat_dim = masked_tensor.shape[1] * masked_tensor.shape[2] * masked_tensor.shape[3]
-    flat_argmax = masked_tensor.reshape(tensor.shape[0], flat_dim).argmax(dim=-1)
+    flat_dim = tensor.shape[1] * tensor.shape[2] * tensor.shape[3]
+    flat_argmax = tensor.reshape(tensor.shape[0], flat_dim).argmax(dim=-1)
 
     # Convert flat indices to 3D indices
     idx_3d = unravel_index(flat_argmax, tensor.shape[1:])
 
-    # Extract the values using these indices
-    max_values = tensor[torch.arange(tensor.shape[0]), idx_3d[0], idx_3d[1], idx_3d[2]]
-
-    return max_values
+    return torch.stack((idx_3d[0], idx_3d[1], idx_3d[2]), dim=1)
 
 @torch.jit.script
 def assignment_cross_entropy_loss(prediction: Tensor, target_data: Tensor, target_mask: Tensor, double_mask: Tensor, gamma: float) -> Tensor:
@@ -55,15 +45,17 @@ def assignment_cross_entropy_loss(prediction: Tensor, target_data: Tensor, targe
     log_probability = log_probability.masked_fill(~target_mask, 0.0)
 
     pos_focal = -log_probability * (1 - torch.exp(log_probability)) ** gamma
-    log_prob_2 = find_and_extract_max_values(prediction)
-    log_prob_2 = log_prob_2.masked_fill(~target_mask, 0.0)
-    pos_focal_2 = -log_prob_2 * (1 - torch.exp(log_prob_2)) ** gamma
-    # neg_log_prob = prediction[max_loc]
-    # neg_prob = torch.exp(neg_log_prob)
-    # neg_focal = -torch.pow(neg_prob, gamma) * torch.log(1 - neg_prob)
-    # neg_focal = neg_focal.masked_fill(~target_mask, 0.0)
+    max_idx = find_and_extract_max_idx(prediction)
+    ravel_target_2 = (max_idx * ravel_sizes).sum(1)
+    neg_log_prob = ravel_prediction.gather(-1, ravel_target.view(-1, 1)).squeeze()
+    neg_prob = torch.exp(neg_log_prob)
+    neg_prob = neg_prob.masked_fill(~target_mask, 0.0)
+    neg_focal = -torch.pow(neg_prob, gamma) * torch.log(1 - neg_prob)
 
-    return torch.where(double_mask, pos_focal_2, pos_focal)
+    double_mask = torch.logical_and(target_mask, ~double_mask)
+    double_mask = torch.logical_and(double_mask, ~torch.all(max_idx == target_data, dim=1))
+
+    return torch.where(double_mask, pos_focal, neg_focal)
 
 
 @torch.jit.script
