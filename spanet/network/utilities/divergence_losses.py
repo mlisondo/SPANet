@@ -1,5 +1,6 @@
 import torch
-from torch import Tensor, List
+from torch import Tensor
+from typing import List
 from torch.nn import functional as F
 
 @torch.jit.script
