@@ -17,7 +17,7 @@ def find_and_extract_max_values(tensor: Tensor):
 
     # Create a mask for the max values and mask other values with -inf
     mask = tensor == max_vals
-    masked_tensor = torch.where(mask, tensor, torch.tensor(float('-inf')))
+    masked_tensor = torch.where(mask, tensor, torch.tensor(float('-inf')).to(tensor.device))
 
     # Compute the argmax along the last three axes
     flat_dim = masked_tensor.shape[1] * masked_tensor.shape[2] * masked_tensor.shape[3]
