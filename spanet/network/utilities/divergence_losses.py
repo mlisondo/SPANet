@@ -47,15 +47,17 @@ def assignment_cross_entropy_loss(prediction: Tensor, target_data: Tensor, targe
     pos_focal = -log_probability * (1 - torch.exp(log_probability)) ** gamma
     max_idx = find_and_extract_max_idx(prediction)
     ravel_target_2 = (max_idx * ravel_sizes).sum(1)
+    
     neg_log_prob = ravel_prediction.gather(-1, ravel_target.view(-1, 1)).squeeze()
     neg_prob = torch.exp(neg_log_prob)
-    neg_prob = neg_prob.masked_fill(~target_mask, 0.0)
+    
+    double_mask = torch.logical_and(target_mask, ~double_mask)
+    triple_mask = torch.logical_and(double_mask, ~torch.all(max_idx == target_data, dim=1))
+    
+    neg_prob = neg_prob.masked_fill(~double_mask, 0.0)
     neg_focal = -torch.pow(neg_prob, gamma) * torch.log(1 - neg_prob)
 
-    double_mask = torch.logical_and(target_mask, ~double_mask)
-    double_mask = torch.logical_and(double_mask, ~torch.all(max_idx == target_data, dim=1))
-
-    return torch.where(double_mask, pos_focal, neg_focal)
+    return (pos_focal + torch.where(triple_mask, neg_focal, pos_focal)) / 2
 
 
 @torch.jit.script
