@@ -46,7 +46,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
             # Find the assignment loss for each particle in this permutation.
             for assignment, detection, (target, mask), (_, flip_mask), assignment_mask in zip(assignments, detections, targets[permutation], targets[np.flip(permutation)], assignments_mask):
                 if pass_num == 0:
-                    assignment_loss, detection_loss = self.particle_symmetric_loss(assignment, detection, target, mask, torch.zeros_like(mask, dtype=torch.bool))
+                    assignment_loss, detection_loss = self.particle_symmetric_loss(assignment, detection, target, mask, torch.ones_like(mask, dtype=torch.bool))
                 elif pass_num == 1:
                     assignment_loss, detection_loss = self.particle_symmetric_loss(assignment, detection, target, mask, flip_mask)
                 
