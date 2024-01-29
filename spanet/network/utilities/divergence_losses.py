@@ -51,7 +51,7 @@ def assignment_cross_entropy_loss(prediction: Tensor, target_data: Tensor, targe
     neg_log_prob = ravel_prediction.gather(-1, ravel_target.view(-1, 1)).squeeze()
     neg_prob = torch.exp(neg_log_prob)
     
-    double_mask = torch.logical_and(target_mask, double_mask)
+    double_mask = torch.logical_and(target_mask, ~double_mask)
     triple_mask = torch.logical_and(double_mask, ~torch.all(max_idx == target_data, dim=1))
     
     neg_prob = neg_prob.masked_fill(~double_mask, 0.0)
