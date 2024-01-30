@@ -68,12 +68,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         total_symmetric_loss = symmetric_losses_reduced.sum((1,2))
         index = total_symmetric_loss.argmin(0)
 
-        index = index[symmetric_losses_reduced != 0]
-        symmetric_losses_reduced = symmetric_losses_reduced[symmetric_losses_reduced != 0]
-        if len(symmetric_losses_reduced) != 0:
-            combined_loss = torch.gather(symmetric_losses_reduced, 0, index.expand_as(symmetric_losses_reduced))[0]
-        else:
-            combined_loss = 0
+        combined_loss = torch.gather(symmetric_losses_reduced, 0, index.expand_as(symmetric_losses_reduced))[0]
 
         # Simple average of all losses as a baseline.
         if self.options.combine_pair_loss.lower() == "mean":
@@ -228,6 +223,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         permutations = self.event_permutation_tensor[best_indices].T
         masks = torch.stack([target.mask for target in batch.assignment_targets])
         masks = torch.gather(masks, 0, permutations)
+        masks = torch.any(masks, dim=0).unsqueeze(0)
 
         # ===================================================================================================
         # Balance the loss based on the distribution of various classes in the dataset.
@@ -247,7 +243,7 @@ class JetReconstructionTraining(JetReconstructionNetwork):
 
         # Take the weighted average of the symmetric loss terms.
         masks = masks.unsqueeze(1)
-        symmetric_losses = (weights * symmetric_losses).sum(-1) / torch.clamp(masks.sum(-1), 1, None)
+        symmetric_losses = (weights * symmetric_losses).sum(-1) / torch.clamp(masks.sum(-1) * 2, 1, None)
         assignment_loss, detection_loss = torch.unbind(symmetric_losses, 1)
 
 
