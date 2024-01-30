@@ -54,10 +54,10 @@ def assignment_cross_entropy_loss(prediction: Tensor, target_data: Tensor, targe
     double_mask = torch.logical_and(target_mask, ~double_mask)
     triple_mask = torch.logical_and(double_mask, ~torch.all(max_idx == target_data, dim=1))
     
-    neg_prob = neg_prob.masked_fill(~double_mask, 0.0)
+    neg_prob = neg_prob.masked_fill(~triple_mask, 0.0)
     neg_focal = -torch.pow(neg_prob, gamma) * torch.log(1 - neg_prob)
 
-    return (pos_focal + torch.where(triple_mask, neg_focal, pos_focal)) / 2
+    return pos_focal + neg_prob
 
 
 @torch.jit.script
