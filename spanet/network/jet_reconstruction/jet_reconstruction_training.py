@@ -68,7 +68,8 @@ class JetReconstructionTraining(JetReconstructionNetwork):
         total_symmetric_loss = symmetric_losses_reduced.sum((1,2))
         index = total_symmetric_loss.argmin(0)
 
-        combined_loss = torch.gather(symmetric_losses_reduced, 0, index.expand_as(symmetric_losses_reduced))[0]
+        combined_loss = torch.gather(symmetric_losses_reduced[symmetric_losses_reduced != 0], 
+                                     0, index.expand_as(symmetric_losses_reduced[symmetric_losses_reduced != 0]))[0]
 
         # Simple average of all losses as a baseline.
         if self.options.combine_pair_loss.lower() == "mean":
