@@ -2,13 +2,15 @@ from torch import Tensor, nn, jit
 
 from spanet.options import Options
 from spanet.network.layers.linear_block.gru_block import GRUGate, GRUBlock
+from spanet.network.layers.linear_block.sinekan import SineKANLayer
 from spanet.network.layers.transformer.transformer_base import TransformerBase
 
 
 class GTrXL(nn.Module):
-    def __init__(self, options, hidden_dim: int, num_heads: int, dropout: float):
+    def __init__(self, options, hidden_dim: int, num_heads: int, dropout: float, sinekan: bool=False):
         super(GTrXL, self).__init__()
 
+        self.sinekan = sinekan
         self.attention_norm = nn.LayerNorm(hidden_dim)
         self.attention_gate = GRUGate(hidden_dim)
         self.attention = nn.MultiheadAttention(
@@ -17,7 +19,10 @@ class GTrXL(nn.Module):
             dropout=dropout
         )
 
-        self.feed_forward = GRUBlock(options, hidden_dim, hidden_dim, skip_connection=True)
+        if self.sinekan:
+            self.feed_forward = SineKANLayer(hidden_dim, hidden_dim)
+        else:
+            self.feed_forward = GRUBlock(options, hidden_dim, hidden_dim, skip_connection=True)
 
     def forward(self, x: Tensor, padding_mask: Tensor, sequence_mask: Tensor) -> Tensor:
         output = self.attention_norm(x)
@@ -36,10 +41,17 @@ class GatedTransformer(TransformerBase):
     def __init__(self, options: Options, num_layers: int):
         super(GatedTransformer, self).__init__(options, num_layers)
 
-        self.layers = nn.ModuleList([
-            GTrXL(options, self.hidden_dim, self.num_heads, self.dropout)
-            for _ in range(num_layers)
-        ])
+        if options.sinekan:
+            self.layers = nn.ModuleList([
+                GTrXL(options, self.hidden_dim, self.num_heads, self.dropout)
+                for _ in range(num_layers-1)
+            ])
+            self.layers.append(GTrXL(options, self.hidden_dim, self.num_heads, self.dropout, sinekan=True))
+        else:
+            self.layers = nn.ModuleList([
+                GTrXL(options, self.hidden_dim, self.num_heads, self.dropout)
+                for _ in range(num_layers)
+            ])
 
     def forward(self, x: Tensor, padding_mask: Tensor, sequence_mask: Tensor) -> Tensor:
         output = x
