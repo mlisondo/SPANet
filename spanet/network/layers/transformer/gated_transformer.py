@@ -20,7 +20,7 @@ class GTrXL(nn.Module):
         )
 
         if self.sinekan:
-            self.feed_forward = SineKANLayer(hidden_dim, hidden_dim)
+            self.feed_forward = SineKANLayer(options, hidden_dim, hidden_dim)
         else:
             self.feed_forward = GRUBlock(options, hidden_dim, hidden_dim, skip_connection=True)
 
