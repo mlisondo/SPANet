@@ -6,11 +6,11 @@ channels:
   - nodefaults
 
 dependencies:
-  - python=3.10.*
+  - python=3.11.*
   - conda
   - pip
 
-  - numpy=1.23
+  - numpy=1.26
   - sympy
   - scikit-learn
   - numba
@@ -18,10 +18,9 @@ dependencies:
   - h5py
   - cytoolz
 
-  - pytorch=1.13.1
-  - pytorch-lightning=2.0.3
-  - pytorch-cuda=11.7
-  - cudatoolkit=11.7
+  - pytorch=2.3
+  - pytorch-lightning=2.4
+  - pytorch-cuda=12.1
   - cuda-nvcc
   - torchvision
   - torchaudio
