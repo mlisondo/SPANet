@@ -50,7 +50,7 @@ class SineKANLayer(torch.nn.Module):
     def forward(self, x, sequence_mask):
         timesteps, batch_size, input_dim = x.shape
         x = self.normalization(x, sequence_mask)
-        x = output.reshape(timesteps * batch_size, self.input_dim)
+        x = x.reshape(timesteps * batch_size, self.input_dim)
         x_shape = x.shape
         output_shape = x_shape[0:-1] + (self.output_dim,)
         x = torch.reshape(x, (-1, self.input_dim))
