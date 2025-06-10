@@ -2,9 +2,10 @@ import torch
 import torch.nn.functional as F
 import math
 from typing import *
+from spanet.network.layers.linear_block.normalizations import create_normalization
 
 class SineKANLayer(torch.nn.Module):
-    def __init__(self, input_dim, output_dim, device='cuda', grid_size=9, is_first=False, add_bias=True, norm_freq=True):
+    def __init__(self, options, input_dim, output_dim, device='cuda', grid_size=9, is_first=False, add_bias=True, norm_freq=True):
         super(SineKANLayer,self).__init__()
         self.grid_size = grid_size
         self.device = device
@@ -39,7 +40,16 @@ class SineKANLayer(torch.nn.Module):
         if self.add_bias:
             self.bias  = torch.nn.Parameter(torch.ones(1, output_dim) / output_dim)
 
-    def forward(self, x):
+        # Create normalization layer for keeping values in good ranges.
+        self.normalization = create_normalization(options.normalization, input_dim)
+
+        # Mask out padding values
+        self.masking = create_masking(options.masking)
+
+    def forward(self, x, sequence_mask):
+        timesteps, batch_size, input_dim = x.shape
+        x = self.normalization(x, sequence_mask)
+        x = output.reshape(timesteps * batch_size, self.input_dim)
         x_shape = x.shape
         output_shape = x_shape[0:-1] + (self.output_dim,)
         x = torch.reshape(x, (-1, self.input_dim))
@@ -49,26 +59,5 @@ class SineKANLayer(torch.nn.Module):
         if self.add_bias:
             y += self.bias
         y = torch.reshape(y, output_shape)
-        return y
-
-class SineKAN(torch.nn.Module):
-    def __init__(
-        self,
-        layers_hidden: List[int],
-        grid_size: int = 9,
-        device: str = 'cuda',
-    ) -> None:
-        super().__init__()
-
-        self.layers = torch.nn.ModuleList([
-            SineKANLayer(
-                in_dim, out_dim, device, grid_size=grid_size, is_first=True
-            ) if i == 0 else SineKANLayer(
-                in_dim, out_dim, device, grid_size=grid_size,
-            ) for i, (in_dim, out_dim) in enumerate(zip(layers_hidden[:-1], layers_hidden[1:]))
-        ])
-
-    def forward(self, x):
-        for layer in self.layers:
-            x = layer(x)
-        return x
+        y = y.reshape(timesteps, batch_size, self.output_dim)
+        return self.masking(y, sequence_mask)
