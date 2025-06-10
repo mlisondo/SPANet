@@ -3,6 +3,7 @@ import torch.nn.functional as F
 import math
 from typing import *
 from spanet.network.layers.linear_block.normalizations import create_normalization
+from spanet.network.layers.linear_block.masking import create_masking
 
 class SineKANLayer(torch.nn.Module):
     def __init__(self, options, input_dim, output_dim, device='cuda', grid_size=9, is_first=False, add_bias=True, norm_freq=True):
