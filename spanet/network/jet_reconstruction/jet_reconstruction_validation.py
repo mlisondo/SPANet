@@ -127,6 +127,7 @@ class JetReconstructionValidation(JetReconstructionNetwork):
         return metrics
 
     def validation_step(self, batch, batch_idx) -> Dict[str, np.float32]:
+        print("does this work")
         # Run the base prediction step
         sources, num_jets, targets, regression_targets, classification_targets = batch
         jet_predictions, particle_scores, regressions, classifications = self.predict(sources)
@@ -222,33 +223,35 @@ class JetReconstructionValidation(JetReconstructionNetwork):
     def test_step(self, batch, batch_idx):
         return self.validation_step(batch, batch_idx)
 
-def probe(o, name):
-    t = type(o)
-    if name != None:
-        print(f"\nObject '{name}': Type = {t.__module__}.{t.__name__}")
-    else:
-        print(f"\nUnnamed Object: Type = {t.__module__}.{t.__name__}")
 
+def probe(o, name=None):
+    import torch, numpy as np
+
+    cls = type(o)
+    header = f"Object '{name}'" if name else "Unnamed object"
+    print(f"\n{header}: {cls.__module__}.{cls.__name__}")
+
+    # NumPy-style introspection
     if hasattr(o, 'shape'):
-        try: print(f"shape: {o.shape}")
-        except: pass
+        print(f"shape: {o.shape}")
     if hasattr(o, 'ndim'):
-        try: print(f"ndim: {o.ndim}")
-        except: pass
+        print(f"ndim: {o.ndim}")
     if hasattr(o, 'dtype'):
-        try: print(f"dtype: {o.dtype}")
-        except: pass
+        print(f"dtype: {o.dtype}")
 
-    if hasattr(o, 'size'):
-        try: print(f"size: {o.size}")
-        except: pass
-    if hasattr(o, 'numel'):
-        try: print(f"numel: {o.numel}")
-        except: pass
-    if hasattr(o, '__len__'):
-        try: print(f"__len__: {o.__len__}")
-        except: pass
+    # size attribute (only when not a callable method)
+    if hasattr(o, 'size') and not callable(o.size):
+        print(f"size: {o.size}")
 
-    # try: print(f"attributes: {dir(o)}\n")
-    # except Exception:
-    #     print(f"attributes: could not be listed\n")
+    # Pythonic length
+    try:
+        print(f"len: {len(o)}")
+    except Exception:
+        pass
+
+    # PyTorch tensors: explicitly call the methods
+    if isinstance(o, torch.Tensor):
+        print(f"shape: {tuple(o.size())}")
+        print(f"dtype: {o.dtype}")
+        print(f"numel: {o.numel()}")
+
