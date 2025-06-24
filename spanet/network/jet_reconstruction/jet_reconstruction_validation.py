@@ -11,7 +11,6 @@ from spanet.options import Options
 from spanet.dataset.evaluator import SymmetricEvaluator
 from spanet.network.jet_reconstruction.jet_reconstruction_network import JetReconstructionNetwork
 
-
 class JetReconstructionValidation(JetReconstructionNetwork):
     def __init__(self, options: Options, torch_script: bool = False):
         super(JetReconstructionValidation, self).__init__(options, torch_script)
@@ -40,16 +39,16 @@ class JetReconstructionValidation(JetReconstructionNetwork):
         particle_predictions = particle_scores >= 0.5
 
         # PROBE ZONE
-        print("Probe Station #1: compute_metrics".center(50, '~'))
-        probe(jet_predictions, 'jet_predictions')
-        probe(particle_scores, 'particle_scores')
-        probe(stacked_targets, 'stacked_targets')
-        probe(stacked_masks, 'stacked_masks')
-        probe(event_permutation_group, 'event_permutation_group')
-        probe(num_permutations, 'num_permutations')
-        probe(num_targets, 'num_targets')
-        probe(batch_size, 'batch_size')
-        probe(particle_predictions, 'particle_predictions')
+        #print("Probe Station #1: compute_metrics".center(50, '~'))
+        #probe(jet_predictions, 'jet_predictions')
+        #probe(particle_scores, 'particle_scores')
+        #probe(stacked_targets, 'stacked_targets')
+        #probe(stacked_masks, 'stacked_masks')
+        #probe(event_permutation_group, 'event_permutation_group')
+        #probe(num_permutations, 'num_permutations')
+        #probe(num_targets, 'num_targets')
+        #probe(batch_size, 'batch_size')
+        #probe(particle_predictions, 'particle_predictions')
 
         # Compute all possible target permutations and take the best performing permutation
         # First compute raw_old accuracy so that we can get an accuracy score for each event
@@ -66,9 +65,9 @@ class JetReconstructionValidation(JetReconstructionNetwork):
         particle_accuracies = particle_accuracies.sum(1)
 
         # PROBE ZONE
-        print("Probe Station #2: compute_metrics".center(50, '~'))
-        probe(particle_accuracies, 'particle_accuracies 1')
-        probe(jet_accuracies, 'jet_accuracies 1')
+        #print("Probe Station #2: compute_metrics".center(50, '~'))
+        #probe(particle_accuracies, 'particle_accuracies 1')
+        #probe(jet_accuracies, 'jet_accuracies 1')
 
         # Select the primary permutation which we will use for all other metrics.
         chosen_permutations = self.event_permutation_tensor[jet_accuracies.argmax(0)].T
@@ -76,9 +75,9 @@ class JetReconstructionValidation(JetReconstructionNetwork):
         permuted_masks = torch.gather(torch.from_numpy(stacked_masks), 0, chosen_permutations).numpy()
 
         # PROBE ZONE
-        print("Probe Station #3: compute_metrics".center(50, '~'))
-        probe(chosen_permutations, 'chosen_permutations')
-        probe(permuted_masks, 'permuted_masks')
+        #print("Probe Station #3: compute_metrics".center(50, '~'))
+        #probe(chosen_permutations, 'chosen_permutations')
+        #probe(permuted_masks, 'permuted_masks')
 
         # Compute final accuracy vectors for output
         num_particles = stacked_masks.sum(0)
@@ -86,10 +85,10 @@ class JetReconstructionValidation(JetReconstructionNetwork):
         particle_accuracies = particle_accuracies.max(0)
 
         # PROBE ZONE
-        print("Probe Station #4: compute_metrics".center(50, '~'))
-        probe(num_particles, 'num_particles')
-        probe(jet_accuracies, 'jet_accuracies 2')
-        probe(particle_accuracies, 'particle_accuracies 2')
+        #print("Probe Station #4: compute_metrics".center(50, '~'))
+        #probe(num_particles, 'num_particles')
+        #probe(jet_accuracies, 'jet_accuracies 2')
+        #probe(particle_accuracies, 'particle_accuracies 2')
 
         # Create the logging dictionaries
         metrics = {f"jet/accuracy_{i}_of_{j}": (jet_accuracies[num_particles == j] >= i).mean()
@@ -105,10 +104,10 @@ class JetReconstructionValidation(JetReconstructionNetwork):
         particle_predictions = particle_predictions.ravel()
 
         # PROBE ZONE
-        print("Probe Station #5: compute_metrics".center(50, '~'))
-        probe(num_particles, 'num_particles')
-        probe(jet_accuracies, 'jet_accuracies 2')
-        probe(particle_accuracies, 'particle_accuracies 2')
+        #print("Probe Station #5: compute_metrics".center(50, '~'))
+        #probe(num_particles, 'num_particles')
+        #probe(jet_accuracies, 'jet_accuracies 2')
+        #probe(particle_accuracies, 'particle_accuracies 2')
 
         for name, metric in self.particle_metrics.items():
             metrics[f"particle/{name}"] = metric(particle_targets, particle_predictions)
@@ -121,13 +120,12 @@ class JetReconstructionValidation(JetReconstructionNetwork):
         metrics["validation_accuracy"] = metrics[f"jet/accuracy_{num_targets}_of_{num_targets}"]
 
         # PROBE ZONE
-        print("Probe Station #6: compute_metrics".center(50, '~'))
-        probe(metrics, 'metrics')
+        #print("Probe Station #6: compute_metrics".center(50, '~'))
+        #probe(metrics, 'metrics')
 
         return metrics
 
     def validation_step(self, batch, batch_idx) -> Dict[str, np.float32]:
-        print("does this work")
         # Run the base prediction step
         sources, num_jets, targets, regression_targets, classification_targets = batch
         jet_predictions, particle_scores, regressions, classifications = self.predict(sources)
@@ -139,11 +137,22 @@ class JetReconstructionValidation(JetReconstructionNetwork):
         print("Probe Station #1: validation_step".center(50, '~'))
         probe(batch, 'batch')
         probe(sources, 'sources')
+        probe(sources[0], 'sources[0]')
+        probe(sources[0][0], 'sources[0][0]')
+        probe(sources[0][1], 'sources[0][1]')
         probe(num_jets, 'num_jets')
         probe(targets, 'targets')
+        probe(targets[0], 'targets[0]')
+        probe(targets[0][0], 'targets[0][0]')
+        probe(targets[0][1], 'targets[0][1]')
+        probe(targets[1], 'targets[1]')
+        probe(targets[1][0], 'targets[1][0]')
+        probe(targets[1][1], 'targets[1][1]')
         probe(regression_targets, 'regression_targets 1')
         probe(classification_targets, 'classification_targets 1')
         probe(jet_predictions, 'jet_predictions')
+        probe(jet_predictions[0], 'jet_predictions[0]')
+        probe(jet_predictions[1], 'jet_predictions[1]')
         probe(particle_scores, 'particle_scores')
         probe(regressions, 'regressions')
         probe(classifications, 'classifications')
@@ -170,7 +179,11 @@ class JetReconstructionValidation(JetReconstructionNetwork):
        # PROBE ZONE
         print("Probe Station #2: validation_step".center(50, '~'))
         probe(stacked_targets, 'stacked_targets')
+        probe(stacked_targets[0], 'stacked_targets[0]')
+        probe(stacked_targets[1], 'stacked_targets[1]')
         probe(stacked_masks, 'stacked_masks')
+        probe(stacked_masks[0], 'stacked_masks[0]')
+        probe(stacked_masks[1], 'stacked_masks[1]')
         probe(regression_targets, 'regression_targets 2')
         probe(classification_targets, 'classification_targets 2')
 
@@ -186,6 +199,13 @@ class JetReconstructionValidation(JetReconstructionNetwork):
        # PROBE ZONE
         print("Probe Station #3: validation_step".center(50, '~'))
         probe(decoder.permutation_indices, 'decoder.permutation_indices')
+        probe(decoder.permutation_indices[0], 'decoder.permutation_indices[0]')
+        probe(decoder.permutation_indices[0][0], 'decoder.permutation_indices[0][0]')
+        probe(decoder.permutation_indices[0][0][0], 'decoder.permutation_indices[0][0][0]')
+        probe(decoder.permutation_indices[0][0][1], 'decoder.permutation_indices[0][0][1]')
+        probe(decoder.permutation_indices[1], 'decoder.permutation_indices[1]')
+        probe(decoder.permutation_indices[1][0], 'decoder.permutation_indices[1][0]')
+        probe(decoder.permutation_indices[1][0][0], 'decoder.permutation_indices[1][0][0]')
         probe(prediction, 'prediction')
         probe(target, 'target')
 
@@ -217,6 +237,7 @@ class JetReconstructionValidation(JetReconstructionNetwork):
        # PROBE ZONE
         print("Probe Station #4: validation_step".center(50, '~'))
         probe(metrics, 'metrics')
+        raise RuntimeError("Stopped at Probe Station #4")
 
         return metrics
 
@@ -254,4 +275,3 @@ def probe(o, name=None):
         print(f"shape: {tuple(o.size())}")
         print(f"dtype: {o.dtype}")
         print(f"numel: {o.numel()}")
-
