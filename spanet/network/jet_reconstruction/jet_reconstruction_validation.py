@@ -39,8 +39,8 @@ class JetReconstructionValidation(JetReconstructionNetwork):
         #collect 1 (num_permutations, num_targets, batch)size) per pred_idx
         all_jet_accs = []
         #initialize bool array to hold (per particle, per jet) accuracies (for each permutation)
-        jet_accuracies = np.zeros((num_permutations, num_targets, batch_size), dtype = np.bool)
-        particle_accuracies = np.zeros((num_permutations, num_targets, batch_size), dtype = np.bool)
+        jet_accuracies = np.zeros((num_permutations, num_targets, batch_size), dtype = bool)
+        particle_accuracies = np.zeros((num_permutations, num_targets, batch_size), dtype = bool)
 
         #itereate through each slice pred_idx of jet_predictions tensor
         for pred_idx in range(jet_predictions[0].shape[-1]):
@@ -131,7 +131,7 @@ class JetReconstructionValidation(JetReconstructionNetwork):
 
         # Stack all of the targets into single array, we will also move to numpy for easier the numba computations.
         stacked_targets = np.zeros(num_targets, dtype=object)
-        stacked_masks = np.zeros((num_targets, batch_size), dtype=np.bool)
+        stacked_masks = np.zeros((num_targets, batch_size), dtype=bool)
         for i, (target, mask) in enumerate(targets):
             stacked_targets[i] = target.detach().cpu().numpy()
             stacked_masks[i] = mask.detach().cpu().numpy()
@@ -169,16 +169,16 @@ class JetReconstructionValidation(JetReconstructionNetwork):
        # PROBE ZONE
         print("Probe Station #3: validation_step".center(50, '~'))
         probe(decoder.permutation_indices, 'decoder.permutation_indices')
-        probe(decoder.permutation_indices[0], 'decoder.permutation_indices[0]')
-        probe(decoder.permutation_indices[0][0], 'decoder.permutation_indices[0][0]')
-        probe(decoder.permutation_indices[0][0][0], 'decoder.permutation_indices[0][0][0]')
-        probe(decoder.permutation_indices[0][0][1], 'decoder.permutation_indices[0][0][1]')
-        probe(decoder.permutation_indices[1], 'decoder.permutation_indices[1]')
-        probe(decoder.permutation_indices[1][0], 'decoder.permutation_indices[1][0]')
-        probe(decoder.permutation_indices[1][0][0], 'decoder.permutation_indices[1][0][0]')
+        print("decoder premutation indices", decoder.permutation_indices)
+        #probe(decoder.permutation_indices[0], 'decoder.permutation_indices[0]')
+        #probe(decoder.permutation_indices[0][0], 'decoder.permutation_indices[0][0]')
+        #probe(decoder.permutation_indices[0][0][0], 'decoder.permutation_indices[0][0][0]')
+        #probe(decoder.permutation_indices[0][0][1], 'decoder.permutation_indices[0][0][1]')
+        #probe(decoder.permutation_indices[1], 'decoder.permutation_indices[1]')
+        #probe(decoder.permutation_indices[1][0], 'decoder.permutation_indices[1][0]')
+        #probe(decoder.permutation_indices[1][0][0], 'decoder.permutation_indices[1][0][0]')
         probe(prediction, 'prediction')
         probe(target, 'target')
-        print(decoder.permutation_indices)
 
         metrics.update(self.compute_metrics(jet_predictions, particle_scores, stacked_targets, stacked_masks))
 
@@ -206,9 +206,9 @@ class JetReconstructionValidation(JetReconstructionNetwork):
                 self.log(name, value, sync_dist=True)
 
        # PROBE ZONE
-        print("Probe Station #4: validation_step".center(50, '~'))
-        probe(metrics, 'metrics')
-        raise RuntimeError("Stopped at Probe Station #4")
+        #print("Probe Station #4: validation_step".center(50, '~'))
+        #probe(metrics, 'metrics')
+        raise RuntimeError("Stop at one iteration")
 
         return metrics
 

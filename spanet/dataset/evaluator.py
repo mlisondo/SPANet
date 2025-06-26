@@ -81,16 +81,20 @@ class SymmetricEvaluator:
             cluster_predictions = np.stack([predictions[i] for i in cluster_indices])
 
             # Keep track of the best accuracy achieved for each event
-            best_accuracy = np.zeros(cluster_target_masks.shape[1], dtype=int)
+            best_accuracy = np.zeros((predictions[0].shape[-1], cluster_target_masks.shape[1]), dtype=int)
+    
+            for pred_idx in range(predictions[0].shape[-1]):
+                current_prediction = cluster_predictions[..., pred_idx]
+                for target_permutation in permutations(range(len(cluster_indices))):
+                    target_permutation = list(target_permutation)
+    
+                    accuracy = current_prediction == cluster_target_jets[target_permutation]
+                    accuracy = accuracy.all(-1) * cluster_target_masks[target_permutation]
+                    accuracy = accuracy.sum(0)
+    
+                    best_accuracy[pred_idx] = np.maximum(accuracy, best_accuracy[pred_idx])
 
-            for target_permutation in permutations(range(len(cluster_indices))):
-                target_permutation = list(target_permutation)
-
-                accuracy = cluster_predictions == cluster_target_jets[target_permutation]
-                accuracy = accuracy.all(-1) * cluster_target_masks[target_permutation]
-                accuracy = accuracy.sum(0)
-
-                best_accuracy = np.maximum(accuracy, best_accuracy)
+            best_accuracy = np.vstack([acc for acc in best_accuracy]).max(axis=0)
 
             # Get rid of pesky warnings
             total_particles = cluster_target_masks.sum()
@@ -106,18 +110,18 @@ class SymmetricEvaluator:
     def event_purity(self, predictions, target_jets, target_masks):
         target_masks = np.stack(target_masks)
 
-        # Keep track of the best accuracy achieved for each event
-        best_accuracy = np.zeros(target_masks.shape[1], dtype=int)
+        best_accuracy = np.zeros((predictions[0].shape[-1], target_masks.shape[1]), dtype=int)
 
-        for target_permutation in self.event_info.event_permutation_group:
-            permuted_targets = self.permute_arrays(target_jets, target_permutation)
-            permuted_mask = self.permute_arrays(target_masks, target_permutation)
-            accuracy = np.array([(p == t).all(-1) * m
-                                 for p, t, m
-                                 in zip(predictions, permuted_targets, permuted_mask)])
-            accuracy = accuracy.sum(0)
-
-            best_accuracy = np.maximum(accuracy, best_accuracy)
+        for pred_idx in range(predictions[0].shape[-1]):
+            for target_permutation in self.event_info.event_permutation_group:
+                permuted_targets = self.permute_arrays(target_jets, target_permutation)
+                permuted_mask = self.permute_arrays(target_masks, target_permutation)
+                accuracy = np.array([(p[...,pred_idx] == t).all(-1) * m
+                                    for p, t, m in zip(predictions, permuted_targets, permuted_mask)])
+                accuracy = accuracy.sum(0)
+    
+                best_accuracy[pred_idx] = np.maximum(accuracy, best_accuracy[pred_idx])
+        best_accuracy = np.vstack([acc for acc in best_accuracy]).max(axis=0)
 
         # Event accuracy is defined as getting all possible particles in event
         num_particles_in_event = target_masks.sum(0)
