@@ -243,36 +243,41 @@ def find_max_and_mask(matrix):
     
     return new_matrix, i, j, k
 
-def extract_predictions(predictions: List[TArray]):
-    num_partons = np.array([len(p.shape) - 1 for p in predictions])
-    max_jets = max(max(p.shape[1:]) for p in predictions)
+def extract_predictions(predictions: List[TArray], k: int):
+    num_partons = np.array([p.ndim - 1 for p in predictions], dtype=np.int64)
+    max_partons = num_partons.max()
+    max_jets   = max(max(p.shape[1:]) for p in predictions)
     batch_size = max(p.shape[0] for p in predictions)
 
-    targets = len(predictions)
-    max_partons = np.max(num_partons)
-    results = np.zeros((targets, batch_size, max_partons, targets))
-    weights = np.zeros((targets, batch_size, targets)) - np.float32(np.inf)
-    predictions = np.array(predictions)
-    indices = np.zeros((batch_size, max_partons), dtype=np.int32)
-    for j in range(targets):
-        original_weights = predictions[j,:,:,:,:].copy()
-        temp_predictions = predictions.copy()
-        for k in range(batch_size):
-            parton_slice, indx1, indx2, indx3 = find_max_and_mask(original_weights[k])
-            indices[k,:] = np.array((indx1, indx2, indx3))
-            temp_predictions[j,k,:,:,:] = parton_slice
-        temp_predictions_list = numba.typed.List([p.reshape((p.shape[0], -1)) for p in temp_predictions])
-        result, weight = _extract_predictions(temp_predictions_list, num_partons, max_jets, batch_size)
-        weights[:,:,j] = weight.copy()
-        for m in range(batch_size):
-            weights[j, m, j] = original_weights[m, indices[m,0], indices[m,1], indices[m,2]]
-        results[:,:,:,j] = result.copy()
-            
-    max_results = np.zeros_like(result)
-    for i in prange(batch_size):
-        temp_weight = weights[:,i,:]
-        new_sum = np.sum(np.exp(temp_weight), axis=0)
-        indx = np.argmax(new_sum)
-        max_results[:,i,:] = results[:,i,:,indx]
+    n_targets  = len(predictions)
 
-    return [max_result[:, :partons] for max_result, partons in zip(max_results, num_partons)]
+    results = np.full((n_targets, batch_size, max_partons, k),
+                      -1, dtype=np.int64)
+    weights = np.full((n_targets, batch_size, k),
+                      -np.float32(np.inf), dtype=np.float32)
+
+    work_preds = [p.astype(np.float32, copy=True) for p in predictions]
+
+    for top_idx in range(k):
+
+        flat_pred_list = numba.typed.List(
+            [p.reshape((p.shape[0], -1)) for p in work_preds]
+        )
+        assign, score = _extract_predictions(
+            flat_pred_list, num_partons, max_jets, batch_size
+        )
+
+        results[:, :, :, top_idx] = assign
+        weights[:, :,    top_idx] = score
+
+        for t in range(n_targets): # target index
+            for b in range(batch_size): # batch index
+                for p_idx in range(num_partons[t]): # parton index
+                    jet = int(assign[t, b, p_idx])
+                    if jet >= 0: # only mask valid assignments
+                        for s in range(n_targets): # mask in all targets
+                            mask_jet(work_preds[s][b].ravel(),
+                                     num_partons[s], max_jets,
+                                     jet, -np.float32(np.inf))
+
+    return [res[:, :partons] for res, partons in zip(results, num_partons)]

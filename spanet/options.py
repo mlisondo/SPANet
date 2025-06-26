@@ -181,6 +181,9 @@ class Options(Namespace):
         # Number of processes to spawn for data collection.
         self.num_dataloader_workers: int = 4
 
+        # k value for Top-k prediction selectionAdd commentMore actions
+        self.k: int = 1
+
         # =========================================================================================
         # Training Options
         # =========================================================================================
@@ -316,3 +319,4 @@ class Options(Namespace):
     def save(self, filepath: str):
         with open(filepath, 'w') as json_file:
             json.dump(self.__dict__, json_file, indent=4, sort_keys=True)
+

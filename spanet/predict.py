@@ -70,8 +70,12 @@ def main(log_directory: str,
          event_file: Optional[str],
          batch_size: Optional[int],
          output_vectors: bool,
-         gpu: bool):
+         gpu: bool,
+         fp16: bool,
+         top_k: int):
     model = load_model(log_directory, test_file, event_file, batch_size, gpu)
+    if top_k is not None:
+        model.options.k = top_k
 
     if output_vectors:
         evaluation, full_outputs = evaluate_on_test_dataset(model, return_full_output=True)
@@ -105,6 +109,9 @@ if __name__ == '__main__':
 
     parser.add_argument("-v", "--output_vectors", action="store_true",
                         help="Include embedding vectors in output in an additional section of the HDF5.")
+    
+    parser.add_argument("-k", "--top_k", type=int, default=None,
+                        help="k value override in Top-k inference")
 
     arguments = parser.parse_args()
     main(**arguments.__dict__)

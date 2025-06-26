@@ -1,5 +1,3 @@
-import inspect      # for debugging purposes
-
 from typing import Dict, Callable
 
 import numpy as np
@@ -38,63 +36,45 @@ class JetReconstructionValidation(JetReconstructionNetwork):
         num_targets, batch_size = stacked_masks.shape
         particle_predictions = particle_scores >= 0.5
 
-        # PROBE ZONE
-        #print("Probe Station #1: compute_metrics".center(50, '~'))
-        #probe(jet_predictions, 'jet_predictions')
-        #probe(particle_scores, 'particle_scores')
-        #probe(stacked_targets, 'stacked_targets')
-        #probe(stacked_masks, 'stacked_masks')
-        #probe(event_permutation_group, 'event_permutation_group')
-        #probe(num_permutations, 'num_permutations')
-        #probe(num_targets, 'num_targets')
-        #probe(batch_size, 'batch_size')
-        #probe(particle_predictions, 'particle_predictions')
+        #collect 1 (num_permutations, num_targets, batch)size) per pred_idx
+        all_jet_accs = []
+        #initialize bool array to hold (per particle, per jet) accuracies (for each permutation)
+        jet_accuracies = np.zeros((num_permutations, num_targets, batch_size), dtype = np.bool)
+        particle_accuracies = np.zeros((num_permutations, num_targets, batch_size), dtype = np.bool)
 
-        # Compute all possible target permutations and take the best performing permutation
-        # First compute raw_old accuracy so that we can get an accuracy score for each event
-        # This will also act as the method for choosing the best permutation to compare for the other metrics.
-        jet_accuracies = np.zeros((num_permutations, num_targets, batch_size), dtype=bool)
-        particle_accuracies = np.zeros((num_permutations, num_targets, batch_size), dtype=bool)
-        for i, permutation in enumerate(event_permutation_group):
-            for j, (prediction, target) in enumerate(zip(jet_predictions, stacked_targets[permutation])):
-                jet_accuracies[i, j] = np.all(prediction == target, axis=1)
-
-            particle_accuracies[i] = stacked_masks[permutation] == particle_predictions
-
-        jet_accuracies = jet_accuracies.sum(1)
-        particle_accuracies = particle_accuracies.sum(1)
-
-        # PROBE ZONE
-        #print("Probe Station #2: compute_metrics".center(50, '~'))
-        #probe(particle_accuracies, 'particle_accuracies 1')
-        #probe(jet_accuracies, 'jet_accuracies 1')
+        #itereate through each slice pred_idx of jet_predictions tensor
+        for pred_idx in range(jet_predictions[0].shape[-1]):
+            for i, permutation in enumerate(event_permutation_group):
+                for j, (prediction, target) in enumerate(zip(jet_predictions, stacked_targets)):
+                    #compare pred_idx-th candidate assignment for each jet
+                    jet_accuracies[i,j] = np.all(prediction[..., pred_idx] == target, axis = 1)
+                #compute particle-lvl accuracy per permutation (elementwise comparison: predicted vs true mask)f
+                particle_accuracies[i] = (stacked_masks[permutation] == particle_predictions)
+            all_jet_accs.append(jet_accuracies.copy())
+        #stack over pred_idx axis: shape(num_predictions, num_permutations, num_targets, batch_size)
+        all_jet_accs_array = np.stack(all_jet_accs, axis=0)
+        #for each event and jet-target -> pick best accuracy over all pred_idx candidates
+        max_jet_accuracies = all_jet_accs_array.max(axis = 0)  # shape (num_permutations, num_targets, batch_size)
+        #sum over jet-target index (axis=1) -> per event and perm TOTAL # of correctly matched jets
+        max_jet_accuracies = max_jet_accuracies.sum(axis = 1)
+        #total particle‐level accuracy (across jets) per event
+        particle_accuracies = particle_accuracies.sum(axis = 1)
 
         # Select the primary permutation which we will use for all other metrics.
-        chosen_permutations = self.event_permutation_tensor[jet_accuracies.argmax(0)].T
+        chosen_permutations = self.event_permutation_tensor[max_jet_accuracies.argmax(0)].T
         chosen_permutations = chosen_permutations.cpu()
         permuted_masks = torch.gather(torch.from_numpy(stacked_masks), 0, chosen_permutations).numpy()
 
-        # PROBE ZONE
-        #print("Probe Station #3: compute_metrics".center(50, '~'))
-        #probe(chosen_permutations, 'chosen_permutations')
-        #probe(permuted_masks, 'permuted_masks')
-
         # Compute final accuracy vectors for output
         num_particles = stacked_masks.sum(0)
-        jet_accuracies = jet_accuracies.max(0)
+        max_jet_accuracies = max_jet_accuracies.max(0)
         particle_accuracies = particle_accuracies.max(0)
 
-        # PROBE ZONE
-        #print("Probe Station #4: compute_metrics".center(50, '~'))
-        #probe(num_particles, 'num_particles')
-        #probe(jet_accuracies, 'jet_accuracies 2')
-        #probe(particle_accuracies, 'particle_accuracies 2')
-
         # Create the logging dictionaries
-        metrics = {f"jet/accuracy_{i}_of_{j}": (jet_accuracies[num_particles == j] >= i).mean()
+        metrics = {f"jet/accuracy_{i}_of_{j}": (max_jet_accuracies[num_particles == j] >= i).mean()
                    for j in range(1, num_targets + 1)
                    for i in range(1, j + 1)}
-
+        
         metrics.update({f"particle/accuracy_{i}_of_{j}": (particle_accuracies[num_particles == j] >= i).mean()
                         for j in range(1, num_targets + 1)
                         for i in range(1, j + 1)})
@@ -102,12 +82,6 @@ class JetReconstructionValidation(JetReconstructionNetwork):
         particle_scores = particle_scores.ravel()
         particle_targets = permuted_masks.ravel()
         particle_predictions = particle_predictions.ravel()
-
-        # PROBE ZONE
-        #print("Probe Station #5: compute_metrics".center(50, '~'))
-        #probe(num_particles, 'num_particles')
-        #probe(jet_accuracies, 'jet_accuracies 2')
-        #probe(particle_accuracies, 'particle_accuracies 2')
 
         for name, metric in self.particle_metrics.items():
             metrics[f"particle/{name}"] = metric(particle_targets, particle_predictions)
@@ -118,10 +92,6 @@ class JetReconstructionValidation(JetReconstructionNetwork):
         # Compute the sum accuracy of all complete events to act as our target for
         # early stopping, hyperparameter optimization, learning rate scheduling, etc.
         metrics["validation_accuracy"] = metrics[f"jet/accuracy_{num_targets}_of_{num_targets}"]
-
-        # PROBE ZONE
-        #print("Probe Station #6: compute_metrics".center(50, '~'))
-        #probe(metrics, 'metrics')
 
         return metrics
 
@@ -161,7 +131,7 @@ class JetReconstructionValidation(JetReconstructionNetwork):
 
         # Stack all of the targets into single array, we will also move to numpy for easier the numba computations.
         stacked_targets = np.zeros(num_targets, dtype=object)
-        stacked_masks = np.zeros((num_targets, batch_size), dtype=bool)
+        stacked_masks = np.zeros((num_targets, batch_size), dtype=np.bool)
         for i, (target, mask) in enumerate(targets):
             stacked_targets[i] = target.detach().cpu().numpy()
             stacked_masks[i] = mask.detach().cpu().numpy()
@@ -208,6 +178,7 @@ class JetReconstructionValidation(JetReconstructionNetwork):
         probe(decoder.permutation_indices[1][0][0], 'decoder.permutation_indices[1][0][0]')
         probe(prediction, 'prediction')
         probe(target, 'target')
+        print(decoder.permutation_indices)
 
         metrics.update(self.compute_metrics(jet_predictions, particle_scores, stacked_targets, stacked_masks))
 
