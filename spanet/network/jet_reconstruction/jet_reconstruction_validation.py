@@ -103,32 +103,6 @@ class JetReconstructionValidation(JetReconstructionNetwork):
         batch_size = num_jets.shape[0]
         num_targets = len(targets)
 
-        # PROBE ZONE
-        print("Probe Station #1: validation_step".center(50, '~'))
-        probe(batch, 'batch')
-        probe(sources, 'sources')
-        probe(sources[0], 'sources[0]')
-        probe(sources[0][0], 'sources[0][0]')
-        probe(sources[0][1], 'sources[0][1]')
-        probe(num_jets, 'num_jets')
-        probe(targets, 'targets')
-        probe(targets[0], 'targets[0]')
-        probe(targets[0][0], 'targets[0][0]')
-        probe(targets[0][1], 'targets[0][1]')
-        probe(targets[1], 'targets[1]')
-        probe(targets[1][0], 'targets[1][0]')
-        probe(targets[1][1], 'targets[1][1]')
-        probe(regression_targets, 'regression_targets 1')
-        probe(classification_targets, 'classification_targets 1')
-        probe(jet_predictions, 'jet_predictions')
-        probe(jet_predictions[0], 'jet_predictions[0]')
-        probe(jet_predictions[1], 'jet_predictions[1]')
-        probe(particle_scores, 'particle_scores')
-        probe(regressions, 'regressions')
-        probe(classifications, 'classifications')
-        probe(batch_size, 'batch_size')
-        probe(num_targets, 'num_targets')
-
         # Stack all of the targets into single array, we will also move to numpy for easier the numba computations.
         stacked_targets = np.zeros(num_targets, dtype=object)
         stacked_masks = np.zeros((num_targets, batch_size), dtype=bool)
@@ -146,17 +120,6 @@ class JetReconstructionValidation(JetReconstructionNetwork):
             for key, value in classification_targets.items()
         }
 
-       # PROBE ZONE
-        print("Probe Station #2: validation_step".center(50, '~'))
-        probe(stacked_targets, 'stacked_targets')
-        probe(stacked_targets[0], 'stacked_targets[0]')
-        probe(stacked_targets[1], 'stacked_targets[1]')
-        probe(stacked_masks, 'stacked_masks')
-        probe(stacked_masks[0], 'stacked_masks[0]')
-        probe(stacked_masks[1], 'stacked_masks[1]')
-        probe(regression_targets, 'regression_targets 2')
-        probe(classification_targets, 'classification_targets 2')
-
         metrics = self.evaluator.full_report_string(jet_predictions, stacked_targets, stacked_masks, prefix="Purity/")
 
         # Apply permutation groups for each target
@@ -166,19 +129,19 @@ class JetReconstructionValidation(JetReconstructionNetwork):
                     prediction[:, indices] = np.sort(prediction[:, indices])
                     target[:, indices] = np.sort(target[:, indices])
 
-       # PROBE ZONE
-        print("Probe Station #3: validation_step".center(50, '~'))
-        probe(decoder.permutation_indices, 'decoder.permutation_indices')
-        print("decoder premutation indices", decoder.permutation_indices)
-        #probe(decoder.permutation_indices[0], 'decoder.permutation_indices[0]')
-        #probe(decoder.permutation_indices[0][0], 'decoder.permutation_indices[0][0]')
-        #probe(decoder.permutation_indices[0][0][0], 'decoder.permutation_indices[0][0][0]')
-        #probe(decoder.permutation_indices[0][0][1], 'decoder.permutation_indices[0][0][1]')
-        #probe(decoder.permutation_indices[1], 'decoder.permutation_indices[1]')
-        #probe(decoder.permutation_indices[1][0], 'decoder.permutation_indices[1][0]')
-        #probe(decoder.permutation_indices[1][0][0], 'decoder.permutation_indices[1][0][0]')
-        probe(prediction, 'prediction')
-        probe(target, 'target')
+        # PROBE ZONE
+        probe(sources, 'sources')
+        print("sources", sources)
+        probe(targets, 'targets')
+        print("targets", targets)
+       	probe(jet_predictions, 'jet_predictions')
+        print("jet_predictions", jet_predictions)
+        probe(self.branch_decoders, 'self.branch_decoders')
+        print("self.branch_decoders[0].permutation_indices", self.branch_decoders[0].permutation_indices)
+        print("self.branch_decoders[1].permutation_indices", self.branch_decoders[1].permutation_indices)
+        #raise RuntimeError("Stop at one iteration")
+
+
 
         metrics.update(self.compute_metrics(jet_predictions, particle_scores, stacked_targets, stacked_masks))
 
@@ -205,11 +168,6 @@ class JetReconstructionValidation(JetReconstructionNetwork):
             if not np.isnan(value):
                 self.log(name, value, sync_dist=True)
 
-       # PROBE ZONE
-        #print("Probe Station #4: validation_step".center(50, '~'))
-        #probe(metrics, 'metrics')
-        raise RuntimeError("Stop at one iteration")
-
         return metrics
 
     def test_step(self, batch, batch_idx):
@@ -217,11 +175,9 @@ class JetReconstructionValidation(JetReconstructionNetwork):
 
 
 def probe(o, name=None):
-    import torch, numpy as np
-
-    cls = type(o)
-    header = f"Object '{name}'" if name else "Unnamed object"
-    print(f"\n{header}: {cls.__module__}.{cls.__name__}")
+    obj = type(o)
+    header = f"Object '{name}'"
+    print(f"\n{header}: {obj.__module__}.{obj.__name__}")
 
     # NumPy-style introspection
     if hasattr(o, 'shape'):
@@ -231,7 +187,7 @@ def probe(o, name=None):
     if hasattr(o, 'dtype'):
         print(f"dtype: {o.dtype}")
 
-    # size attribute (only when not a callable method)
+    # size attribute
     if hasattr(o, 'size') and not callable(o.size):
         print(f"size: {o.size}")
 
@@ -241,8 +197,20 @@ def probe(o, name=None):
     except Exception:
         pass
 
-    # PyTorch tensors: explicitly call the methods
+    # Recursive descent into lists
+    try:
+        if isinstance(o, (list, tuple)):
+            for idx, item in enumerate(o):
+                probe(item, f"{name}[{idx}]")
+    except Exception:
+        pass
+
+    # PyTorch tensors
     if isinstance(o, torch.Tensor):
+        print(f"shape: {tuple(o.size())}")
+        print(f"dtype: {o.dtype}")
+        print(f"numel: {o.numel()}")
+
         print(f"shape: {tuple(o.size())}")
         print(f"dtype: {o.dtype}")
         print(f"numel: {o.numel()}")

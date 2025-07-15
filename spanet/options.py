@@ -184,6 +184,10 @@ class Options(Namespace):
         # k value for Top-k prediction selectionAdd commentMore actions
         self.k: int = 1
 
+        self.branch_dim: int = 2
+        self.jet_max_dim: int = 3
+        self.features_dim: int = 5
+
         # =========================================================================================
         # Training Options
         # =========================================================================================
