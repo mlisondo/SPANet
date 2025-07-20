@@ -130,15 +130,15 @@ class JetReconstructionValidation(JetReconstructionNetwork):
                     target[:, indices] = np.sort(target[:, indices])
 
         # PROBE ZONE
-        probe(sources, 'sources')
-        print("sources", sources)
-        probe(targets, 'targets')
-        print("targets", targets)
-       	probe(jet_predictions, 'jet_predictions')
-        print("jet_predictions", jet_predictions)
-        probe(self.branch_decoders, 'self.branch_decoders')
-        print("self.branch_decoders[0].permutation_indices", self.branch_decoders[0].permutation_indices)
-        print("self.branch_decoders[1].permutation_indices", self.branch_decoders[1].permutation_indices)
+        #probe(sources, 'sources')
+        #print("sources", sources)
+        #probe(targets, 'targets')
+        #print("targets", targets)
+       	#probe(jet_predictions, 'jet_predictions')
+        #print("jet_predictions", jet_predictions)
+        #probe(self.branch_decoders, 'self.branch_decoders')
+        #print("self.branch_decoders[0].permutation_indices", self.branch_decoders[0].permutation_indices)
+        #print("self.branch_decoders[1].permutation_indices", self.branch_decoders[1].permutation_indices)
         #raise RuntimeError("Stop at one iteration")
 
 

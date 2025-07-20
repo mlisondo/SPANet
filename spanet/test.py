@@ -279,5 +279,8 @@ if __name__ == '__main__':
     parser.add_argument("-k", "--top_k", type=int, default=None,
                         help="k value override in top-k inference")
 
+    parser.add_argument("-fp16", "--fp16", action="store_true", help="Use Torch AMP for training.")
+
+
     arguments = parser.parse_args()
     main(**arguments.__dict__)

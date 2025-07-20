@@ -62,9 +62,9 @@
     "gradient_clip": 0.0,
     "dropout": 0.0,
 
-    "epochs": 500,
+    "epochs": 50,
     "num_gpu": 1,
     "verbose_output": true,
     
-    "k": 4
+    "k": 1
 }

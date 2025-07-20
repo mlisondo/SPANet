@@ -1,4 +1,4 @@
 from spanet.network.jet_reconstruction import JetReconstructionModel
-from SPANet.spanet.network.jet_reconstruction.jet_scm_training_validation import SCM_Training_Val
+from spanet.network.jet_reconstruction.jet_scm_training_validation import SCM_Training_Val
 from spanet.dataset import JetReconstructionDataset
 from spanet.options import Options

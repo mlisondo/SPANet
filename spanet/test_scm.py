@@ -279,8 +279,5 @@ if __name__ == '__main__':
     parser.add_argument("-k", "--top_k", type=int, default=None,
                         help="k value override in top-k inference")
 
-	parser.add_argument("log_directory", type=str,
-                        help="Pytorch Lightning Log directory containing the checkpoint and options file.")	
-
     arguments = parser.parse_args()
     main(**arguments.__dict__)

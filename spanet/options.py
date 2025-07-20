@@ -282,8 +282,15 @@ class Options(Namespace):
             table.add_column("Parameter", justify="left")
             table.add_column("Value", justify="left")
 
+            # for key, value in sorted(self.__dict__.items()):
+            #     table.add_row(key, str(value), style="red" if value != default_options[key] else None)
             for key, value in sorted(self.__dict__.items()):
-                table.add_row(key, str(value), style="red" if value != default_options[key] else None)
+                if key in default_options:
+                    style = "red" if value != default_options[key] else None
+                else:
+                    style = "yellow"  # Or just None if you don't want highlighting
+                table.add_row(key, str(value), style=style)
+
 
             console.print(table)
 

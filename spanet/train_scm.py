@@ -3,6 +3,9 @@ from typing import Optional, List
 from os import getcwd, makedirs, environ
 import shutil
 import json
+import os
+
+from copy import deepcopy
 
 import torch
 import pytorch_lightning as pl
@@ -10,6 +13,8 @@ from pytorch_lightning.profilers import PyTorchProfiler
 from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.callbacks.progress.rich_progress import _RICH_AVAILABLE
 from pytorch_lightning.loggers.wandb import _WANDB_AVAILABLE, WandbLogger
+
+from spanet.evaluation import load_model
 
 from pytorch_lightning.callbacks import (
     LearningRateMonitor,
@@ -22,7 +27,7 @@ from pytorch_lightning.callbacks import (
 )
 
 from spanet import Options 
-from SPANet.spanet.network.jet_reconstruction.jet_scm_training_validation import SCM_Training_Val             # changed
+from spanet.network.jet_reconstruction.jet_scm_training_validation import SCM_Training_Val             # changed
 
 
 def main(
@@ -52,6 +57,9 @@ def main(
 
         class_hidden_dims: List[int],
         mask_hidden_dims: List[int],
+
+        spanet_log_directory: str,
+        test_file: Optional[str] = None
     ):
 
     # Whether or not this script version is the master run or a worker
@@ -114,7 +122,29 @@ def main(
     # Begin the training loop
     # -------------------------------------------------------------------------------------------------------
 
-    model = SCM_Training_Val(options, class_hidden_dims, mask_hidden_dims, torch_script)             # changed
+    # # Load baseline SPANet (parent)
+    # SPANet_model = load_model(spanet_log_directory, test_file, event_file, batch_size, cuda=True)
+
+    # # Create your new model (child)
+    # model = SCM_Training_Val(options, class_hidden_dims, mask_hidden_dims, torch_script)
+
+    # # Inherit all SPANet properties into your new model
+    # model.__dict__.update(deepcopy(SPANet_model.__dict__))
+
+    # # Now you can safely delete the parent if not needed
+    # del SPANet_model
+
+    model = SCM_Training_Val.load_from_checkpoint(
+        os.path.join(spanet_log_directory, "checkpoints", "last.ckpt"),  # Path to your parent SPANet checkpoint
+        strict=False,                  # Allow non-matching weights if you added heads, etc.
+        options=options,               # Your current options object
+        class_hidden_dims=class_hidden_dims,   # List of int, e.g. [30,64]
+        mask_hidden_dims=mask_hidden_dims,     # List of int, e.g. [30,64]
+        torch_script=torch_script
+    )
+
+    if not spanet_log_directory:
+        raise ValueError("You must provide --spanet_log_directory pointing to a trained SPANet output dir.")
 
     if state_dict is not None:
         if master:
@@ -132,8 +162,17 @@ def main(
                 if pname in state_dict:
                     parameter.requires_grad_(False)
 
-    # Construct the logger for this training run. Logs will be saved in {logdir}/{name}/version_i
-    log_dir = getcwd() if log_dir is None else log_dir
+    # # Construct the logger for this training run. Logs will be saved in {logdir}/{name}/version_i
+    # log_dir = getcwd() if log_dir is None else log_dir
+    # logger = (
+    #     WandbLogger(name=name, save_dir=log_dir)
+    #     if _WANDB_AVAILABLE else
+    #     TensorBoardLogger(save_dir=log_dir, name=name)
+    # )
+
+    if log_dir is None:
+        log_dir = f"./{name}"
+    os.makedirs(log_dir, exist_ok=True)
     logger = (
         WandbLogger(name=name, save_dir=log_dir)
         if _WANDB_AVAILABLE else
@@ -144,9 +183,9 @@ def main(
     callbacks = [
         ModelCheckpoint(
             verbose=options.verbose_output,
-            monitor='val_total_loss',                       # changed
+            monitor='val_loss',                       # changed
             save_top_k=3,
-            mode='max',
+            mode='min',
             save_last=True
         ),
         LearningRateMonitor(),
@@ -261,6 +300,8 @@ if __name__ == '__main__':
         
     parser.add_argument("--mask_hidden_dims", type=lambda s: [int(x) for x in s.split(",")], default=[30, 64],
                         help="Initial=Comma-separated hidden sizes for masker, e.g. '30,64'.")
-
+    
+    parser.add_argument("--spanet_log_directory", type=str,
+                        help="Pytorch Lightning Log directory containing the checkpoint and options file.")
 
     main(**parser.parse_args().__dict__)
