@@ -61,14 +61,16 @@ class SCM_Training_Val(JetSecondaryLoader):
         class_first = torch.argmax(class_truth_int, dim=1)  # (events,)
         has_truth = torch.any(class_truth_int == 1, dim=1)  # (events,)
 
-        # Mask all logits with true label except for the first one (focus loss on one target only)
-        for event in range(events):
-            if torch.any(class_truth[event, :] == True):
-                first_val = class_logits[event, class_first[event]].clone()
-                for idx, i in enumerate(class_truth[event]):
-                    if i == 1:
-                        class_logits[event, idx] = -torch.inf
-                class_logits[event, class_first[event]] = first_val  # restore only first correct logit
+        mask = class_truth.bool().clone() # which positions are "correct"
+        has_true = mask.any(dim=1) # rows that actually have a True
+        rows = torch.arange(events, device=class_logits.device)
+        
+        # Clear the mask at the position we want to keep
+        mask[rows[has_true], class_first[has_true]] = False
+        
+        # Now mask contains True exactly where we want to set -inf
+        neg_inf = torch.finfo(class_logits.dtype).min # safer than -inf for some ops
+        masked_logits = class_logits.masked_fill(mask, neg_inf)
 
         # Cross-entropy loss, summed only over events with at least one true label
         class_loss = nn.CrossEntropyLoss(reduction="none")(class_logits, class_first)[has_truth].sum()
