@@ -132,7 +132,7 @@ def evaluate_on_test_dataset(
         assignment_indices = extract_predictions([
             np.nan_to_num(assignment.detach().cpu().numpy(), -np.inf)
             for assignment in outputs.assignments
-        ])
+        ], k=model.options.k)
         timer.stop()
 
         detection_probabilities = np.stack([

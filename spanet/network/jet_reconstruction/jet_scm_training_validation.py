@@ -135,8 +135,6 @@ class SCM_Training_Val(JetSecondaryLoader):
         self.eval()
         self.classifier.train()
         self.masker.train()
-        for name, module in self.named_children():
-            print(f"{name}: {'train' if module.training else 'eval'}")
 
     def on_train_batch_start(self, batch, batch_idx):
         for name, module in self.named_children():
@@ -145,6 +143,4 @@ class SCM_Training_Val(JetSecondaryLoader):
         self.eval()
         self.classifier.train()
         self.masker.train()
-        for name, module in self.named_children():
-            print(f"{name}: {'train' if module.training else 'eval'}")
 

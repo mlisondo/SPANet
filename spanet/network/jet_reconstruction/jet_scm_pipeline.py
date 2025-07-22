@@ -17,8 +17,8 @@ class JetSecondaryLoader(JetReconstructionNetwork):
         sources, _, targets, _, _ = batch
         jet_data, _ = sources[0]  # (events, Njets, F)
         device = jet_data.device
-        jet_preds, *_ = self.predict(sources)  # list[len=B]; each (events, K, p_i)
-        jet_preds = [torch.as_tensor(p, device=device) for p in jet_preds]
+        raw_preds, *_ = self.predict(sources)  # list[len=B]; each (events, K, p_i)
+        jet_preds = [torch.as_tensor(p, device=device).permute(0, 2, 1).contiguous() for p in raw_preds]
 
         events, Njets, Fdim = jet_data.shape
         B = len(targets)  # branches
@@ -34,23 +34,21 @@ class JetSecondaryLoader(JetReconstructionNetwork):
         feat_list = []  # will hold (events, K, p_i, F) per branch
 
         for b, p_i in enumerate(partons):
-            # predicted == truth?
-            # jet_preds[b]: (events, K, p_i);  true_idx[b]: (events, p_i)
-            matches = (jet_preds[b] == true_idx[b].unsqueeze(1)).all(dim=2)  # (events, K) bool
+            # Ensure prediction shape matches ground truth
+            matches = (jet_preds[b][..., :p_i] == true_idx[b].unsqueeze(1)).all(dim=2)
             pred_truth_list.append(matches)
 
             # gather features
-            # reshape to flat list of jet indices, gather, then reshape back
-            idx_flat   = jet_preds[b].reshape(events, K * p_i) # (events, K*p_i)
-            gathered   = jet_data.gather(1,
-                             idx_flat.unsqueeze(-1).expand(-1, -1, Fdim)) # (events, K*p_i, F)
-            gathered   = gathered.view(events, K, p_i, Fdim) # (events, K, p_i, F)
+            idx_flat = jet_preds[b][..., :p_i].reshape(events, K * p_i)  # Only gather as many jets as needed
+            idx_flat = idx_flat.long()  # indices must be int64
+            gathered = jet_data.gather(1, idx_flat.unsqueeze(-1).expand(-1, -1, Fdim))  # (events, K*p_i, F)
+            gathered = gathered.view(events, K, p_i, Fdim)  # (events, K, p_i, F)
 
             # pad along parton dimension so every branch has length max_p
             if p_i < max_p:
-                gathered = F.pad(gathered, (0, 0, # features dim
-                                            0, max_p-p_i))# pad p_i→max_p
+                gathered = F.pad(gathered, (0, 0, 0, max_p-p_i))
             feat_list.append(gathered)
+
 
         # stack into final tensors
         pred_truth   = torch.stack(pred_truth_list, dim=2) # (events, K, B)
