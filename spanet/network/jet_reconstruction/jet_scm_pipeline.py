@@ -17,8 +17,8 @@ class JetSecondaryLoader(JetReconstructionNetwork):
         sources, _, targets, _, _ = batch
         jet_data, _ = sources[0]  # (events, Njets, F)
         device = jet_data.device
-        jet_preds, *_ = self.predict(sources)  # list[len=B]; each (events, K, p_i)
-        jet_preds = [torch.as_tensor(p, device=device) for p in jet_preds]
+        raw_preds, *_ = self.predict(sources)  # list[len=B]; each (events, K, p_i)
+        jet_preds = [torch.as_tensor(p, device=device).permute(0, 2, 1).contiguous() for p in raw_preds]
 
         events, Njets, Fdim = jet_data.shape
         B = len(targets)  # branches
