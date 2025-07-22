@@ -77,7 +77,6 @@ class SCM_Training_Val(JetSecondaryLoader):
         # Cross-entropy loss, summed only over events with at least one true label
         class_loss = nn.CrossEntropyLoss(reduction="none")(class_logits, class_first)[has_truth].sum()
 
-
         # ----------- Masker -----------
         # For each hypothesis k, process branches independently
         masker_k_loss = torch.zeros(events, device=features_arr.device)
@@ -92,7 +91,6 @@ class SCM_Training_Val(JetSecondaryLoader):
 
         mask_loss = masker_k_loss.sum()
         
-
         # # ----------- Top-1 accuracy -----------
         pred_k = torch.argmax(class_logits, dim=1)  # for each hypo, find idx with highest logit; shape: (events,)  
         event_idx = torch.arange(events)            # vector of event‐indices
@@ -102,7 +100,7 @@ class SCM_Training_Val(JetSecondaryLoader):
         top1_acc = correct_predictions / events
 
         return class_loss, mask_loss, top1_acc
-    
+
     def training_step(self, batch: Batch, batch_idx: int) -> Dict[str, torch.Tensor]:
 
         self.on_train_epoch_start()
@@ -123,10 +121,6 @@ class SCM_Training_Val(JetSecondaryLoader):
         class_loss, mask_loss, top1_acc = self.forward_scm(batch)
         total_loss = class_loss + mask_loss
 
-        # self.log('val_classifier_loss', class_loss, on_epoch=True, prog_bar=True)
-        # self.log('val_masker_loss', mask_loss, on_epoch=True, prog_bar=True)
-        # self.log('val_total_loss', total_loss, on_epoch=True, prog_bar=True)
-        # self.log('val_top1_acc', top1_acc, on_epoch=True, prog_bar=True)
         self.log('val_classifier_loss', class_loss, on_epoch=True, prog_bar=True)
         self.log('val_masker_loss', mask_loss, on_epoch=True, prog_bar=True)
         self.log('val_total_loss', total_loss, on_epoch=True, prog_bar=True)
@@ -153,3 +147,4 @@ class SCM_Training_Val(JetSecondaryLoader):
         self.masker.train()
         for name, module in self.named_children():
             print(f"{name}: {'train' if module.training else 'eval'}")
+

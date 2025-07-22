@@ -15,54 +15,47 @@ class JetSecondaryLoader(JetReconstructionNetwork):
     @torch.no_grad()
     def topk_data(self, batch):
         sources, _, targets, _, _ = batch
-
         jet_data, _ = sources[0]  # (events, Njets, F)
         device = jet_data.device
         jet_preds, *_ = self.predict(sources)  # list[len=B]; each (events, K, p_i)
         jet_preds = [torch.as_tensor(p, device=device) for p in jet_preds]
-    
+
         events, Njets, Fdim = jet_data.shape
-        B = len(targets) # branches        K = (self.options.k * branches) - 1
+        B = len(targets)  # branches
         K = jet_preds[0].shape[1]
 
-        
         true_idx = [idx_t.to(device) for idx_t, _ in targets] # list[events, p_i]
         true_masks = torch.stack([m.to(device) for _, m in targets]) # (B, ) (branch first)
         partons = torch.tensor([t.shape[1] for t in true_idx],
                                device=device, dtype=torch.long) # (B,)
         max_p = int(partons.max())
-    
+
         pred_truth_list = [] # will hold (events, K) per branch
         feat_list = []  # will hold (events, K, p_i, F) per branch
-    
-        for b, p_i in enumerate(partons):
 
-            print(f"jet_preds[{b}].shape: {jet_preds[b].shape}")
-            print(f"true_idx[{b}].unsqueeze(1).shape: {true_idx[b].unsqueeze(1).shape}")
-            comparison = (jet_preds[b] == true_idx[b].unsqueeze(1))
-            print(f"comparison type: {type(comparison)}, shape: {getattr(comparison, 'shape', 'not a tensor')}")
+        for b, p_i in enumerate(partons):
             # predicted == truth?
             # jet_preds[b]: (events, K, p_i);  true_idx[b]: (events, p_i)
             matches = (jet_preds[b] == true_idx[b].unsqueeze(1)).all(dim=2)  # (events, K) bool
             pred_truth_list.append(matches)
-    
+
             # gather features
             # reshape to flat list of jet indices, gather, then reshape back
             idx_flat   = jet_preds[b].reshape(events, K * p_i) # (events, K*p_i)
             gathered   = jet_data.gather(1,
                              idx_flat.unsqueeze(-1).expand(-1, -1, Fdim)) # (events, K*p_i, F)
             gathered   = gathered.view(events, K, p_i, Fdim) # (events, K, p_i, F)
-    
+
             # pad along parton dimension so every branch has length max_p
             if p_i < max_p:
                 gathered = F.pad(gathered, (0, 0, # features dim
                                             0, max_p-p_i))# pad p_i→max_p
             feat_list.append(gathered)
-    
+
         # stack into final tensors
         pred_truth   = torch.stack(pred_truth_list, dim=2) # (events, K, B)
         features_arr = torch.stack(feat_list,     dim=2) # (events, K, B, max_p, F)
-    
+
         # True => every branch's prediction matches
         # its mask, and at least one branch is true
         mask_matrix  = true_masks.permute(1, 0) # (events, B)
@@ -70,6 +63,7 @@ class JetSecondaryLoader(JetReconstructionNetwork):
         class_truth &= mask_matrix.any(dim=1, keepdim=True) # require >=1 True mask
 
         return pred_truth, true_masks, features_arr, class_truth
+
 
 
 
