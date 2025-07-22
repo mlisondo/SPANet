@@ -19,16 +19,17 @@ class SCM_Training_Val(JetSecondaryLoader):
         mask_hidden_dims default = [30, 32]
         '''
         super(SCM_Training_Val, self).__init__(options, torch_script)
-        self.options = Options
+        self.options = options
+        real_K = self.options.branch_dim * self.options.k - 1
 
         # -- Classifier Head (whole event) --
         # For each event, flatten all hypothesis/branch/jet/feature into a single vector
-        class_input_dim = self.options.branch_dim * self.options.jet_max_dim * self.options.features_dim * self.options.k
+        class_input_dim = self.options.branch_dim * self.options.jet_max_dim * self.options.features_dim * real_K
         classifier_layers = []
-        class_dims = [class_input_dim] + class_hidden_dims + [self.options.k]
+        class_dims = [class_input_dim] + class_hidden_dims + [real_K]
         for in_d, out_d in zip(class_dims[:-1], class_dims[1:]):
             classifier_layers.append(nn.Linear(in_d, out_d))
-            if out_d != self.options.k:
+            if out_d != real_K:
                 classifier_layers.append(nn.ReLU())
         self.classifier = nn.Sequential(*classifier_layers)
 
@@ -43,7 +44,7 @@ class SCM_Training_Val(JetSecondaryLoader):
                 masker_layers.append(nn.ReLU())
         self.masker = nn.Sequential(*masker_layers)
 
-    def forward(self, batch: Batch):
+    def forward_scm(self, batch: Batch):
         pred_truth, true_masks, features_arr, class_truth = self.topk_data(batch)
         true_masks = true_masks.permute(1, 0) # true_masks: (branches, events) -> (events, branches) 
         events, K, branches, jets, features = features_arr.shape
@@ -62,13 +63,16 @@ class SCM_Training_Val(JetSecondaryLoader):
         has_truth = torch.any(class_truth_int == 1, dim=1)  # (events,)
 
         # Mask all logits with true label except for the first one (focus loss on one target only)
-        for event in range(events):
-            if torch.any(class_truth[event, :] == True):
-                first_val = class_logits[event, class_first[event]].clone()
-                for idx, i in enumerate(class_truth[event]):
-                    if i == 1:
-                        class_logits[event, idx] = -torch.inf
-                class_logits[event, class_first[event]] = first_val  # restore only first correct logit
+        mask = class_truth.bool().clone() # which positions are "correct"
+        has_true = mask.any(dim=1) # rows that actually have a True
+        rows = torch.arange(events, device=class_logits.device)
+        
+        # Clear the mask at the position we want to keep
+        mask[rows[has_true], class_first[has_true]] = False
+        
+        # Now mask contains True exactly where we want to set -inf
+        neg_inf = torch.finfo(class_logits.dtype).min # safer than -inf for some ops
+        masked_logits = class_logits.masked_fill(mask, neg_inf)
 
         # Cross-entropy loss, summed only over events with at least one true label
         class_loss = nn.CrossEntropyLoss(reduction="none")(class_logits, class_first)[has_truth].sum()
@@ -76,50 +80,76 @@ class SCM_Training_Val(JetSecondaryLoader):
 
         # ----------- Masker -----------
         # For each hypothesis k, process branches independently
-        masker_k_loss = torch.zeros(events)
+        masker_k_loss = torch.zeros(events, device=features_arr.device)
+
         for k in range(K):
             # features_arr[:, k] has shape (events, branches, jets, features)
             # Flatten jets/features for each branch independently; Reshape to (events, branches * jets * features)
             hypo_arr = features_arr[:, k].reshape(events, branches * jets * features)
             logits_k = self.masker(hypo_arr)  # (events, branches)
 
-            masker_k_loss  += nn.BCEWithLogitsLoss()(logits_k, pred_truth[:,k])
+            masker_k_loss += nn.BCEWithLogitsLoss()(logits_k, pred_truth[:, k].float().to(logits_k.device))
 
         mask_loss = masker_k_loss.sum()
         
 
         # # ----------- Top-1 accuracy -----------
-        # # Select, for each event, the hypothesis with the highest predicted score
-        # pred_k = class_logits.argmax(dim=1)  # (events,)
-        # # For each event, check if the predicted hypothesis is correct
-        # # class_truth: (events, K), class_truth[batch_index, pred_k] gives whether prediction is correct
-        # top1_acc = (class_truth[torch.arange(class_truth.size(0)), pred_k] > 0).float().mean()
+        pred_k = torch.argmax(class_logits, dim=1)  # for each hypo, find idx with highest logit; shape: (events,)  
+        event_idx = torch.arange(events)            # vector of event‐indices
+        
+        # for each event e, look up class_truth[e, pred_k[e]]; convert to float -> sum # of correct pred        
+        correct_predictions = class_truth[event_idx, pred_k].float().sum()
+        top1_acc = correct_predictions / events
 
-        return class_loss, mask_loss#, top1_acc
+        return class_loss, mask_loss, top1_acc
     
     def training_step(self, batch: Batch, batch_idx: int) -> Dict[str, torch.Tensor]:
-        # class_loss, mask_loss, top1_acc = self.forward(batch)
-        class_loss, mask_loss = self.forward(batch)
+
+        self.on_train_epoch_start()
+
+        class_loss, mask_loss, top1_acc = self.forward_scm(batch)
 
         total_loss = class_loss + mask_loss
 
         self.log('train_classifier_loss', class_loss)
         self.log('train_masker_loss', mask_loss)
         self.log('train_total_loss', total_loss)
-        # self.log('train_top1_acc', top1_acc)
+        self.log('train_top1_acc', top1_acc)
 
         return total_loss
-    
+        
     def validation_step(self, batch: Batch, batch_idx: int) -> Dict[str, torch.Tensor]:
-        # class_loss, mask_loss, top1_acc = self.forward(batch)
-        class_loss, mask_loss = self.forward(batch)
 
+        class_loss, mask_loss, top1_acc = self.forward_scm(batch)
         total_loss = class_loss + mask_loss
 
-        self.log('train_classifier_loss', class_loss)
-        self.log('train_masker_loss', mask_loss)
-        self.log('train_total_loss', total_loss)
-        # self.log('train_top1_acc', top1_acc)
+        # self.log('val_classifier_loss', class_loss, on_epoch=True, prog_bar=True)
+        # self.log('val_masker_loss', mask_loss, on_epoch=True, prog_bar=True)
+        # self.log('val_total_loss', total_loss, on_epoch=True, prog_bar=True)
+        # self.log('val_top1_acc', top1_acc, on_epoch=True, prog_bar=True)
+        self.log('val_classifier_loss', class_loss, on_epoch=True, prog_bar=True)
+        self.log('val_masker_loss', mask_loss, on_epoch=True, prog_bar=True)
+        self.log('val_total_loss', total_loss, on_epoch=True, prog_bar=True)
+        self.log('val_top1_acc', top1_acc, on_epoch=True, prog_bar=True)
 
-        # return {'val_loss': total_loss, 'val_top1_acc': top1_acc}
-        return {'val_loss': total_loss}
+        return {'val_total_loss': total_loss}
+    
+    def on_train_epoch_start(self):
+        for name, module in self.named_children():
+            if name not in ['classifier', 'masker']:
+                module.eval()
+        self.eval()
+        self.classifier.train()
+        self.masker.train()
+        for name, module in self.named_children():
+            print(f"{name}: {'train' if module.training else 'eval'}")
+
+    def on_train_batch_start(self, batch, batch_idx):
+        for name, module in self.named_children():
+            if name not in ['classifier', 'masker']:
+                module.eval()
+        self.eval()
+        self.classifier.train()
+        self.masker.train()
+        for name, module in self.named_children():
+            print(f"{name}: {'train' if module.training else 'eval'}")

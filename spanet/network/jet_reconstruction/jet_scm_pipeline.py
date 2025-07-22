@@ -10,48 +10,64 @@ class JetSecondaryLoader(JetReconstructionNetwork):
     def __init__(self, options: Options, torch_script: bool = False):
         super(JetSecondaryLoader, self).__init__(options, torch_script)
         self.evaluator = SymmetricEvaluator(self.training_dataset.event_info)
+        self.options = options
 
+    @torch.no_grad()
     def topk_data(self, batch):
         sources, _, targets, _, _ = batch
-        device = sources[0][0].device
 
-        with torch.no_grad():
-            jet_preds, _, _, _ = self.predict(sources)  # shape [branches]: (events, jet_idx, K) = [2](32, 3, K)
-
-        jet_data, _ = sources[0]
-
-        events, _, features = jet_data.shape
-        branches = len(targets)
+        jet_data, _ = sources[0]  # (events, Njets, F)
+        device = jet_data.device
+        jet_preds, *_ = self.predict(sources)  # list[len=B]; each (events, K, p_i)
+        jet_preds = [torch.as_tensor(p, device=device) for p in jet_preds]
+    
+        events, Njets, Fdim = jet_data.shape
+        B = len(targets) # branches        K = (self.options.k * branches) - 1
         K = jet_preds[0].shape[1]
 
-        true_idx   = [None] * branches
-        true_masks = torch.zeros((branches, events), dtype=torch.bool, device=device)
-        partons    = torch.zeros((branches,), dtype=torch.long, device=device)
+        
+        true_idx = [idx_t.to(device) for idx_t, _ in targets] # list[events, p_i]
+        true_masks = torch.stack([m.to(device) for _, m in targets]) # (B, ) (branch first)
+        partons = torch.tensor([t.shape[1] for t in true_idx],
+                               device=device, dtype=torch.long) # (B,)
+        max_p = int(partons.max())
+    
+        pred_truth_list = [] # will hold (events, K) per branch
+        feat_list = []  # will hold (events, K, p_i, F) per branch
+    
+        for b, p_i in enumerate(partons):
 
-        for i, (idx_t, mask_t) in enumerate(targets):               # each targets[i].indices is (events, p_i), mask is (events,)
-            true_idx[i]   = idx_t
-            partons[i]    = idx_t.shape[1]                  # p_i (for ttbar = 3)
-            true_masks[i] = mask_t
-
-        max_p = torch.max(partons).item()
-
-        pred_truth   = torch.zeros((events, K, branches), dtype=torch.bool, device=device)                      # Whether each hypothesis matches the truth
-        class_truth  = torch.zeros((events, K), dtype=torch.bool, device=device)                                # Whether the whole K'th predicted event is true
-        features_arr = torch.zeros((events, K, branches, max_p, features), dtype=torch.float, device=device)    # The per-hypothesis jet features for every event
-
-        for event in range(events):
-            for branch in range(branches):
-                targ = true_idx[branch][event, :].long()
-                for k in range(K):
-                    pred = jet_preds[branch][event, k, :].long()
-                    if torch.equal(pred, targ):
-                        pred_truth[event, k, branch] = True
-                    for j, jet_idx in enumerate(pred):
-                        features_arr[event, k, branch, j, :] = jet_data[event, jet_idx, :]
-            for k in range(K):
-                # class_truth[event, k]: True if all pred_truth[event, k, :] matches true_masks[:, event], and at least one mask is True
-                if torch.all(pred_truth[event, k, :] == true_masks[:, event]) and torch.any(true_masks[:, event]):
-                    class_truth[event, k] = True
+            print(f"jet_preds[{b}].shape: {jet_preds[b].shape}")
+            print(f"true_idx[{b}].unsqueeze(1).shape: {true_idx[b].unsqueeze(1).shape}")
+            comparison = (jet_preds[b] == true_idx[b].unsqueeze(1))
+            print(f"comparison type: {type(comparison)}, shape: {getattr(comparison, 'shape', 'not a tensor')}")
+            # predicted == truth?
+            # jet_preds[b]: (events, K, p_i);  true_idx[b]: (events, p_i)
+            matches = (jet_preds[b] == true_idx[b].unsqueeze(1)).all(dim=2)  # (events, K) bool
+            pred_truth_list.append(matches)
+    
+            # gather features
+            # reshape to flat list of jet indices, gather, then reshape back
+            idx_flat   = jet_preds[b].reshape(events, K * p_i) # (events, K*p_i)
+            gathered   = jet_data.gather(1,
+                             idx_flat.unsqueeze(-1).expand(-1, -1, Fdim)) # (events, K*p_i, F)
+            gathered   = gathered.view(events, K, p_i, Fdim) # (events, K, p_i, F)
+    
+            # pad along parton dimension so every branch has length max_p
+            if p_i < max_p:
+                gathered = F.pad(gathered, (0, 0, # features dim
+                                            0, max_p-p_i))# pad p_i→max_p
+            feat_list.append(gathered)
+    
+        # stack into final tensors
+        pred_truth   = torch.stack(pred_truth_list, dim=2) # (events, K, B)
+        features_arr = torch.stack(feat_list,     dim=2) # (events, K, B, max_p, F)
+    
+        # True => every branch's prediction matches
+        # its mask, and at least one branch is true
+        mask_matrix  = true_masks.permute(1, 0) # (events, B)
+        class_truth  = (pred_truth == mask_matrix.unsqueeze(1)).all(dim=2) # (events, K)
+        class_truth &= mask_matrix.any(dim=1, keepdim=True) # require >=1 True mask
 
         return pred_truth, true_masks, features_arr, class_truth
 
@@ -111,3 +127,46 @@ class JetSecondaryLoader(JetReconstructionNetwork):
 #     torch.from_numpy(features_arr).to(device),
 #     torch.from_numpy(class_truth).to(device)
 # )
+
+
+def probe(o, name=None):
+    obj = type(o)
+    header = f"Object '{name}'"
+    print(f"\n{header}: {obj.__module__}.{obj.__name__}")
+
+    # NumPy-style introspection
+    if hasattr(o, 'shape'):
+        print(f"shape: {o.shape}")
+    if hasattr(o, 'ndim'):
+        print(f"ndim: {o.ndim}")
+    if hasattr(o, 'dtype'):
+        print(f"dtype: {o.dtype}")
+
+    # size attribute
+    if hasattr(o, 'size') and not callable(o.size):
+        print(f"size: {o.size}")
+
+    # Pythonic length
+    try:
+        print(f"len: {len(o)}")
+    except Exception:
+        pass
+
+    # Recursive descent into lists
+    try:
+        if isinstance(o, (list, tuple)):
+            for idx, item in enumerate(o):
+                probe(item, f"{name}[{idx}]")
+    except Exception:
+        pass
+
+    # PyTorch tensors
+    if isinstance(o, torch.Tensor):
+        print(f"shape: {tuple(o.size())}")
+        print(f"dtype: {o.dtype}")
+        print(f"numel: {o.numel()}")
+
+        print(f"shape: {tuple(o.size())}")
+        print(f"dtype: {o.dtype}")
+        print(f"numel: {o.numel()}")
+        print(f"device: {o.device}")

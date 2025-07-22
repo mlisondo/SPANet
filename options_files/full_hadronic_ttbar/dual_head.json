@@ -69,7 +69,7 @@
     "branch_dim": 2,
     "jet_max_dim": 3,
     "features_dim": 5,
-    "k": 3,
+    "k": 4,
     "class_hidden_dims": [30, 64],
     "mask_hidden_dims": [30, 32]
 }

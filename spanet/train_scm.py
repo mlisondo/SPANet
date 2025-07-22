@@ -183,7 +183,7 @@ def main(
     callbacks = [
         ModelCheckpoint(
             verbose=options.verbose_output,
-            monitor='val_loss',                       # changed
+            monitor='val_total_loss',                       # changed
             save_top_k=3,
             mode='min',
             save_last=True
