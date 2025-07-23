@@ -7,8 +7,8 @@ from spanet.network.jet_reconstruction.jet_scm_training_validation import SCM_Tr
 from spanet.dataset.types import Batch
 
 class SCM_Eval_Test(SCM_Training_Val):
-    def __init__(self, options: Options, class_hidden_dims: List[int], mask_hidden_dims: List[int] = None, torch_script: bool = False):
-        super().__init__(options, class_hidden_dims, mask_hidden_dims, torch_script)
+    def __init__(self, options: Options, torch_script: bool = False):
+        super().__init__(options, torch_script)
 
     @torch.no_grad()
     def evaluate_batch(self, batch: Batch) -> Dict[str, np.ndarray]:
