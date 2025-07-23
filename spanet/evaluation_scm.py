@@ -74,7 +74,7 @@ def load_model(
         options.batch_size = batch_size
 
     # Create model and disable all training operations for speed
-    model = SCM_Eval_Test(options)                                                                       # CHANGED
+    model = SCM_Eval_Test(options, options.class_hidden_dims, options.mask_hidden_dims)
     model.load_state_dict(checkpoint)
     model = model.eval()
     for parameter in model.parameters():
