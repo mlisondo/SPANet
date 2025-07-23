@@ -10,15 +10,9 @@ from spanet.dataset.types import Batch
 tcompile = torch.compile
 
 class SCM_Training_Val(JetSecondaryLoader):
-    def __init__(self, options: Options, class_hidden_dims: List[int], mask_hidden_dims: List[int] = None, torch_script: bool = False):
+    def __init__(self, options: Options, torch_script: bool = False):
         '''
-        input_dim and hidden_dims are defined in train_scm.py
-
-        class_input_dim default = 30
-        mask_input_dim defual = 30
-
-        class_hidden_dims deafult = [30,64]
-        mask_hidden_dims default = [30, 32]
+        input_dim and hidden_dims are defined in options file
         '''
         super(SCM_Training_Val, self).__init__(options, torch_script)
         self.options = options
@@ -28,7 +22,7 @@ class SCM_Training_Val(JetSecondaryLoader):
         # For each event, flatten all hypothesis/branch/jet/feature into a single vector
         class_input_dim = self.options.branch_dim * self.options.jet_max_dim * self.options.features_dim * real_K
         classifier_layers = []
-        class_dims = [class_input_dim] + class_hidden_dims + [real_K]
+        class_dims = [class_input_dim] + options.class_hidden_dims + [real_K]
         for in_d, out_d in zip(class_dims[:-1], class_dims[1:]):
             classifier_layers.append(nn.Linear(in_d, out_d))
             if out_d != real_K:
@@ -39,7 +33,7 @@ class SCM_Training_Val(JetSecondaryLoader):
         # Masker processes each branch in each hypothesis individually
         masker_input_dim = self.options.branch_dim * self.options.jet_max_dim * self.options.features_dim
         masker_layers = []
-        mask_dims = [masker_input_dim] + mask_hidden_dims + [self.options.branch_dim]
+        mask_dims = [masker_input_dim] + options.mask_hidden_dims + [self.options.branch_dim]
         for in_d, out_d in zip(mask_dims[:-1], mask_dims[1:]):
             masker_layers.append(nn.Linear(in_d, out_d))
             if out_d != self.options.branch_dim:
