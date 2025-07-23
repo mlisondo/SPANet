@@ -153,12 +153,6 @@ def total_pT(features, class_pred): # Reconstructed total transverse momentum fo
     pT_tot = np.sqrt(px_tot**2 + py_tot**2)
     return pT_tot  # total_pT: (E,) for histogram/plot
 
-def mass_window_efficiency(masses, min_mass, max_mass): # Fraction of events with mass in window
-    """
-    masses: (E,)
-    min_mass, max_mass: window radius
-    """
-    return np.mean((masses > min_mass) & (masses < max_mass))
 
 
 
@@ -201,7 +195,7 @@ def main(
     metrics["Top-1"] = float(top1_acc(CT, CPd))
     metrics["Top-{}".format(model.options.k)] = float(topk_acc(CT, CL, model.options.k))
 
-    # masker: flatten (E,K,B) → (N,)
+    # masker: flatten (E,K,B) -> (N,)
     precision, recall = precision_recall_curve(MP.ravel(), MT.ravel())
     fpr, tpr = roc_curve(MP.ravel(), MT.ravel())
     metrics["AUC_PR"]  = float(auc(recall, precision))
@@ -212,11 +206,41 @@ def main(
     metrics["Event_eff"]   = float(EC(CT, CPd, MPd, MT))
     metrics["Partial_rec"] = float(PR(CT, CPd, MPd, MT))
 
-    # physics (example: top‑mass from branch 0, total‑pT)
+    # physics (example: to-mass from branch 0, total-pT)
     m_top   = reco_mass(feats, CPd, branch=0)
     pT_tot  = total_pT(feats, CPd)
     metrics["Top_mass_mean"] = float(m_top.mean())
     metrics["pT_tot_mean"]   = float(pT_tot.mean())
+
+    # physics (fully vs partial)
+    E, K, B = MPd.shape
+    event_idx = np.arange(E)
+    is_correct_class = (CT[event_idx, CPd] == 1)
+    matches = (MPd[event_idx, CPd, :] == MT[event_idx, CPd, :])  # (E, B)
+    n_correct_branches = np.sum(matches, axis=1)
+    is_full_mask    = (n_correct_branches == B)
+    is_partial_mask = (n_correct_branches > 0) & (n_correct_branches < B)
+
+    fully_reco_mask   = is_correct_class & is_full_mask
+    partial_reco_mask = is_correct_class & is_partial_mask
+
+    m_top_full      = m_top[fully_reco_mask]
+    m_top_partial   = m_top[partial_reco_mask]
+    pT_tot_full     = pT_tot[fully_reco_mask]
+    pT_tot_partial  = pT_tot[partial_reco_mask]
+
+    metrics["n_full_reco"] = int(fully_reco_mask.sum())
+    metrics["n_partial_reco"] = int(partial_reco_mask.sum())
+
+    metrics["Top_mass_mean_full"] = float(m_top_full.mean()) if len(m_top_full) > 0 else float('nan')
+    metrics["Top_mass_std_full"]  = float(m_top_full.std()) if len(m_top_full) > 0 else float('nan')
+    metrics["Top_mass_mean_partial"] = float(m_top_partial.mean()) if len(m_top_partial) > 0 else float('nan')
+    metrics["Top_mass_std_partial"]  = float(m_top_partial.std()) if len(m_top_partial) > 0 else float('nan')
+
+    metrics["pT_tot_mean_full"] = float(pT_tot_full.mean()) if len(pT_tot_full) > 0 else float('nan')
+    metrics["pT_tot_std_full"]  = float(pT_tot_full.std())  if len(pT_tot_full) > 0 else float('nan')
+    metrics["pT_tot_mean_partial"] = float(pT_tot_partial.mean()) if len(pT_tot_partial) > 0 else float('nan')
+    metrics["pT_tot_std_partial"]  = float(pT_tot_partial.std())  if len(pT_tot_partial) > 0 else float('nan')
 
     with open(os.path.join(output_dir, "metrics.json"), "w") as f:
         json.dump(metrics, f, indent=4)
@@ -250,6 +274,25 @@ def main(
         plt.ylabel("Events")
         pdf.savefig(); plt.close()
 
+        # Plot mass: full vs partial
+        plt.figure()
+        plt.hist(m_top_full, bins=60, alpha=0.7, label="Full reco")
+        plt.hist(m_top_partial, bins=60, alpha=0.7, label="Partial reco")
+        plt.xlabel(r"$m_\mathrm{reco}^{\mathrm{top}}\;[\mathrm{GeV}]$")
+        plt.ylabel("Events")
+        plt.title("Reconstructed Top Mass")
+        plt.legend()
+        pdf.savefig(); plt.close()
+
+        # Plot total pT: full vs partial
+        plt.figure()
+        plt.hist(pT_tot_full, bins=60, alpha=0.7, label="Full reco")
+        plt.hist(pT_tot_partial, bins=60, alpha=0.7, label="Partial reco")
+        plt.xlabel(r"$p_T^{\mathrm{tot}}\;[\mathrm{GeV}]$")
+        plt.ylabel("Events")
+        plt.title("Total $p_T$")
+        plt.legend()
+        pdf.savefig(); plt.close()
 
 if __name__ == '__main__':
     parser = ArgumentParser()
