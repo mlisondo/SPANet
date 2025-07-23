@@ -70,6 +70,6 @@
     "jet_max_dim": 3,
     "features_dim": 5,
     "k": 5,
-    "class_hidden_dims": [30, 64],
-    "mask_hidden_dims": [30, 32]
+    "class_hidden_dims": [64, 64],
+    "mask_hidden_dims": [64, 64]
 }
