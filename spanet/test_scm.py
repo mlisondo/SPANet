@@ -1,283 +1,170 @@
-from typing import List, Any, Optional, Dict
+from typing import Optional
 
-from sys import stderr, stdout
-from collections import defaultdict
 from argparse import ArgumentParser
 
 import numpy as np
-from numpy.typing import ArrayLike
+import torch                                 
 
-from spanet.dataset.evaluator import SymmetricEvaluator, EventInfo
 from spanet.evaluation import evaluate_on_test_dataset, load_model
-from spanet.dataset.types import Evaluation
+
+from sklearn.metrics import accuracy_score, top_k_accuracy_score, precision_recall_curve as skl_prc
+from sklearn.metrics import roc_curve as skl_roc, auc as skl_auc, confusion_matrix as skl_cm
+
+import json, os, matplotlib.pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
+from spanet.network.jet_reconstruction.jet_scm_eval_test import SCM_Eval_Test
+from torch.utils.data import DataLoader
 
 
-def formatter(value: Any) -> str:
-    """ A monolithic formatter function to convert possible values to output strings.
+# ---------------------- Classifier ----------------------
 
+
+
+def top1_acc(class_truth, class_pred): # Top-1 accuracy: fraction of events where predicted hypothesis is correct
     """
-    if isinstance(value, str):
-        return value
-
-    if value is None:
-        return "Full"
-
-    if np.isnan(value):
-        return "N/A"
-
-    return "{:.3f}".format(value)
-
-
-def transpose_columns(columns):
-    header = list(columns.keys())
-    num_rows = len(columns[header[0]])
-
-    output = [header]
-    for row in range(num_rows):
-        output.append([columns[col][row] for col in header])
-
-    return output
-
-
-# Table function taken from here:
-# https://stackoverflow.com/questions/5909873/how-can-i-pretty-print-ascii-tables-with-python
-def create_table(table: dict, full_row: bool = False, event_type: str = None) -> None:
-    table = {
-        k: list(map(formatter, v)) for k, v in table.items()
-    }
-
-    min_len = len(min((v for v in table.values()), key=lambda q: len(q)))
-    max_len = len(max((v for v in table.values()), key=lambda q: len(q)))
-
-    if min_len < max_len:
-        stderr.write("Table is out of shape, please make sure all columns have the same length.")
-        stderr.flush()
-        return
-
-    additional_spacing = 1
-
-    heading_separator = '| '
-    horizontal_split = '| '
-
-    rc_separator = ''
-    header_full_line = ''
-    key_list = list(table.keys())
-    rc_len_values = []
-    for key in key_list:
-        rc_len = len(max((v for v in table[key]), key=lambda q: len(str(q))))
-        rc_len_values += ([rc_len, [key]] for n in range(len(table[key])))
-
-        heading_line = (key + (" " * (rc_len + (additional_spacing + 1)))) + heading_separator
-        rc_separator += ("-" * (len(key) + (rc_len + (additional_spacing + 1)))) + '+-'
-        header_full_line += heading_line
-
-    stdout.flush()
-    if event_type is not None:
-        stdout.write('\n' + rc_separator + '\n' + "Event Type: " + event_type + '\n')
-    stdout.write(rc_separator + '\n' + header_full_line + '\n' + rc_separator + '\n')
-
-    value_list = [v for vl in table.values() for v in vl]
-
-    aligned_data_offset = max_len
-
-    row_count = len(key_list)
-
-    next_idx = 0
-    newline_indicator = 0
-    iterations = 0
-
-    for n in range(len(value_list)):
-        key = rc_len_values[next_idx][1][0]
-        rc_len = rc_len_values[next_idx][0]
-
-        line = ('{:{}} ' + " " * len(key)).format(value_list[next_idx],
-                                                  str(rc_len + additional_spacing)) + horizontal_split
-
-        if next_idx >= (len(value_list) - aligned_data_offset):
-            next_idx = iterations + 1
-            iterations += 1
-        else:
-            next_idx += aligned_data_offset
-
-        if newline_indicator >= row_count:
-            if full_row:
-                stdout.flush()
-                stdout.write('\n' + rc_separator + '\n')
-            else:
-                stdout.flush()
-                stdout.write('\n')
-
-            newline_indicator = 0
-
-        stdout.write(line)
-        newline_indicator += 1
-
-    stdout.write('\n' + rc_separator + '\n')
-    stdout.flush()
-
-
-def display_latex_table(results: Dict[str, Any], jet_limits: List[str], clusters: List[str]):
-    columns = " ".join("c" * len(clusters))
-    print(r"\begin{tabular}{c | c | c c | c " + columns + "}")
-    print(r"\hline")
-    print(r"\hline")
-    print(r"& $N_\mathrm{jets}$ & Event Proportion  & Jet Proportion & Event Purity & ", end="")
-    HEADER_PRINTED = False
-
-    event_types = set(map(lambda x: x.split("/")[0], filter(lambda x: "/" in x, next(iter(results.values())))))
-    for event_type in sorted(event_types):
-        if "0" in event_type:
-            continue
-
-        columns = defaultdict(list)
-        for jet_limit in jet_limits:
-            particle_keys = [key.split("/")[1] for key in results[jet_limit] if
-                             event_type in key and "event" not in key]
-
-            columns["Jet Limit"].append(
-                jet_limit.replace(">=", "$\\geq$").replace("==", "$=$")
-                if jet_limit is not None
-                else jet_limit
-            )
-
-            columns["Event Proportion"].append(results[jet_limit][f"{event_type}/event_proportion"])
-            columns["Jet Proportion"].append(results[jet_limit][f"event_jet_proportion"])
-            columns["Event Purity"].append(results[jet_limit][f"{event_type}/event_purity"])
-            for particle_key in sorted(particle_keys):
-                name = ' '.join(map(str.capitalize, particle_key.split("_")))
-                columns[name].append(results[jet_limit][f"{event_type}/{particle_key}"])
-
-        rows = transpose_columns(columns)
-        rows = [[formatter(val) for val in row] for row in rows]
-
-        if not HEADER_PRINTED:
-            header = " & ".join(rows[0][4:])
-            print(header + r"\\")
-            HEADER_PRINTED = True
-
-        print(r"\hline")
-        for row_number, row in enumerate(rows[1:]):
-            event_name = event_type
-            if row_number == len(rows) - 2:
-                row = [r"\textbf{" + v + "}" for v in row]
-                event_name = r"\textbf{" + event_name + "}"
-
-            row_string = " & ".join(row)
-            row_string = "&" + row_string + r"\\"
-            if row_number == 0:
-                row_string = event_name + row_string
-
-            print(row_string)
-        print(r"\hline")
-
-    print(r"\hline")
-    print(r"\end{tabular}")
-
-
-def display_table(results: Dict[str, Any], jet_limits: List[str], clusters: List[str]):
-    event_types = set(map(lambda x: x.split("/")[0], filter(lambda x: "/" in x, next(iter(results.values())))))
-    for event_type in sorted(event_types):
-        columns = defaultdict(list)
-        for jet_limit in jet_limits:
-            particle_keys = [key.split("/")[1] for key in results[jet_limit] if
-                             event_type in key and "event" not in key]
-
-            columns["Jet Limit"].append(jet_limit)
-            columns["Event Proportion"].append(results[jet_limit][f"{event_type}/event_proportion"])
-            columns["Jet Proportion"].append(results[jet_limit][f"event_jet_proportion"])
-            columns["Event Purity"].append(results[jet_limit][f"{event_type}/event_purity"])
-            for particle_key in sorted(particle_keys):
-                name = ' '.join(map(str.capitalize, particle_key.split("_")))
-                columns[name].append(results[jet_limit][f"{event_type}/{particle_key}"])
-
-        create_table(columns, event_type=event_type)
-        print()
-
-
-def evaluate_predictions(predictions: ArrayLike, num_vectors: ArrayLike, targets: ArrayLike, masks: ArrayLike, event_info_file: str, lines: int):
-    event_info = EventInfo.read_from_yaml(event_info_file)
-    evaluator = SymmetricEvaluator(event_info)
-
-    minimum_jet_count = num_vectors.min()
-    jet_limits = [f"== {minimum_jet_count + i}" for i in range(lines)]
-    jet_limits.append(f">= {minimum_jet_count + lines}")
-    jet_limits.append(None)
-
-    results = {}
-    for jet_limit_name in jet_limits:
-        limited_predictions = predictions
-        limited_targets = targets
-        limited_masks = masks
-
-        if jet_limit_name is not None:
-            jet_limit = eval("num_vectors {}".format(jet_limit_name))
-            limited_predictions = [p[jet_limit] for p in limited_predictions]
-            limited_targets = [t[jet_limit] for t in limited_targets]
-            limited_masks = [m[jet_limit] for m in limited_masks]
-
-        results[jet_limit_name] = evaluator.full_report_string(limited_predictions, limited_targets, limited_masks)
-        results[jet_limit_name]["event_jet_proportion"] = 1.0 if jet_limit_name is None else jet_limit.mean()
-
-    return results, jet_limits, evaluator.clusters
-
-
-def main(
-    log_directory: str,
-    test_file: Optional[str],
-    event_file: Optional[str],
-    batch_size: Optional[int],
-    lines: int,
-    gpu: bool,
-    fp16: bool,
-    latex: bool,
-    top_k: int
-):
-    model = load_model(log_directory, test_file, event_file, batch_size, cuda=True)
-    if top_k is not None:
-        model.options.k = top_k
-    evaluation = evaluate_on_test_dataset(model)
-
-    # Flatten predictions
-    predictions = list(evaluation.assignments.values())
-
-    # Flatten targets and convert to numpy
-    targets = [assignment[0].cpu().numpy() for assignment in model.testing_dataset.assignments.values()]
-    masks = [assignment[1].cpu().numpy() for assignment in model.testing_dataset.assignments.values()]
-
-    results, jet_limits, clusters = evaluate_predictions(predictions, model.testing_dataset.num_vectors.cpu().numpy(), targets, masks, model.options.event_info_file, lines)
-    if latex:
-        display_latex_table(results, jet_limits, clusters)
-    else:
-        display_table(results, jet_limits, clusters)
-
-
-if __name__ == '__main__':
-    parser = ArgumentParser()
-    parser.add_argument("log_directory", type=str,
-                        help="Pytorch Lightning Log directory containing the checkpoint and options file.")
-
-    parser.add_argument("-tf", "--test_file", type=str, default=None,
-                        help="Replace the test file in the options with a custom one. "
-                             "Must provide if options does not define a test file.")
-
-    parser.add_argument("-ef", "--event_file", type=str, default=None,
-                        help="Replace the event file in the options with a custom event.")
-
-    parser.add_argument("-bs", "--batch_size", type=int, default=None,
-                        help="Replace the batch size in the options with a custom size.")
-
-    parser.add_argument("-l", "--lines", type=int, default=2,
-                        help="Number of equality lines to print for every event. "
-                             "Will group other events into a >= group.")
-
-    parser.add_argument("-g", "--gpu", action="store_true",
-                        help="Evaluate network on the gpu.")
-
-    parser.add_argument("-tex", "--latex", action="store_true",
-                        help="Output a latex table.")
-    
-    parser.add_argument("-k", "--top_k", type=int, default=None,
-                        help="k value override in top-k inference")
-
-    arguments = parser.parse_args()
-    main(**arguments.__dict__)
+    class_truth: (E, K)
+    class_pred: (E,)
+    """
+    true_labels = np.argmax(class_truth, axis=1) # Convert one-hot to integer class labels
+    return accuracy_score(true_labels, class_pred) # float: top-1 accuracy over batch
+
+def topk_acc(class_truth, class_logits, k): # Top-K accuracy: correct hypo in top-k hypotheses by score.
+    """
+    class_truth: (E, K)
+    class_logits: (E, K)
+    """
+    true_labels = np.argmax(class_truth, axis=1)
+    return top_k_accuracy_score(
+        true_labels,    # the correct class index per event
+        class_logits,   # score array
+        k,
+        np.arange(class_logits.shape[1]) # Ensures all possible class labels are considered
+    )
+
+
+
+# ---------------------- Masker ----------------------
+
+
+
+def precision_recall_curve(P, T): # Compute precision-recall curve for mask probabilities using sklearn.
+    """
+    P: (N,) mask probabilities (flattened)
+    T: (N,) mask truth (flattened, 0/1)
+    """
+    precision, recall, _ = skl_prc(T, P)
+    return precision, recall # precision, recall (all np.arrays)
+
+def roc_curve(P, T): # Compute ROC curve for mask probabilities using sklearn.
+    """
+    P: (N,) mask probabilities (flattened)
+    T: (N,) mask truth (flattened, 0/1)
+    """
+    fpr, tpr, _ = skl_roc(T, P)
+    return tpr, fpr # tpr, fpr
+
+def auc(x, y):
+    return skl_auc(x, y)
+
+def confusion_matrix(mask_pred, mask_truth):
+    """
+    mask_pred: (...,) binary 0/1
+    mask_truth: (...,) binary 0/1
+    """
+    return skl_cm(mask_truth.ravel(), mask_pred.ravel()) # Order: [[tn, fp], [fn, tp]]
+
+
+
+# ---------------------- Joint ----------------------
+
+
+
+def EC(class_truth, class_pred, mask_pred, mask_truth): # Event-level reconstruction efficiency: correct class and all masks correct
+    """
+    class_truth: (E, K)
+    class_pred: (E,)
+    mask_pred: (E, K, B) binary
+    mask_truth: (E, K, B) binary
+    """
+    E, _ = class_truth.shape
+    correct_class = class_truth[np.arange(E), class_pred] == 1
+    # For each event: are ALL branches of chosen hypo correct?
+    all_branches = np.all(mask_pred[np.arange(E), class_pred, :] == mask_truth[np.arange(E), class_pred, :], axis=1)
+    return np.mean(correct_class & all_branches) # efficiency
+
+def PR(class_truth, class_pred, mask_pred, mask_truth): # Fraction of partial reconstructions: correct class and at least one branch correct
+    """
+    Args:
+    class_truth: (E, K)
+    class_pred: (E,)
+    mask_pred: (E, K, B)
+    mask_truth: (E, K, B)
+    """
+    E, _ = class_truth.shape
+    B = mask_pred.shape[2]
+    correct_class = class_truth[np.arange(E), class_pred] == 1
+    matches = mask_pred[np.arange(E), class_pred, :] == mask_truth[np.arange(E), class_pred, :]
+    n_correct_branches = np.sum(matches, axis=1)
+    # At least one branch right, but not all
+    partial = (n_correct_branches > 0) & (n_correct_branches < B)
+    return np.mean(correct_class & partial) # partial reconstruction fraction
+
+
+
+# ---------------------- Physics ----------------------
+
+
+
+def reco_mass(features, class_pred, branch): # Reconstruct mass for each event's assigned hypothesis and branch
+    """
+    features: (E, K, B, J, F)
+    class_pred: (E,)
+    branch: e.g. 0 for top, 1 for tbar
+    """
+    jets = features[np.arange(features.shape[0]), class_pred, branch]  # (E, J, F)
+    # Features: [mass, pt, eta, phi, btag]      NEED TO CHECK
+    eta = jets[..., 2]
+    mass = jets[..., 0]
+    phi = jets[..., 3]
+    pt = jets[..., 1]
+    px = pt * np.cos(phi)
+    py = pt * np.sin(phi)
+    pz = pt * np.sinh(eta)
+    E_jet = np.sqrt(mass**2 + px**2 + py**2 + pz**2)
+    # Sum 4-vectors over all jets for each event
+    E_sum = np.sum(E_jet, axis=1)
+    px_sum = np.sum(px, axis=1)
+    py_sum = np.sum(py, axis=1)
+    pz_sum = np.sum(pz, axis=1)
+    mass_reco = np.sqrt(np.clip(E_sum**2 - px_sum**2 - py_sum**2 - pz_sum**2, 0, None))
+    return mass_reco  # For histogram/plot
+
+def total_pT(features, class_pred): # Reconstructed total transverse momentum for each event (sum all branches/jets)
+    """
+    features: (E, K, B, J, F)
+    class_pred: (E,)
+    """
+    # Take all jets in all branches for assigned hypo
+    E, _, _, _, _ = features.shape
+    jets = features[np.arange(E), class_pred]  # (E, B, J, F)
+    phi = jets[..., 3]  # (E, B, J,)
+    pt = jets[..., 1]
+    px = pt * np.cos(phi)   # (E, B, J,)
+    py = pt * np.sin(phi)
+    px_tot = np.sum(px, axis=(1, 2))  # sum over branches and jets
+    py_tot = np.sum(py, axis=(1, 2))
+    pT_tot = np.sqrt(px_tot**2 + py_tot**2)
+    return pT_tot  # total_pT: (E,) for histogram/plot
+
+def mass_window_efficiency(masses, min_mass, max_mass): # Fraction of events with mass in window
+    """
+    masses: (E,)
+    min_mass, max_mass: window radius
+    """
+    return np.mean((masses > min_mass) & (masses < max_mass))
+
+
+
+
+
+# ---------------------- MAIN ----------------------
