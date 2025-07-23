@@ -55,9 +55,6 @@ def main(
         limit_dataset: Optional[float],
         random_seed: int,
 
-        class_hidden_dims: List[int],
-        mask_hidden_dims: List[int],
-
         spanet_log_directory: str,
         test_file: Optional[str] = None
     ):
@@ -126,7 +123,7 @@ def main(
     # SPANet_model = load_model(spanet_log_directory, test_file, event_file, batch_size, cuda=True)
 
     # # Create your new model (child)
-    # model = SCM_Training_Val(options, class_hidden_dims, mask_hidden_dims, torch_script)
+    # model = SCM_Training_Val(options, torch_script)
 
     # # Inherit all SPANet properties into your new model
     # model.__dict__.update(deepcopy(SPANet_model.__dict__))
@@ -138,8 +135,6 @@ def main(
         os.path.join(spanet_log_directory, "checkpoints", "last.ckpt"),  # Path to your parent SPANet checkpoint
         strict=False,                  # Allow non-matching weights if you added heads, etc.
         options=options,               # Your current options object
-        class_hidden_dims=class_hidden_dims,   # List of int, e.g. [30,64]
-        mask_hidden_dims=mask_hidden_dims,     # List of int, e.g. [30,64]
         torch_script=torch_script
     )
 
@@ -294,12 +289,6 @@ if __name__ == '__main__':
 
     parser.add_argument("--profile", action='store_true',
                         help="Profile network for a single training epoch.")
-    
-    parser.add_argument("--class_hidden_dims", type=lambda s: [int(x) for x in s.split(",")], default=[30,64],
-                        help="Initial=Comma-separated hidden sizes for classifer, e.g. '30,64,64'.")
-        
-    parser.add_argument("--mask_hidden_dims", type=lambda s: [int(x) for x in s.split(",")], default=[30, 64],
-                        help="Initial=Comma-separated hidden sizes for masker, e.g. '30,64'.")
     
     parser.add_argument("--spanet_log_directory", type=str,
                         help="Pytorch Lightning Log directory containing the checkpoint and options file.")
