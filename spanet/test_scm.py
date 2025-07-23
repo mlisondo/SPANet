@@ -5,8 +5,6 @@ from argparse import ArgumentParser
 import numpy as np
 import torch                                 
 
-from spanet.evaluation import evaluate_on_test_dataset, load_model
-
 from sklearn.metrics import accuracy_score, top_k_accuracy_score, precision_recall_curve as skl_prc
 from sklearn.metrics import roc_curve as skl_roc, auc as skl_auc, confusion_matrix as skl_cm
 
@@ -168,3 +166,150 @@ def mass_window_efficiency(masses, min_mass, max_mass): # Fraction of events wit
 
 
 # ---------------------- MAIN ----------------------
+
+
+
+
+
+def main(log_directory, test_file, event_file,
+         batch_size, gpu, fp16, top_k, output_dir):
+
+    os.makedirs(output_dir, exist_ok=True)
+
+    # ---------------- load model (our dual‑head) ----------------
+    model = SCM_Eval_Test.load_from_checkpoint(
+        os.path.join(log_directory, "checkpoints", "last.ckpt"),
+        strict=False,
+        options=None,                 # will be overridden by Lightning checkpoint
+        class_hidden_dims=[30, 64],
+        mask_hidden_dims=[30, 64],
+        torch_script=False
+    ).eval()
+
+    if top_k is not None:
+        model.options.k = top_k
+
+    device = "cuda" if (gpu and torch.cuda.is_available()) else "cpu"
+    model.to(device)
+
+    loader = DataLoader(model.testing_dataset,
+                        batch_size=batch_size or model.options.batch_size,
+                        shuffle=False,
+                        num_workers=4,
+                        pin_memory=True)
+
+    # --------------- accumulate batch‑wise outputs ---------------
+    all_CL, all_CT, all_CPd = [], [], []
+    all_ML, all_MT, all_MPd = [], [], []
+    all_features = []
+
+    for batch in loader:
+        batch = [x.to(device) if torch.is_tensor(x) else x for x in batch]
+        out = model.evaluate_batch(batch)
+
+        all_CL.append(out["class_logits"].cpu().numpy())
+        all_CT.append(out["class_truth"].cpu().numpy())
+        all_CPd.append(out["class_preds"].cpu().numpy())
+
+        all_ML.append(out["mask_logits"].cpu().numpy())
+        all_MT.append(out["mask_truth"].cpu().numpy())
+        all_MPd.append(out["mask_preds"].cpu().numpy())
+
+        all_features.append(out["features_arr"].cpu().numpy())
+
+    CL = np.concatenate(all_CL)
+    CT = np.concatenate(all_CT)
+    CPd = np.concatenate(all_CPd)
+
+    ML = np.concatenate(all_ML)
+    MT = np.concatenate(all_MT)
+    MPd = np.concatenate(all_MPd)
+
+    feats = np.concatenate(all_features)
+
+    # ------------------ numeric metrics ------------------
+    metrics = {}
+    metrics["Top-1"] = float(top1_acc(CT, CPd))
+    metrics["Top-{}".format(model.options.k)] = float(topk_acc(CT, CL, model.options.k))
+
+    # masker: flatten (E,K,B) → (N,)
+    MP   = 1/(1+np.exp(-ML))          # sigmoid after concatenation
+    precision, recall = precision_recall_curve(MP.ravel(), MT.ravel())
+    tpr, fpr = roc_curve(MP.ravel(), MT.ravel())
+    metrics["AUC_PR"]  = float(auc(recall, precision))
+    metrics["AUC_ROC"] = float(auc(fpr, tpr))
+    metrics["Confusion"] = confusion_matrix(MPd, MT).tolist()
+
+    # joint
+    metrics["Event_eff"]   = float(EC(CT, CPd, MPd, MT))
+    metrics["Partial_rec"] = float(PR(CT, CPd, MPd, MT))
+
+    # physics (example: top‑mass from branch 0, total‑pT)
+    m_top   = reco_mass(feats, CPd, branch=0)
+    pT_tot  = total_pT(feats, CPd)
+    metrics["Top_mass_mean"] = float(m_top.mean())
+    metrics["pT_tot_mean"]   = float(pT_tot.mean())
+
+    with open(os.path.join(output_dir, "metrics.json"), "w") as f:
+        json.dump(metrics, f, indent=4)
+
+    # ------------------ figures ------------------
+    with PdfPages(os.path.join(output_dir, "plots.pdf")) as pdf:
+        # PR curve
+        plt.figure()
+        plt.plot(recall, precision)
+        plt.xlabel("Recall"); plt.ylabel("Precision"); plt.title("Precision‑Recall")
+        pdf.savefig(); plt.close()
+
+        # ROC
+        plt.figure()
+        plt.plot(fpr, tpr)
+        plt.xlabel("False Positive Rate"); plt.ylabel("True Positive Rate")
+        plt.title("ROC")
+        pdf.savefig(); plt.close()
+
+        # Top mass
+        plt.figure()
+        plt.hist(m_top, bins=60)
+        plt.xlabel(r"$m_\mathrm{reco}^{\mathrm{top}}\;[\mathrm{GeV}]$")
+        plt.ylabel("Events")
+        pdf.savefig(); plt.close()
+
+        # Total pT
+        plt.figure()
+        plt.hist(pT_tot, bins=60)
+        plt.xlabel(r"$p_T^{\mathrm{tot}}\;[\mathrm{GeV}]$")
+        plt.ylabel("Events")
+        pdf.savefig(); plt.close()
+
+
+
+if __name__ == '__main__':
+    parser = ArgumentParser()
+    parser.add_argument("log_directory", type=str,
+                        help="Pytorch Lightning Log directory containing the checkpoint and options file.")
+
+    parser.add_argument("-tf", "--test_file", type=str, default=None,
+                        help="Replace the test file in the options with a custom one. "
+                             "Must provide if options does not define a test file.")
+
+    parser.add_argument("-ef", "--event_file", type=str, default=None,
+                        help="Replace the event file in the options with a custom event.")
+
+    parser.add_argument("-bs", "--batch_size", type=int, default=None,
+                        help="Replace the batch size in the options with a custom size.")
+
+    parser.add_argument("-g", "--gpu", action="store_true",
+                        help="Evaluate network on the gpu.")
+    
+    parser.add_argument("-k", "--top_k", type=int, default=None,
+                        help="k value override in top-k inference")
+    
+    parser.add_argument("-o", "--output_dir", type=str, required=True, 
+                        help="Directory where metrics.json and plots.pdf will be written.")
+
+
+    parser.add_argument("-fp16", "--fp16", action="store_true", help="Use Torch AMP for training.")
+
+    arguments = parser.parse_args()
+    main(**arguments.__dict__)
