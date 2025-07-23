@@ -11,7 +11,7 @@ class SCM_Eval_Test(SCM_Training_Val):
         super().__init__(options, torch_script)
 
     @torch.no_grad()
-    def evaluate_batch(self, batch: Batch) -> Dict[str, np.ndarray]:
+    def evaluate_scm_batch(self, batch: Batch) -> Dict[str, np.ndarray]:
         """
         Returns a dictionary with:
         CLASSIFIER:
