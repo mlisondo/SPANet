@@ -62,13 +62,13 @@ class SCM_Training_Val(JetSecondaryLoader):
         masked_logits = class_logits.masked_fill(mask, neg_inf)
 
         class_loss = nn.CrossEntropyLoss(reduction="none")(
-            class_logits, class_first)[has_truth].sum()
+            class_logits, class_first)[has_truth].mean()
         
         # vectorised masker
         flat = features_arr.reshape(events*K, branches*jets*feats)
         logits_all = self.masker(flat).view(events, K, branches)
         mask_loss  = nn.BCEWithLogitsLoss()(logits_all,
-                                            pred_truth.float()).sum()
+                                            pred_truth.float())
         
         pred_k = torch.argmax(class_logits, 1)
         top1_acc = class_truth[rows, pred_k].float().mean()
