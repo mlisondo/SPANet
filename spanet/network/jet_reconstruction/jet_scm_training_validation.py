@@ -7,6 +7,8 @@ from spanet.options import Options
 from spanet.network.jet_reconstruction.jet_scm_pipeline import JetSecondaryLoader
 from spanet.dataset.types import Batch
 
+tcompile = torch.compile
+
 class SCM_Training_Val(JetSecondaryLoader):
     def __init__(self, options: Options, class_hidden_dims: List[int], mask_hidden_dims: List[int] = None, torch_script: bool = False):
         '''
@@ -44,62 +46,48 @@ class SCM_Training_Val(JetSecondaryLoader):
                 masker_layers.append(nn.ReLU())
         self.masker = nn.Sequential(*masker_layers)
 
-    def forward_scm(self, batch: Batch):
-        pred_truth, true_masks, features_arr, class_truth = self.topk_data(batch)
-        true_masks = true_masks.permute(1, 0) # true_masks: (branches, events) -> (events, branches) 
-        events, K, branches, jets, features = features_arr.shape
 
-        # ----------- Classifier -----------
-        # Prepare classifier input: flatten event features for MLP
-        # features_arr: (events, K, branches, jets, features)
-        class_in = features_arr.reshape(events, -1)  # (events, K * branches * jets * features)
+        self.classifier = tcompile(self.classifier, dynamic=True)
+        self.masker     = tcompile(self.masker,    dynamic=True)
 
-        # Forward pass through classifier head
-        class_logits = self.classifier(class_in)  # (events, K)
+    def _compiled_core(self, features_arr, pred_truth, class_truth):
+        """Tensor-only slice of forward_scm."""
+        events, K, branches, jets, feats = features_arr.shape
+        class_in = features_arr.reshape(events, -1)
+        class_logits = self.classifier(class_in)
 
-        # Prepare ground truth: integer format and get index of first positive
-        class_truth_int = class_truth.to(torch.int)  # (events, K)
-        class_first = torch.argmax(class_truth_int, dim=1)  # (events,)
-        has_truth = torch.any(class_truth_int == 1, dim=1)  # (events,)
+        class_truth_int = class_truth.to(torch.int)
+        class_first = torch.argmax(class_truth_int, 1)
+        has_truth   = torch.any(class_truth_int == 1, 1)
 
-        # Mask all logits with true label except for the first one (focus loss on one target only)
-        mask = class_truth.bool().clone() # which positions are "correct"
-        has_true = mask.any(dim=1) # rows that actually have a True
+        mask = class_truth.bool().clone()
         rows = torch.arange(events, device=class_logits.device)
         
-        # Clear the mask at the position we want to keep
-        mask[rows[has_true], class_first[has_true]] = False
-        
-        # Now mask contains True exactly where we want to set -inf
-        neg_inf = torch.finfo(class_logits.dtype).min # safer than -inf for some ops
+        mask[rows[has_truth], class_first[has_truth]] = False
+        neg_inf = torch.finfo(class_logits.dtype).min
         masked_logits = class_logits.masked_fill(mask, neg_inf)
 
-        # Cross-entropy loss, summed only over events with at least one true label
-        class_loss = nn.CrossEntropyLoss(reduction="none")(class_logits, class_first)[has_truth].sum()
-
-        # ----------- Masker -----------
-        # For each hypothesis k, process branches independently
-        masker_k_loss = torch.zeros(events, device=features_arr.device)
-
-        for k in range(K):
-            # features_arr[:, k] has shape (events, branches, jets, features)
-            # Flatten jets/features for each branch independently; Reshape to (events, branches * jets * features)
-            hypo_arr = features_arr[:, k].reshape(events, branches * jets * features)
-            logits_k = self.masker(hypo_arr)  # (events, branches)
-
-            masker_k_loss += nn.BCEWithLogitsLoss()(logits_k, pred_truth[:, k].float().to(logits_k.device))
-
-        mask_loss = masker_k_loss.sum()
+        class_loss = nn.CrossEntropyLoss(reduction="none")(
+            class_logits, class_first)[has_truth].sum()
         
-        # # ----------- Top-1 accuracy -----------
-        pred_k = torch.argmax(class_logits, dim=1)  # for each hypo, find idx with highest logit; shape: (events,)  
-        event_idx = torch.arange(events)            # vector of event‐indices
+        # vectorised masker
+        flat = features_arr.reshape(events*K, branches*jets*feats)
+        logits_all = self.masker(flat).view(events, K, branches)
+        mask_loss  = nn.BCEWithLogitsLoss()(logits_all,
+                                            pred_truth.float()).sum()
         
-        # for each event e, look up class_truth[e, pred_k[e]]; convert to float -> sum # of correct pred        
-        correct_predictions = class_truth[event_idx, pred_k].float().sum()
-        top1_acc = correct_predictions / events
+        pred_k = torch.argmax(class_logits, 1)
+        top1_acc = class_truth[rows, pred_k].float().mean()
 
         return class_loss, mask_loss, top1_acc
+    
+    # single call covers whole tensor graph
+    _compiled_core = tcompile(_compiled_core, dynamic=True)
+
+    def forward_scm(self, batch):
+        pred_truth, true_masks, features_arr, class_truth = self.topk_data(batch)
+        return self._compiled_core(features_arr, pred_truth, class_truth)
+
 
     def training_step(self, batch: Batch, batch_idx: int) -> Dict[str, torch.Tensor]:
 
@@ -135,12 +123,3 @@ class SCM_Training_Val(JetSecondaryLoader):
         self.eval()
         self.classifier.train()
         self.masker.train()
-
-    def on_train_batch_start(self, batch, batch_idx):
-        for name, module in self.named_children():
-            if name not in ['classifier', 'masker']:
-                module.eval()
-        self.eval()
-        self.classifier.train()
-        self.masker.train()
-
