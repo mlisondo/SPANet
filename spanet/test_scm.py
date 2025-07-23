@@ -10,8 +10,7 @@ from sklearn.metrics import roc_curve as skl_roc, auc as skl_auc, confusion_matr
 
 import json, os, matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
-from spanet.network.jet_reconstruction.jet_scm_eval_test import SCM_Eval_Test
-from torch.utils.data import DataLoader
+from spanet.evaluation_scm import evaluate_on_test_dataset, load_model
 
 
 # ---------------------- Classifier ----------------------
@@ -163,82 +162,51 @@ def mass_window_efficiency(masses, min_mass, max_mass): # Fraction of events wit
 
 
 
-
-
 # ---------------------- MAIN ----------------------
 
 
-
-
-
-def main(log_directory, test_file, event_file,
-         batch_size, gpu, fp16, top_k, output_dir):
+def main(
+    log_directory: str,
+    test_file: Optional[str],
+    event_file: Optional[str],
+    batch_size: Optional[int],
+    gpu: bool,
+    fp16: bool,             # why is this needed?
+    top_k: int,
+    output_dir: str):
 
     os.makedirs(output_dir, exist_ok=True)
-
-    # ---------------- load model (our dual‑head) ----------------
-    model = SCM_Eval_Test.load_from_checkpoint(
-        os.path.join(log_directory, "checkpoints", "last.ckpt"),
-        strict=False,
-        options=None,                 # will be overridden by Lightning checkpoint
-        class_hidden_dims=[30, 64],
-        mask_hidden_dims=[30, 64],
-        torch_script=False
-    ).eval()
-
+    # ---------------- load model ----------------
+    model = load_model(log_directory, test_file, event_file, batch_size, gpu)
     if top_k is not None:
         model.options.k = top_k
 
-    device = "cuda" if (gpu and torch.cuda.is_available()) else "cpu"
-    model.to(device)
+    # --------------- accumulate outputs ---------------
+    arrays = evaluate_on_test_dataset(model)
 
-    loader = DataLoader(model.testing_dataset,
-                        batch_size=batch_size or model.options.batch_size,
-                        shuffle=False,
-                        num_workers=4,
-                        pin_memory=True)
-
-    # --------------- accumulate batch‑wise outputs ---------------
-    all_CL, all_CT, all_CPd = [], [], []
-    all_ML, all_MT, all_MPd = [], [], []
-    all_features = []
-
-    for batch in loader:
-        batch = [x.to(device) if torch.is_tensor(x) else x for x in batch]
-        out = model.evaluate_batch(batch)
-
-        all_CL.append(out["class_logits"].cpu().numpy())
-        all_CT.append(out["class_truth"].cpu().numpy())
-        all_CPd.append(out["class_preds"].cpu().numpy())
-
-        all_ML.append(out["mask_logits"].cpu().numpy())
-        all_MT.append(out["mask_truth"].cpu().numpy())
-        all_MPd.append(out["mask_preds"].cpu().numpy())
-
-        all_features.append(out["features_arr"].cpu().numpy())
-
-    CL = np.concatenate(all_CL)
-    CT = np.concatenate(all_CT)
-    CPd = np.concatenate(all_CPd)
-
-    ML = np.concatenate(all_ML)
-    MT = np.concatenate(all_MT)
-    MPd = np.concatenate(all_MPd)
-
-    feats = np.concatenate(all_features)
+    CL  = arrays["class_logits"]       # (events, K)
+    CP  = arrays["class_probs"]        # (events, K)
+    CPd = arrays["class_preds"]        # (events,)
+    ML  = arrays["mask_logits"]        # (events, K, branches)
+    MP  = arrays["mask_probs"]         # (events, K, branches)
+    MPd = arrays["mask_preds"]         # (events, K, branches)
+    CT  = arrays["class_truth"]        # (events, K)
+    MT  = arrays["mask_truth"]         # (events, K, branches)
+    feats = arrays["features_arr"]     # (events, K, branches, jets, features)
 
     # ------------------ numeric metrics ------------------
     metrics = {}
+
+    # classifier
     metrics["Top-1"] = float(top1_acc(CT, CPd))
     metrics["Top-{}".format(model.options.k)] = float(topk_acc(CT, CL, model.options.k))
 
     # masker: flatten (E,K,B) → (N,)
-    MP   = 1/(1+np.exp(-ML))          # sigmoid after concatenation
     precision, recall = precision_recall_curve(MP.ravel(), MT.ravel())
-    tpr, fpr = roc_curve(MP.ravel(), MT.ravel())
+    fpr, tpr = roc_curve(MP.ravel(), MT.ravel())
     metrics["AUC_PR"]  = float(auc(recall, precision))
     metrics["AUC_ROC"] = float(auc(fpr, tpr))
-    metrics["Confusion"] = confusion_matrix(MPd, MT).tolist()
+    metrics["Confusion"] = confusion_matrix(MPd.ravel(), MT.ravel()).tolist()  # Flatten for confusion
 
     # joint
     metrics["Event_eff"]   = float(EC(CT, CPd, MPd, MT))
@@ -258,7 +226,7 @@ def main(log_directory, test_file, event_file,
         # PR curve
         plt.figure()
         plt.plot(recall, precision)
-        plt.xlabel("Recall"); plt.ylabel("Precision"); plt.title("Precision‑Recall")
+        plt.xlabel("Recall"); plt.ylabel("Precision"); plt.title("Precision-Recall")
         pdf.savefig(); plt.close()
 
         # ROC
@@ -281,7 +249,6 @@ def main(log_directory, test_file, event_file,
         plt.xlabel(r"$p_T^{\mathrm{tot}}\;[\mathrm{GeV}]$")
         plt.ylabel("Events")
         pdf.savefig(); plt.close()
-
 
 
 if __name__ == '__main__':
