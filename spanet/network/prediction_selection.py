@@ -260,7 +260,7 @@ def find_max_and_mask(matrix):
 
     print("Indices", l, m, n)
 
-    raise RuntimeError("Debug matrix index vals)
+    raise RuntimeError("Debug matrix index vals")
     
     return new_matrix
 
