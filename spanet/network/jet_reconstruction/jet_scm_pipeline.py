@@ -12,7 +12,7 @@ class JetSecondaryLoader(JetReconstructionNetwork):
         self.options = options
 
 
-    def _sort_ignore_pad(x: torch.Tensor, pad_val: int, high_val: int) -> torch.Tensor:
+    def _sort_ignore_pad(self, x: torch.Tensor, pad_val: int, high_val: int) -> torch.Tensor:
         """Sort last dim but shove pad_val to the end."""
         sentinel = torch.full_like(x, high_val)
         x_tmp    = torch.where(x == pad_val, sentinel, x)
@@ -21,6 +21,7 @@ class JetSecondaryLoader(JetReconstructionNetwork):
     
     @staticmethod
     def _topk_core(
+        self,
         jet_data: torch.Tensor,          # (E, Njets, F)
         jet_preds_tensor: torch.Tensor,  # (E, K, B, p_max)
         true_idx_tensor: torch.Tensor,   # (B, E, p_max)  – pad = -1
@@ -34,9 +35,9 @@ class JetSecondaryLoader(JetReconstructionNetwork):
         _, Njets, Fdim = jet_data.shape
     
         # 1) Sort jets within each branch / truth, ignore PAD
-        pred_sorted = _sort_ignore_pad(jet_preds_tensor, pad_val=PAD, high_val=Njets + 1)  # (E,K,B,p)
+        pred_sorted = self._sort_ignore_pad(jet_preds_tensor, pad_val=PAD, high_val=Njets + 1)  # (E,K,B,p)
         truth       = true_idx_tensor.permute(1, 0, 2)                                     # (E,B,p)
-        truth_sorted = _sort_ignore_pad(truth, pad_val=PAD, high_val=Njets + 1)            # (E,B,p)
+        truth_sorted = self._sort_ignore_pad(truth, pad_val=PAD, high_val=Njets + 1)            # (E,B,p)
     
         # 2) Compare branch-wise, ignoring padded truth locations
         valid_truth_mask = (truth_sorted != PAD).unsqueeze(1)                               # (E,1,B,p)
@@ -61,7 +62,7 @@ class JetSecondaryLoader(JetReconstructionNetwork):
         return pred_truth, class_truth, gathered
     
     # Compile
-    _topk_core = torch.compile(_topk_core, dynamic=True)   # or mode="max-autotune" if you're on 2.4+
+    self._topk_core = torch.compile(self._topk_core, dynamic=True)   # or mode="max-autotune" if you're on 2.4+
     
     @torch.no_grad()
     def topk_data(self, batch):
@@ -86,7 +87,7 @@ class JetSecondaryLoader(JetReconstructionNetwork):
         true_idx   = torch.stack(true_idx)   # (B,E,p_max)
         true_masks = torch.stack(true_masks) # (B,E)
     
-        pred_truth, class_truth, features_arr = self.__class__._topk_core(
+        pred_truth, class_truth, features_arr = self._topk_core(
             jet_data, jet_preds_tensor, true_idx, true_masks
         )
 
