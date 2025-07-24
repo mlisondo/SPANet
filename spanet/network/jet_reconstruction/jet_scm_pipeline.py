@@ -18,9 +18,6 @@ class JetSecondaryLoader(JetReconstructionNetwork):
         x_tmp     = torch.where(x == pad_val, sentinel, x)
         x_sorted, _ = x_tmp.sort(dim=-1)
         return torch.where(x_sorted == sentinel, torch.full_like(x_sorted, pad_val), x_sorted)
-    
-    # compile with dynamic shapes
-    _sort_ignore_pad = torch.compile(_sort_ignore_pad, dynamic=True)
 
     @staticmethod
     def _topk_core(
@@ -198,3 +195,70 @@ def probe(o, name=None):
         print(f"dtype: {o.dtype}")
         print(f"numel: {o.numel()}")
         print(f"device: {o.device}")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#         # ------------------ experimental for more rigorous masker ------------------
+#         targ_arr     = np.zeros((branches, events, max_p), dtype=int)                   # The (possibly padded/filled) ground-truth assignments
+#         for event in range(events):
+#             # 1. Build set of available jets for this event based on mask (indices 0..max_jet-1 where mask is True)
+#             avail = set(np.flatnonzero(jet_mask[event]))
+
+#             # 2. Loop over all branches: assign pre-specified jets, track locations of -1s (unassigned jets)
+#             neg1_locs = []  # Will hold tuples (branch, idx) for all -1s across all branches for this event
+#             for branch in range(branches):
+#                 tarr = true_idx[branch][event]  # True jet indices for this branch/event (may contain -1)
+#                 targ_arr[branch, event, :] = tarr  # Copy to working array so we can modify in-place
+#                 for idx, jet in enumerate(tarr):
+#                     if jet >= 0:
+#                         # Remove any pre-assigned jet from available set to ensure unique usage across branches
+#                         avail.discard(jet)
+#                     else:
+#                         # Save position of -1 for later joint filling
+#                         neg1_locs.append((branch, idx))
+
+#             # 3. Randomly assign unique available jets to all -1s across all branches for this event
+#             shuffled = np.array(list(avail))
+#             np.random.shuffle(shuffled)
+#             for (branch, idx), jet in zip(neg1_locs, shuffled):
+#                 targ_arr[branch, event, idx] = jet  # Fill -1 position with a unique available jet
+
+#             # 4. Evaluate predicted assignments and fill features for each hypothesis (k) per branch
+#             for branch in range(branches):
+#                 targ = targ_arr[branch, event, :]  # Final unique assignment for this branch/event
+#                 for k in range(K):
+#                     pred = jet_preds[branch][event, k, :]  # Model-predicted jet indices for hypothesis k
+#                     # Compare prediction to truth (after -1 filling): True if exact match, else False
+#                     pred_truth[event, k, branch] = np.array_equal(pred, targ)
+#                     # Populate jet features for this hypothesis/branch (always, regardless of match)
+#                     for j, jet_idx in enumerate(pred):
+#                         features_arr[event, k, branch, j, :] = jet_data[event, jet_idx, :]
+#                 # If this branch/event is not reconstructable (mask is False), force pred_truth to all False
+#                 if not true_masks[branch, event]:
+#                     pred_truth[event, :, branch] = False
+
+#             # 5. Evaluate if the full event-level assignment matches the mask for all branches (top-level metric)
+#             for k in range(K):
+#                 # Returns True if ALL branch assignments match their respective masks AND at least one is reconstructable
+#                 class_truth[event, k] = (
+#                     np.all(pred_truth[event, k, :] == true_masks[:, event]) and
+#                     np.any(true_masks[:, event])
+#                 )
+#         return (
+#     torch.from_numpy(pred_truth).to(device),
+#     torch.from_numpy(targ_arr).to(device),
+#     torch.from_numpy(true_masks).to(device),
+#     torch.from_numpy(features_arr).to(device),
+#     torch.from_numpy(class_truth).to(device)
+# )
