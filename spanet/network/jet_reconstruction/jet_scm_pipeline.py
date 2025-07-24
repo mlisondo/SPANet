@@ -50,14 +50,13 @@ class JetSecondaryLoader(JetReconstructionNetwork):
         gathered = jet_data.gather(
             1, flat_idx.unsqueeze(-1).expand(-1, -1, Fdim)
         ).view(E, K, B, p_max, Fdim)
-    
-        # 4) Hypothesis-level truth: “Did any branch match?” ↔ “Is there a target?”
-        mask_matrix = true_masks_tensor.permute(1, 0)             # (E,B)
-        any_match   = pred_truth.any(dim=1)                       # (E,B)
-        event_ok    = (any_match == mask_matrix)                  # (E,B)
-    
-        # Preserve old API: (E,K) shaped class_truth
-        class_truth = event_ok.all(dim=1, keepdim=True).expand(-1, K)
+
+        # class_truth[e,k] = (OR_b {true_mask[b,e]) AND (true_mask[b,e] = pred_truth[e,k,b])
+        mask_matrix  = true_masks_tensor.permute(1, 0)        # (E,B)
+        has_rec      = mask_matrix.any(dim=1, keepdim=True)   # (E,1)  ⇐  part (1)
+        mask_expanded = mask_matrix.unsqueeze(1)              # (E,1,B)
+        branch_ok = (pred_truth == mask_expanded).all(dim=2)  # (E,K)
+        class_truth = branch_ok & has_rec.expand_as(branch_ok)  # (E,K)  
     
         return pred_truth, class_truth, gathered
 
@@ -97,28 +96,6 @@ class JetSecondaryLoader(JetReconstructionNetwork):
         probe(class_truth, "class_truth")
         probe(features_arr, "features_arr")
 
-
-        # print("jet_preds_tensor[:4]", jet_preds_tensor[:4])
-        # print()
-        # print()
-        # print("true_idx[0][:4]", true_idx[0][:4])
-        # print()
-        # print()
-        # print("true_idx[1][:4]", true_idx[1][:4])
-        # print()
-        # print()
-        # print("pred_truth[:4]", pred_truth[:4])
-        # print()
-        # print()
-        # print("true_masks[0][:4]", true_masks[0][:4])
-        # print()
-        # print()
-        # print("true_masks[1][:4]", true_masks[1][:4])
-        # print()
-        # print()
-        # print("class_truth[:4]", class_truth[:4])
-        # print()
-        # print()
 
         true_event_idx = torch.nonzero(class_truth[:, 0]).squeeze(1)
         true_event_idx = true_event_idx[:5]
