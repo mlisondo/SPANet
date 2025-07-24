@@ -14,39 +14,46 @@ class JetSecondaryLoader(JetReconstructionNetwork):
         self.options = options
 
 
+    def _sort_ignore_pad(x, pad_val, high_val):
+        # Push pad_val to the end, sort, bring pad_val back.
+        sentinel = torch.full_like(x, high_val)
+        x_tmp     = torch.where(x == pad_val, sentinel, x)
+        x_sorted, _ = x_tmp.sort(dim=-1)
+        return torch.where(x_sorted == sentinel, torch.full_like(x_sorted, pad_val), x_sorted)
+    
     def _topk_core(
         jet_data,            # (E, Njets, F)
         jet_preds_tensor,    # (E, K, B, p_max)
-        true_idx_tensor,     # (B, E, p_max)   – padded with -1
+        true_idx_tensor,     # (B, E, p_max) – padded with -1
         true_masks_tensor,   # (B, E)
     ):
         E, K, B, p_max = jet_preds_tensor.shape
-        _, _, Fdim     = jet_data.shape
+        _, Njets, Fdim = jet_data.shape
     
-        # Permutation-invariant comparison
-        # Sort along the p_max axis so sets of jets match regardless of order.
-        pred_sorted   = jet_preds_tensor.sort(dim=-1).values                         # (E, K, B, p_max)
-        truth_sorted  = true_idx_tensor.permute(1, 0, 2).sort(dim=-1).values         # (E, B, p_max)
+        # Sort both pred and truth, ignore -1
+        pred_sorted = _sort_ignore_pad(jet_preds_tensor, pad_val=-1, high_val=Njets + 1)    # (E,K,B,p_max)
+        truth       = true_idx_tensor.permute(1, 0, 2)                                      # (E,B,p_max)
+        truth_sorted = _sort_ignore_pad(truth, pad_val=-1, high_val=Njets + 1)              # (E,B,p_max)
     
-        # Compare each branch K against truth, elementwise across p_max, then all(-1)
-        matches = (pred_sorted == truth_sorted.unsqueeze(1)).all(dim=-1)             # (E, K, B)
+        valid_truth_mask = (truth_sorted != -1).unsqueeze(1)                                 # (E,1,B,p_max)
+        eq = (pred_sorted == truth_sorted.unsqueeze(1)) | (~valid_truth_mask)
+        pred_truth = eq.all(dim=-1)                                                         # (E,K,B)
     
         # Feature gather
-        flat_idx = jet_preds_tensor.reshape(E, K * B * p_max).long()                 # (E, K*B*p_max)
+        flat_idx = jet_preds_tensor.reshape(E, K * B * p_max).long()                         # (E,K*B*p_max)
         gathered = jet_data.gather(
             1, flat_idx.unsqueeze(-1).expand(-1, -1, Fdim)
-        ).view(E, K, B, p_max, Fdim)                                                 # (E, K, B, p_max, F)
+        ).view(E, K, B, p_max, Fdim)                                                         # (E,K,B,p_max,F)
     
-        # Class-level correctness mask
-        # true_masks_tensor: (B, E) -> (E, B)
-        mask_matrix  = true_masks_tensor.permute(1, 0)                               # (E, B)
+        # Class-level truth: "any branch matched?" vs "was there any ground truth?"
+        mask_matrix   = true_masks_tensor.permute(1, 0)                                      # (E,B)
+        any_match     = pred_truth.any(dim=1)                                                # (E,B) over K
+        # event is correct if presence of truth == presence of match
+        event_correct = (any_match == mask_matrix)                                           # (E,B)
+        # replicate to (E,K) to preserve original return shape
+        class_truth   = event_correct.all(dim=1, keepdim=True).expand(-1, K)                 # (E,K)
     
-        # The original logic checked that every branch's match state equals mask_matrix,
-        # and that at least one branch is valid whenever mask_matrix is True anywhere.
-        class_truth  = (matches == mask_matrix.unsqueeze(1)).all(dim=2)              # (E, K)
-        class_truth &= mask_matrix.any(dim=1, keepdim=True)                          # ensure at least one real target existed
-    
-        return matches, class_truth, gathered
+        return pred_truth, class_truth, gathered
     
     # compile with dynamic shapes
     _topk_core = torch.compile(_topk_core, dynamic=True)
@@ -54,32 +61,32 @@ class JetSecondaryLoader(JetReconstructionNetwork):
     @torch.no_grad()
     def topk_data(self, batch):
         sources, _, targets, _, _ = batch
-        jet_data, _ = sources[0]                      # (E, Njets, F)
+        jet_data, _ = sources[0]  # (E,Njets,F)
     
-        # PRE-PROCESS (Python) #
-        raw_preds, *_ = self.predict(sources)         # list[B] of (E, K, p_i)
-        # Stack and permute to (E, K, B, p_max)
+        # PRE-PROCESS #
+        raw_preds, *_ = self.predict(sources)  # list[B] of (E,K,p_i) (no guarantee they are sorted)
         jet_preds_tensor = torch.stack(
             [torch.as_tensor(p, device=jet_data.device).permute(0, 2, 1)
              for p in raw_preds],
             dim=2
-        )
+        )  # (E,K,B,p_max)
         p_max = jet_preds_tensor.shape[-1]
     
-        # Build true index/mask tensors (pad to p_max with -1)
-        true_idx   = []
-        true_masks = []
+        true_idx, true_masks = [], []
         for idx_t, m in targets:
-            idx_t = F.pad(idx_t, (0, p_max - idx_t.shape[1]), value=-1)
-            true_idx.append(idx_t)
-            true_masks.append(m)
-        true_idx   = torch.stack(true_idx)            # (B, E, p_max)
-        true_masks = torch.stack(true_masks)          # (B, E)
+            # pad to p_max if needed
+            if idx_t.shape[1] < p_max:
+                idx_t = F.pad(idx_t, (0, p_max - idx_t.shape[1]), value=-1)
+            true_idx.append(idx_t.to(jet_data.device))
+            true_masks.append(m.to(jet_data.device))
     
-        # COMPILED MATH #
+        true_idx   = torch.stack(true_idx)   # (B,E,p_max)
+        true_masks = torch.stack(true_masks) # (B,E)
+    
         pred_truth, class_truth, features_arr = self.__class__._topk_core(
             jet_data, jet_preds_tensor, true_idx, true_masks
         )
+        
         probe(batch, "batch")
         probe(sources, "sources")
         probe(targets, "targets")
