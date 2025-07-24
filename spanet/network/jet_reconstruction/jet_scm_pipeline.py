@@ -65,7 +65,88 @@ class JetSecondaryLoader(JetReconstructionNetwork):
         # COMPILED MATH #
         pred_truth, class_truth, features_arr = self.__class__._topk_core(jet_data, jet_preds_tensor, true_idx, true_masks)
 
+        probe(batch, "batch")
+        probe(sources, "sources")
+        probe(targets, "targets")
+        probe(jet_data, "jet_data")
+        probe(raw_preds, "raw_preds")
+        probe(jet_preds_tensor, "jet_preds_tensor")
+        probe(p_max, "p_max")
+        probe(true_idx, "true_idx")
+        probe(true_masks, "true_masks")
+        probe(pred_truth, "pred_truth")
+        probe(class_truth, "class_truth")
+        probe(features_arr, "features_arr")
+
+
+        print("pred_truth[4:]", pred_truth[4:])
+        print()
+        print()
+        print("class_truth[4:]", class_truth[4:])
+        print()
+        print()
+        print("class_truth[4:]", class_truth[4:])
+        print()
+        print()
+
+
+        raise RuntimeError("Debug break")
+
         return pred_truth, true_masks, features_arr, class_truth
+
+
+
+
+def probe(o, name=None):
+    obj = type(o)
+    header = f"Object '{name}'"
+    print(f"\n{header}: {obj.__module__}.{obj.__name__}")
+
+    # NumPy-style introspection
+    if hasattr(o, 'shape'):
+        print(f"shape: {o.shape}")
+    if hasattr(o, 'ndim'):
+        print(f"ndim: {o.ndim}")
+    if hasattr(o, 'dtype'):
+        print(f"dtype: {o.dtype}")
+
+    # size attribute
+    if hasattr(o, 'size') and not callable(o.size):
+        print(f"size: {o.size}")
+
+    # Pythonic length
+    try:
+        print(f"len: {len(o)}")
+    except Exception:
+        pass
+
+    # Recursive descent into lists
+    try:
+        if isinstance(o, (list, tuple)):
+            for idx, item in enumerate(o):
+                probe(item, f"{name}[{idx}]")
+    except Exception:
+        pass
+
+    # PyTorch tensors
+    if isinstance(o, torch.Tensor):
+        print(f"shape: {tuple(o.size())}")
+        print(f"dtype: {o.dtype}")
+        print(f"numel: {o.numel()}")
+
+        print(f"shape: {tuple(o.size())}")
+        print(f"dtype: {o.dtype}")
+        print(f"numel: {o.numel()}")
+        print(f"device: {o.device}")
+
+
+
+
+
+
+
+
+
 
 
 
@@ -124,46 +205,3 @@ class JetSecondaryLoader(JetReconstructionNetwork):
 #     torch.from_numpy(features_arr).to(device),
 #     torch.from_numpy(class_truth).to(device)
 # )
-
-
-def probe(o, name=None):
-    obj = type(o)
-    header = f"Object '{name}'"
-    print(f"\n{header}: {obj.__module__}.{obj.__name__}")
-
-    # NumPy-style introspection
-    if hasattr(o, 'shape'):
-        print(f"shape: {o.shape}")
-    if hasattr(o, 'ndim'):
-        print(f"ndim: {o.ndim}")
-    if hasattr(o, 'dtype'):
-        print(f"dtype: {o.dtype}")
-
-    # size attribute
-    if hasattr(o, 'size') and not callable(o.size):
-        print(f"size: {o.size}")
-
-    # Pythonic length
-    try:
-        print(f"len: {len(o)}")
-    except Exception:
-        pass
-
-    # Recursive descent into lists
-    try:
-        if isinstance(o, (list, tuple)):
-            for idx, item in enumerate(o):
-                probe(item, f"{name}[{idx}]")
-    except Exception:
-        pass
-
-    # PyTorch tensors
-    if isinstance(o, torch.Tensor):
-        print(f"shape: {tuple(o.size())}")
-        print(f"dtype: {o.dtype}")
-        print(f"numel: {o.numel()}")
-
-        print(f"shape: {tuple(o.size())}")
-        print(f"dtype: {o.dtype}")
-        print(f"numel: {o.numel()}")
-        print(f"device: {o.device}")
