@@ -232,35 +232,8 @@ def find_max_and_mask(matrix):
 
     l, m, n = np.unravel_index(flat_idx, new_matrix.shape[1:])
 
-    print(new_matrix[0, l, m, n])
-    print(new_matrix[0, l, n, m])
-    print(new_matrix[0, m, l, n])
-    print(new_matrix[0, m, n, l])
-    print(new_matrix[0, n, l, m])
-    print(new_matrix[0, n, m, l])
-    
     new_matrix[np.arange(B), l, m, n] = -np.inf
     new_matrix[np.arange(B), m, l, n] = -np.inf
-
-    print("Indices", l, m, n)
-    
-    flat_idx = new_matrix.reshape(B, -1).argmax(axis=1)
-
-    l, m, n = np.unravel_index(flat_idx, new_matrix.shape[1:])
-
-    print(new_matrix[0, l, m, n])
-    print(new_matrix[0, l, n, m])
-    print(new_matrix[0, m, l, n])
-    print(new_matrix[0, m, n, l])
-    print(new_matrix[0, n, l, m])
-    print(new_matrix[0, n, m, l])
-    
-    new_matrix[np.arange(B), l, m, n] = -np.inf
-    new_matrix[np.arange(B), m, l, n] = -np.inf
-
-    print("Indices", l, m, n)
-
-    raise RuntimeError("Debug matrix index vals")
     
     return new_matrix
 
