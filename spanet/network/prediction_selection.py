@@ -232,12 +232,12 @@ def find_max_and_mask(matrix):
 
     l, m, n = np.unravel_index(flat_idx, new_matrix.shape[1:])
 
-    print(new_matrix[np.arange(B), l, m, n])
-    print(new_matrix[np.arange(B), l, n, m])
-    print(new_matrix[np.arange(B), m, l, n])
-    print(new_matrix[np.arange(B), m, n, l])
-    print(new_matrix[np.arange(B), n, l, m])
-    print(new_matrix[np.arange(B), n, m, l])
+    print(new_matrix[0, l, m, n])
+    print(new_matrix[0, l, n, m])
+    print(new_matrix[0, m, l, n])
+    print(new_matrix[0, m, n, l])
+    print(new_matrix[0, n, l, m])
+    print(new_matrix[0, n, m, l])
     
     new_matrix[np.arange(B), l, m, n] = -np.inf
     new_matrix[np.arange(B), m, l, n] = -np.inf
@@ -248,15 +248,15 @@ def find_max_and_mask(matrix):
 
     l, m, n = np.unravel_index(flat_idx, new_matrix.shape[1:])
 
+    print(new_matrix[0, l, m, n])
+    print(new_matrix[0, l, n, m])
+    print(new_matrix[0, m, l, n])
+    print(new_matrix[0, m, n, l])
+    print(new_matrix[0, n, l, m])
+    print(new_matrix[0, n, m, l])
+    
     new_matrix[np.arange(B), l, m, n] = -np.inf
     new_matrix[np.arange(B), m, l, n] = -np.inf
-
-    print(new_matrix[np.arange(B), l, m, n])
-    print(new_matrix[np.arange(B), l, n, m])
-    print(new_matrix[np.arange(B), m, l, n])
-    print(new_matrix[np.arange(B), m, n, l])
-    print(new_matrix[np.arange(B), n, l, m])
-    print(new_matrix[np.arange(B), n, m, l])
 
     print("Indices", l, m, n)
 
