@@ -12,83 +12,63 @@ class JetSecondaryLoader(JetReconstructionNetwork):
         self.options = options
 
 
-    def _sort_ignore_pad(x, pad_val, high_val):
-        # Push pad_val to the end, sort, bring pad_val back.
+    def _sort_ignore_pad(x: torch.Tensor, pad_val: int, high_val: int) -> torch.Tensor:
+        """Sort last dim but shove pad_val to the end."""
         sentinel = torch.full_like(x, high_val)
-        x_tmp     = torch.where(x == pad_val, sentinel, x)
+        x_tmp    = torch.where(x == pad_val, sentinel, x)
         x_sorted, _ = x_tmp.sort(dim=-1)
         return torch.where(x_sorted == sentinel, torch.full_like(x_sorted, pad_val), x_sorted)
-
+    
     @staticmethod
     def _topk_core(
-        jet_data: torch.Tensor,        # (E, Njets, F)
-        jet_preds_tensor: torch.Tensor,# (E, K, B, p_max)
-        true_idx_tensor: torch.Tensor, # (B, E, p_max)  – pad = -1
-        true_masks_tensor: torch.Tensor,# (B, E)
+        jet_data: torch.Tensor,          # (E, Njets, F)
+        jet_preds_tensor: torch.Tensor,  # (E, K, B, p_max)
+        true_idx_tensor: torch.Tensor,   # (B, E, p_max)  – pad = -1
+        true_masks_tensor: torch.Tensor, # (B, E)
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Canonical, permutation‑invariant label/feature extractor."""
+        """
+        Permutation-invariant branch match without reordering branches.
+        """
+        PAD = -1
         E, K, B, p_max = jet_preds_tensor.shape
         _, Njets, Fdim = jet_data.shape
-        PAD = -1
-
-        # ---- 1. jet‑level sort (pad last) -----------------------
-        pred_sorted = JetSecondaryLoader._sort_ignore_pad(
-            jet_preds_tensor, pad_val=PAD, high_val=Njets + 1
-        )                                              # (E,K,B,p_max)
-
-        truth_sorted = JetSecondaryLoader._sort_ignore_pad(
-            true_idx_tensor.permute(1, 0, 2),          # (E,B,p_max)
-            pad_val=PAD, high_val=Njets + 1
-        )                                              # (E,B,p_max)
-
-        # ---- 2. branch‑level canonical order -------------------
-        weight = (Njets + 2) ** torch.arange(
-            p_max, device=jet_data.device, dtype=pred_sorted.dtype
-        )
-        key_pred  = (pred_sorted  + 1).mul(weight).sum(-1)  # (E,K,B)
-        key_truth = (truth_sorted + 1).mul(weight).sum(-1)  # (E,B)
-
-        order_pred  = key_pred.argsort(2)                   # branch axis = 2
-        order_truth = key_truth.argsort(1)                  # axis = 1
-
-        pred_sorted  = torch.gather(
-            pred_sorted, 2, order_pred.unsqueeze(-1).expand_as(pred_sorted)
-        )
-        truth_sorted = torch.gather(
-            truth_sorted, 1, order_truth.unsqueeze(-1).expand_as(truth_sorted)
-        )
-
-        # ---- 3. branch‑wise equality ---------------------------
-        valid = (truth_sorted != PAD).unsqueeze(1)           # (E,1,B,p_max)
-        eq = (pred_sorted == truth_sorted.unsqueeze(1)) | (~valid)
-        pred_truth = eq.all(-1)                              # (E,K,B)
-
-        # ---- 4. gather jet features (safe indices) ------------
-        flat_idx = pred_sorted.reshape(E, K * B * p_max).long()
-        flat_idx[flat_idx < 0]      = 0           # pad → 0
-        flat_idx[flat_idx >= Njets] = Njets - 1   # overflow → last jet
-
+    
+        # 1) Sort jets within each branch / truth, ignore PAD
+        pred_sorted = _sort_ignore_pad(jet_preds_tensor, pad_val=PAD, high_val=Njets + 1)  # (E,K,B,p)
+        truth       = true_idx_tensor.permute(1, 0, 2)                                     # (E,B,p)
+        truth_sorted = _sort_ignore_pad(truth, pad_val=PAD, high_val=Njets + 1)            # (E,B,p)
+    
+        # 2) Compare branch-wise, ignoring padded truth locations
+        valid_truth_mask = (truth_sorted != PAD).unsqueeze(1)                               # (E,1,B,p)
+        eq = (pred_sorted == truth_sorted.unsqueeze(1)) | (~valid_truth_mask)
+        pred_truth = eq.all(dim=-1)                                                         # (E,K,B)
+    
+        # 3) Gather features with original (unsorted) prediction indices
+        flat_idx = jet_preds_tensor.reshape(E, K * B * p_max).long()
+        flat_idx = flat_idx.clamp_(min=0, max=Njets - 1)  # safe clamp instead of in-place scatter
         gathered = jet_data.gather(
             1, flat_idx.unsqueeze(-1).expand(-1, -1, Fdim)
         ).view(E, K, B, p_max, Fdim)
-
-        # ---- 5. hypothesis‑level correctness ------------------
-        mask_matrix = true_masks_tensor.permute(1, 0)        # (E,B)
-        all_match   = pred_truth.all(2)                      # (E,K)
-        class_truth = all_match == mask_matrix.any(1, keepdim=True)
-
+    
+        # 4) Hypothesis-level truth: “Did any branch match?” ↔ “Is there a target?”
+        mask_matrix = true_masks_tensor.permute(1, 0)             # (E,B)
+        any_match   = pred_truth.any(dim=1)                       # (E,B)
+        event_ok    = (any_match == mask_matrix)                  # (E,B)
+    
+        # Preserve old API: (E,K) shaped class_truth
+        class_truth = event_ok.all(dim=1, keepdim=True).expand(-1, K)
+    
         return pred_truth, class_truth, gathered
-        
-    # compile with dynamic shapes
-    _topk_core = torch.compile(_topk_core, dynamic=True)
+    
+    # Compile
+    _topk_core = torch.compile(_topk_core, dynamic=True)   # or mode="max-autotune" if you're on 2.4+
     
     @torch.no_grad()
     def topk_data(self, batch):
         sources, _, targets, _, _ = batch
         jet_data, _ = sources[0]  # (E,Njets,F)
     
-        # PRE-PROCESS #
-        raw_preds, *_ = self.predict(sources)  # list[B] of (E,K,p_i) (no guarantee they are sorted)
+        raw_preds, *_ = self.predict(sources)  # list[B] of (E,K,p_i)
         jet_preds_tensor = torch.stack(
             [torch.as_tensor(p, device=jet_data.device).permute(0, 2, 1)
              for p in raw_preds],
@@ -98,7 +78,6 @@ class JetSecondaryLoader(JetReconstructionNetwork):
     
         true_idx, true_masks = [], []
         for idx_t, m in targets:
-            # pad to p_max if needed
             if idx_t.shape[1] < p_max:
                 idx_t = F.pad(idx_t, (0, p_max - idx_t.shape[1]), value=-1)
             true_idx.append(idx_t.to(jet_data.device))
