@@ -10,6 +10,8 @@ class JetSecondaryLoader(JetReconstructionNetwork):
         super(JetSecondaryLoader, self).__init__(options, torch_script)
         self.evaluator = SymmetricEvaluator(self.training_dataset.event_info)
         self.options = options
+        self._topk_core = torch.compile(self._topk_core, dynamic=True)   # or mode="max-autotune"
+    
 
 
     def _sort_ignore_pad(self, x: torch.Tensor, pad_val: int, high_val: int) -> torch.Tensor:
@@ -62,8 +64,7 @@ class JetSecondaryLoader(JetReconstructionNetwork):
         return pred_truth, class_truth, gathered
     
     # Compile
-    self._topk_core = torch.compile(self._topk_core, dynamic=True)   # or mode="max-autotune" if you're on 2.4+
-    
+
     @torch.no_grad()
     def topk_data(self, batch):
         sources, _, targets, _, _ = batch
