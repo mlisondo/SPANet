@@ -232,7 +232,11 @@ def find_max_and_mask(matrix):
     l, m, n = np.unravel_index(flat_idx, new_matrix.shape[1:])
 
     new_matrix[np.arange(B), l, m, n] = -np.inf
+    new_matrix[np.arange(B), l, n, m] = -np.inf
     new_matrix[np.arange(B), m, l, n] = -np.inf
+    new_matrix[np.arange(B), m, n, l] = -np.inf
+    new_matrix[np.arange(B), n, m, l] = -np.inf
+    new_matrix[np.arange(B), n, l, m] = -np.inf
 
     return new_matrix
 
