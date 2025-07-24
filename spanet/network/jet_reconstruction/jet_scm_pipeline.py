@@ -62,8 +62,6 @@ class JetSecondaryLoader(JetReconstructionNetwork):
         class_truth = event_ok.all(dim=1, keepdim=True).expand(-1, K)
     
         return pred_truth, class_truth, gathered
-    
-    # Compile
 
     @torch.no_grad()
     def topk_data(self, batch):
@@ -87,20 +85,16 @@ class JetSecondaryLoader(JetReconstructionNetwork):
     
         true_idx   = torch.stack(true_idx)   # (B,E,p_max)
         true_masks = torch.stack(true_masks) # (B,E)
+        
+        probe(jet_data, "jet_data")
+        probe(jet_preds_tensor, "jet_preds_tensor")
+        probe(true_idx, "true_idx")
+        probe(true_masks, "true_masks")
     
         pred_truth, class_truth, features_arr = self._topk_core(
             jet_data, jet_preds_tensor, true_idx, true_masks
         )
-
-        probe(batch, "batch")
-        probe(sources, "sources")
-        probe(targets, "targets")
-        probe(jet_data, "jet_data")
-        probe(raw_preds, "raw_preds")
-        probe(jet_preds_tensor, "jet_preds_tensor")
-        probe(p_max, "p_max")
-        probe(true_idx, "true_idx")
-        probe(true_masks, "true_masks")
+        
         probe(pred_truth, "pred_truth")
         probe(class_truth, "class_truth")
         probe(features_arr, "features_arr")
@@ -109,19 +103,13 @@ class JetSecondaryLoader(JetReconstructionNetwork):
         print("jet_preds_tensor[:4]", jet_preds_tensor[:4])
         print()
         print()
-        print("true_idx[0][:4]", true_idx[0][:4])
-        print()
-        print()
-        print("true_idx[1][:4]", true_idx[1][:4])
+        print("true_idx[:][:4]", true_idx[:][:4])
         print()
         print()
         print("pred_truth[:4]", pred_truth[:4])
         print()
         print()
-        print("true_masks[0][:4]", true_masks[0][:4])
-        print()
-        print()
-        print("true_masks[1][:4]", true_masks[1][:4])
+        print("true_masks[:][:4]", true_masks[:][:4])
         print()
         print()
         print("class_truth[:4]", class_truth[:4])
