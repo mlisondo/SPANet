@@ -176,7 +176,8 @@ class JetSecondaryLoader(JetReconstructionNetwork):
 
         # -- gather jet features -----------------------------------------
         flat_idx = pred_canon.reshape(E, K * B * p_max).long()
-        flat_idx[flat_idx == JetSecondaryLoader.PAD_VAL] = 0  # safe column
+        flat_idx[flat_idx < 0]      = 0           # pads
+        flat_idx[flat_idx >= Njets] = Njets - 1   # overflow
         gathered = jet_data.gather(
             1, flat_idx.unsqueeze(-1).expand(-1, -1, Fdim)
         ).view(E, K, B, p_max, Fdim)
