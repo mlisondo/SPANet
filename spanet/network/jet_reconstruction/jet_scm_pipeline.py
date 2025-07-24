@@ -34,9 +34,9 @@ class JetSecondaryLoader(JetReconstructionNetwork):
         _, Njets, Fdim = jet_data.shape
     
         # Sort both pred and truth, ignore -1
-        pred_sorted = self.class._sort_ignore_pad(jet_preds_tensor, pad_val=-1, high_val=Njets + 1)    # (E,K,B,p_max)
+        pred_sorted = self.__class__._sort_ignore_pad(jet_preds_tensor, pad_val=-1, high_val=Njets + 1)    # (E,K,B,p_max)
         truth       = true_idx_tensor.permute(1, 0, 2)                                      # (E,B,p_max)
-        truth_sorted = self.class._sort_ignore_pad(truth, pad_val=-1, high_val=Njets + 1)              # (E,B,p_max)
+        truth_sorted = self.__class__._sort_ignore_pad(truth, pad_val=-1, high_val=Njets + 1)              # (E,B,p_max)
     
         valid_truth_mask = (truth_sorted != -1).unsqueeze(1)                                 # (E,1,B,p_max)
         eq = (pred_sorted == truth_sorted.unsqueeze(1)) | (~valid_truth_mask)
