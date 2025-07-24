@@ -223,6 +223,7 @@ def _extract_predictions(predictions, num_partons, max_jets, batch_size):
         output[batch, :, :], weight[batch, :] = extract_prediction(current_prediction, num_partons, max_jets)
 
     return np.ascontiguousarray(output.transpose((1, 0, 2))), np.ascontiguousarray(weight.transpose((1, 0)))
+
 def find_max_and_mask(matrix):
     new_matrix = matrix.copy()
     B = new_matrix.shape[0]
@@ -231,13 +232,36 @@ def find_max_and_mask(matrix):
 
     l, m, n = np.unravel_index(flat_idx, new_matrix.shape[1:])
 
+    print(new_matrix[np.arange(B), l, m, n])
+    print(new_matrix[np.arange(B), l, n, m])
+    print(new_matrix[np.arange(B), m, l, n])
+    print(new_matrix[np.arange(B), m, n, l])
+    print(new_matrix[np.arange(B), n, l, m])
+    print(new_matrix[np.arange(B), n, m, l])
+    
     new_matrix[np.arange(B), l, m, n] = -np.inf
-    new_matrix[np.arange(B), l, n, m] = -np.inf
     new_matrix[np.arange(B), m, l, n] = -np.inf
-    new_matrix[np.arange(B), m, n, l] = -np.inf
-    new_matrix[np.arange(B), n, m, l] = -np.inf
-    new_matrix[np.arange(B), n, l, m] = -np.inf
 
+    print("Indices", l, m, n)
+    
+    flat_idx = new_matrix.reshape(B, -1).argmax(axis=1)
+
+    l, m, n = np.unravel_index(flat_idx, new_matrix.shape[1:])
+
+    new_matrix[np.arange(B), l, m, n] = -np.inf
+    new_matrix[np.arange(B), m, l, n] = -np.inf
+
+    print(new_matrix[np.arange(B), l, m, n])
+    print(new_matrix[np.arange(B), l, n, m])
+    print(new_matrix[np.arange(B), m, l, n])
+    print(new_matrix[np.arange(B), m, n, l])
+    print(new_matrix[np.arange(B), n, l, m])
+    print(new_matrix[np.arange(B), n, m, l])
+
+    print("Indices", l, m, n)
+
+    raise RuntimeError("Debug matrix index vals)
+    
     return new_matrix
 
 def extract_predictions(predictions: List[TArray], k: int):
