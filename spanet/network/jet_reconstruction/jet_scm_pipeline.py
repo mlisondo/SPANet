@@ -87,40 +87,6 @@ class JetSecondaryLoader(JetReconstructionNetwork):
             jet_data, jet_preds_tensor, true_idx, true_masks
         )
 
-        # probe(jet_data, "jet_data")
-        # probe(jet_preds_tensor, "jet_preds_tensor")
-        # probe(true_idx, "true_idx")
-        # probe(true_masks, "true_masks")
-        # probe(pred_truth, "pred_truth")
-        # probe(class_truth, "class_truth")
-        # probe(features_arr, "features_arr")
-
-
-        # true_event_idx = torch.nonzero(class_truth[:, 0]).squeeze(1)
-        # true_event_idx = true_event_idx[:5]
-
-        # for e in true_event_idx:
-        #     print(f"\n===== EVENT {int(e)} =====")
-
-        #     print("jet_preds_tensor:")
-        #     print(jet_preds_tensor[e])
-
-        #     print("true_idx:")
-        #     print(true_idx[:, e])
-
-        #     print("pred_truth matrix (K x B):")
-        #     print(pred_truth[e])
-
-        #     print("true_masks:")
-        #     print(true_masks[:, e])
-
-        #     print("class_truth row:")
-        #     print(class_truth[e])
-
-        #     print("=" * 30)
-
-        # raise RuntimeError("Debug break")
-
         return pred_truth, true_masks, features_arr, class_truth
 
 
