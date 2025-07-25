@@ -111,11 +111,11 @@ def evaluate_on_test_dataset(
         outputs = model.evaluate_scm_batch(batch)
         timer.stop()
 
-        for k, v in out.items():    # change to outputs.items() ?
+        for k, v in outputs.items():
             bank[k].append(v.cpu().numpy())
 
         if return_full_output:
-            full_outputs.append(tree_map(lambda x: x.cpu().numpy(), out))   # change to outputs ?
+            full_outputs.append(tree_map(lambda x: x.cpu().numpy(), outputs))
 
     print(f"Total combinatorics time: {timer.get_time():.2f} s")
 
