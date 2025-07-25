@@ -45,6 +45,8 @@ class SCM_Training_Val(JetSecondaryLoader):
         self.masker     = tcompile(self.masker,    dynamic=True)
 
     def _compiled_core(self, features_arr, pred_truth, class_truth):
+        print("[DEBUG] --> Inside _compiled_core")
+
         """Tensor-only slice of forward_scm."""
         events, K, branches, jets, feats = features_arr.shape
         class_in = features_arr.reshape(events, -1)
@@ -73,22 +75,24 @@ class SCM_Training_Val(JetSecondaryLoader):
         pred_k = torch.argmax(class_logits, 1)
         top1_acc = class_truth[rows, pred_k].float().mean()
 
+        print(f"[DEBUG] class_loss: {class_loss.item():.4f}, mask_loss: {mask_loss.item():.4f}, top1_acc: {top1_acc.item():.4f}")
+
         return class_loss, mask_loss, top1_acc
     
     # single call covers whole tensor graph
     _compiled_core = tcompile(_compiled_core, dynamic=True)
 
     def forward_scm(self, batch):
+        print("[DEBUG] --> Entered forward_scm")
         pred_truth, true_masks, features_arr, class_truth = self.topk_data(batch)
+
+        true_event_idx = torch.nonzero(class_truth[:, 0]).squeeze(1)
+        true_event_idx = true_event_idx[:5]
 
         probe(true_masks, "true_masks")
         probe(pred_truth, "pred_truth")
         probe(class_truth, "class_truth")
         probe(features_arr, "features_arr")
-
-
-        true_event_idx = torch.nonzero(class_truth[:, 0]).squeeze(1)
-        true_event_idx = true_event_idx[:5]
 
         for e in true_event_idx:
             print(f"\n===== EVENT {int(e)} =====")
@@ -102,15 +106,16 @@ class SCM_Training_Val(JetSecondaryLoader):
             print("class_truth row:")
             print(class_truth[e])
 
+            print("features_arr:")
+            print(features_arr[e, :, :, :, 0])
+
             print("=" * 30)
-
-        raise RuntimeError("Debug break")
-
 
         return self._compiled_core(features_arr, pred_truth, class_truth)
 
 
     def training_step(self, batch: Batch, batch_idx: int) -> Dict[str, torch.Tensor]:
+        print(f"\n[DEBUG] --> Training Step {batch_idx}")
 
         self.on_train_epoch_start()
 
@@ -122,6 +127,11 @@ class SCM_Training_Val(JetSecondaryLoader):
         self.log('train_masker_loss', mask_loss)
         self.log('train_total_loss', total_loss)
         self.log('train_top1_acc', top1_acc)
+
+        print(f"[DEBUG] total_loss: {total_loss.item():.4f}, top1_acc: {top1_acc.item():.4f}")
+
+
+        raise RuntimeError("Debug break")
 
         return total_loss
         
@@ -138,12 +148,17 @@ class SCM_Training_Val(JetSecondaryLoader):
         return {'val_total_loss': total_loss}
     
     def on_train_epoch_start(self):
+        print("[DEBUG] --> Entered on_train_epoch_start")
+
         for name, module in self.named_children():
             if name not in ['classifier', 'masker']:
+                print(f"[DEBUG] Setting module {name} to eval()")
                 module.eval()
+        print("[DEBUG] Setting self.eval() and classifier/masker to train()")
         self.eval()
         self.classifier.train()
         self.masker.train()
+
 
 
 def probe(o, name=None):
