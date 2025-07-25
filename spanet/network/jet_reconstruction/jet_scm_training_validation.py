@@ -69,7 +69,7 @@ class SCM_Training_Val(JetSecondaryLoader):
         print("[DEBUG] Classifier Truth (argmax) [0]:", class_first[e].item())
         print("[DEBUG] Classifier Truth (raw):", class_truth[e])
 
-        mask = class_truth.bool().clone()
+        mask = ~class_truth.bool().clone()
         rows = torch.arange(events, device=class_logits.device)
         
         mask[rows[has_truth], class_first[has_truth]] = False
