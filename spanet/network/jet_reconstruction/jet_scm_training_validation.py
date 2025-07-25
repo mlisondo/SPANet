@@ -66,21 +66,37 @@ class SCM_Training_Val(JetSecondaryLoader):
         class_first = torch.argmax(class_truth_int, 1)
         has_truth   = torch.any(class_truth_int == 1, 1)
 
+        has_truth = class_truth.any(dim=1)
+
+         # Pick one positive per row.
+        chosen = class_truth.to(torch.int).argmax(dim=1)
+
+         # Mask all other positions that were 1 (keep the chosen one unmasked).
+        mask = class_truth.bool().clone()
+        rows = torch.arange(events, device=class_logits.device)
+        mask[rows[has_truth], chosen[has_truth]] = False
+
+        neg_inf = torch.finfo(class_logits.dtype).min
+        masked_logits = class_logits.masked_fill(mask, neg_inf)
+
+        class_loss = nn.CrossEntropyLoss(reduction="none")(
+            masked_logits, chosen)[has_truth].mean()
+
         print("[DEBUG] Classifier Truth (argmax) [0]:", class_first[e].item())
         print("[DEBUG] Classifier Truth (raw):", class_truth[e])
 
-        mask = ~class_truth.bool().clone()
-        rows = torch.arange(events, device=class_logits.device)
+        # mask = ~class_truth.bool().clone()
+        # rows = torch.arange(events, device=class_logits.device)
         
-        mask[rows[has_truth], class_first[has_truth]] = False
-        neg_inf = torch.finfo(class_logits.dtype).min
-        masked_logits = class_logits.masked_fill(mask, neg_inf)
+        # mask[rows[has_truth], class_first[has_truth]] = False
+        # neg_inf = torch.finfo(class_logits.dtype).min
+        # masked_logits = class_logits.masked_fill(mask, neg_inf)
 
         print("[DEBUG] Masked Classifier Logits [0]:")
         print(masked_logits[e])
         
-        class_loss = nn.CrossEntropyLoss(reduction="none")(
-            class_logits, class_first)[has_truth].mean()
+        # class_loss = nn.CrossEntropyLoss(reduction="none")(
+        #     class_logits, class_first)[has_truth].mean()
         print(f"[DEBUG] Classifier Loss: {class_loss.item():.4f}")
 
         # vectorised masker
