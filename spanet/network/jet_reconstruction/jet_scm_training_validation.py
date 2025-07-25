@@ -80,6 +80,39 @@ class SCM_Training_Val(JetSecondaryLoader):
 
     def forward_scm(self, batch):
         pred_truth, true_masks, features_arr, class_truth = self.topk_data(batch)
+
+        probe(true_masks, "true_masks")
+        probe(pred_truth, "pred_truth")
+        probe(class_truth, "class_truth")
+        probe(features_arr, "features_arr")
+
+
+        true_event_idx = torch.nonzero(class_truth[:, 0]).squeeze(1)
+        true_event_idx = true_event_idx[:5]
+
+        for e in true_event_idx:
+            print(f"\n===== EVENT {int(e)} =====")
+
+            print("jet_preds_tensor:")
+            print(jet_preds_tensor[e])
+
+            print("true_idx:")
+            print(true_idx[:, e])
+
+            print("pred_truth matrix (K x B):")
+            print(pred_truth[e])
+
+            print("true_masks:")
+            print(true_masks[:, e])
+
+            print("class_truth row:")
+            print(class_truth[e])
+
+            print("=" * 30)
+
+        raise RuntimeError("Debug break")
+
+
         return self._compiled_core(features_arr, pred_truth, class_truth)
 
 
@@ -117,3 +150,46 @@ class SCM_Training_Val(JetSecondaryLoader):
         self.eval()
         self.classifier.train()
         self.masker.train()
+
+
+def probe(o, name=None):
+    obj = type(o)
+    header = f"Object '{name}'"
+    print(f"\n{header}: {obj.__module__}.{obj.__name__}")
+
+    # NumPy-style introspection
+    if hasattr(o, 'shape'):
+        print(f"shape: {o.shape}")
+    if hasattr(o, 'ndim'):
+        print(f"ndim: {o.ndim}")
+    if hasattr(o, 'dtype'):
+        print(f"dtype: {o.dtype}")
+
+    # size attribute
+    if hasattr(o, 'size') and not callable(o.size):
+        print(f"size: {o.size}")
+
+    # Pythonic length
+    try:
+        print(f"len: {len(o)}")
+    except Exception:
+        pass
+
+    # Recursive descent into lists
+    try:
+        if isinstance(o, (list, tuple)):
+            for idx, item in enumerate(o):
+                probe(item, f"{name}[{idx}]")
+    except Exception:
+        pass
+
+    # PyTorch tensors
+    if isinstance(o, torch.Tensor):
+        print(f"shape: {tuple(o.size())}")
+        print(f"dtype: {o.dtype}")
+        print(f"numel: {o.numel()}")
+
+        print(f"shape: {tuple(o.size())}")
+        print(f"dtype: {o.dtype}")
+        print(f"numel: {o.numel()}")
+        print(f"device: {o.device}")
