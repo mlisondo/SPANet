@@ -101,9 +101,12 @@ def evaluate_on_test_dataset(
     if progress:
         dataloader = progress.track(dataloader, description="Evaluating SCM model")
 
+    probe(dataloader, "dataloader")
+
     timer = Timer()
     for batch in dataloader:
         # sources = tuple(Source(x[0].to(model.device), x[1].to(model.device)) for x in batch.sources)
+        probe(batch, "batch")
         timer.start()
         outputs = model.evaluate_scm_batch(batch)
         timer.stop()
@@ -121,3 +124,50 @@ def evaluate_on_test_dataset(
     if return_full_output:
         return arrays, tuple(full_outputs)
     return arrays
+
+
+
+
+
+
+def probe(o, name=None):
+    obj = type(o)
+    header = f"Object '{name}'"
+    print(f"\n{header}: {obj.__module__}.{obj.__name__}")
+
+    # NumPy-style introspection
+    if hasattr(o, 'shape'):
+        print(f"shape: {o.shape}")
+    if hasattr(o, 'ndim'):
+        print(f"ndim: {o.ndim}")
+    if hasattr(o, 'dtype'):
+        print(f"dtype: {o.dtype}")
+
+    # size attribute
+    if hasattr(o, 'size') and not callable(o.size):
+        print(f"size: {o.size}")
+
+    # Pythonic length
+    try:
+        print(f"len: {len(o)}")
+    except Exception:
+        pass
+
+    # Recursive descent into lists
+    try:
+        if isinstance(o, (list, tuple)):
+            for idx, item in enumerate(o):
+                probe(item, f"{name}[{idx}]")
+    except Exception:
+        pass
+
+    # PyTorch tensors
+    if isinstance(o, torch.Tensor):
+        print(f"shape: {tuple(o.size())}")
+        print(f"dtype: {o.dtype}")
+        print(f"numel: {o.numel()}")
+
+        print(f"shape: {tuple(o.size())}")
+        print(f"dtype: {o.dtype}")
+        print(f"numel: {o.numel()}")
+        print(f"device: {o.device}")
