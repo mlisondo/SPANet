@@ -10,7 +10,7 @@ from rich import progress
 import time
 
 from spanet.options import Options
-from spanet.dataset.types import Source
+from spanet.dataset.types import Source, AssignmentTargets
 from spanet.network.jet_reconstruction.jet_scm_eval_test import SCM_Eval_Test
 
 from collections import defaultdict
