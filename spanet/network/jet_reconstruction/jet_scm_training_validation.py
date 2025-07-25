@@ -93,12 +93,6 @@ class SCM_Training_Val(JetSecondaryLoader):
         for e in true_event_idx:
             print(f"\n===== EVENT {int(e)} =====")
 
-            print("jet_preds_tensor:")
-            print(jet_preds_tensor[e])
-
-            print("true_idx:")
-            print(true_idx[:, e])
-
             print("pred_truth matrix (K x B):")
             print(pred_truth[e])
 
