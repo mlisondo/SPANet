@@ -110,10 +110,10 @@ class SCM_Training_Val(JetSecondaryLoader):
 
         return {'val_total_loss': total_loss}
     
-    def on_train_epoch_start(self):
-        for name, module in self.named_children():
-            if name not in ['classifier', 'masker']:
-                module.eval()
-        self.eval()
-        self.classifier.train()
-        self.masker.train()
+    # def on_train_epoch_start(self):
+    #     for name, module in self.named_children():
+    #         if name not in ['classifier', 'masker']:
+    #             module.eval()
+    #     self.eval()
+    #     self.classifier.train()
+    #     self.masker.train()
