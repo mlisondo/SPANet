@@ -103,9 +103,9 @@ def evaluate_on_test_dataset(
 
     timer = Timer()
     for batch in dataloader:
-        sources = tuple(Source(x[0].to(model.device), x[1].to(model.device)) for x in batch.sources)
+        # sources = tuple(Source(x[0].to(model.device), x[1].to(model.device)) for x in batch.sources)
         timer.start()
-        outputs = model.evaluate_scm_batch(sources)
+        outputs = model.evaluate_scm_batch(batch)
         timer.stop()
 
         for k, v in out.items():    # change to outputs.items() ?
