@@ -47,14 +47,27 @@ class SCM_Training_Val(JetSecondaryLoader):
     def _compiled_core(self, features_arr, pred_truth, class_truth):
         print("[DEBUG] --> Inside _compiled_core")
 
+        e = 0
+
         """Tensor-only slice of forward_scm."""
         events, K, branches, jets, feats = features_arr.shape
         class_in = features_arr.reshape(events, -1)
+
+        print("\n[DEBUG] Classifier Input [0]:")
+        print(class_in[e])  # Shape: (flat_dim,)
+
         class_logits = self.classifier(class_in)
+
+        print("[DEBUG] Classifier Output Logits [0]:")
+        print(class_logits[e])  # Shape: (K,)
+
 
         class_truth_int = class_truth.to(torch.int)
         class_first = torch.argmax(class_truth_int, 1)
         has_truth   = torch.any(class_truth_int == 1, 1)
+
+        print("[DEBUG] Classifier Truth (argmax) [0]:", class_first[e].item())
+        print("[DEBUG] Classifier Truth (raw):", class_truth[e])
 
         mask = class_truth.bool().clone()
         rows = torch.arange(events, device=class_logits.device)
@@ -63,19 +76,30 @@ class SCM_Training_Val(JetSecondaryLoader):
         neg_inf = torch.finfo(class_logits.dtype).min
         masked_logits = class_logits.masked_fill(mask, neg_inf)
 
+        print("[DEBUG] Masked Classifier Logits [0]:")
+        print(masked_logits[e])
+        
         class_loss = nn.CrossEntropyLoss(reduction="none")(
             class_logits, class_first)[has_truth].mean()
-        
+        print(f"[DEBUG] Classifier Loss: {class_loss.item():.4f}")
+
         # vectorised masker
         flat = features_arr.reshape(events*K, branches*jets*feats)
+        print("\n[DEBUG] Masker Input [0]:")
+        print(flat[e * K])
+
         logits_all = self.masker(flat).view(events, K, branches)
+        print("[DEBUG] Masker Logits [0]:")
+        print(logits_all[e])  # Shape: (K, B)
+
         mask_loss  = nn.BCEWithLogitsLoss()(logits_all,
                                             pred_truth.float())
+        print(f"[DEBUG] Masker Loss: {mask_loss.item():.4f}")
         
         pred_k = torch.argmax(class_logits, 1)
+        print(f"[DEBUG] pred_k: {pred_k}")
         top1_acc = class_truth[rows, pred_k].float().mean()
-
-        print(f"[DEBUG] class_loss: {class_loss.item():.4f}, mask_loss: {mask_loss.item():.4f}, top1_acc: {top1_acc.item():.4f}")
+        print(f"[DEBUG] Top 1 Acc: {top1_acc}")
 
         return class_loss, mask_loss, top1_acc
     
@@ -84,38 +108,31 @@ class SCM_Training_Val(JetSecondaryLoader):
 
     def forward_scm(self, batch):
         print("[DEBUG] --> Entered forward_scm")
+
         pred_truth, true_masks, features_arr, class_truth = self.topk_data(batch)
 
-        true_event_idx = torch.nonzero(class_truth[:, 0]).squeeze(1)
-        true_event_idx = true_event_idx[:5]
+        e = 0
 
-        probe(true_masks, "true_masks")
-        probe(pred_truth, "pred_truth")
-        probe(class_truth, "class_truth")
-        probe(features_arr, "features_arr")
+        print("\n======== FORWARD: Event 0 Inputs ========")
+        print("pred_truth[0]:")
+        print(pred_truth[e])  # (K, B)
 
-        for e in true_event_idx:
-            print(f"\n===== EVENT {int(e)} =====")
+        print("true_masks[:, 0]:")
+        print(true_masks[:, e])  # (B,)
 
-            print("pred_truth matrix (K x B):")
-            print(pred_truth[e])
+        print("class_truth[0]:")
+        print(class_truth[e])  # (K,)
 
-            print("true_masks:")
-            print(true_masks[:, e])
+        print("features_arr[0]:")
+        print(features_arr[e])  # (K, B, J, F)
 
-            print("class_truth row:")
-            print(class_truth[e])
+        print("=" * 40)
 
-            print("features_arr:")
-            print(features_arr[e, :, :, :, 0])
-
-            print("=" * 30)
 
         return self._compiled_core(features_arr, pred_truth, class_truth)
 
 
     def training_step(self, batch: Batch, batch_idx: int) -> Dict[str, torch.Tensor]:
-        print(f"\n[DEBUG] --> Training Step {batch_idx}")
 
         self.on_train_epoch_start()
 
@@ -127,8 +144,6 @@ class SCM_Training_Val(JetSecondaryLoader):
         self.log('train_masker_loss', mask_loss)
         self.log('train_total_loss', total_loss)
         self.log('train_top1_acc', top1_acc)
-
-        print(f"[DEBUG] total_loss: {total_loss.item():.4f}, top1_acc: {top1_acc.item():.4f}")
 
 
         raise RuntimeError("Debug break")
@@ -148,13 +163,10 @@ class SCM_Training_Val(JetSecondaryLoader):
         return {'val_total_loss': total_loss}
     
     def on_train_epoch_start(self):
-        print("[DEBUG] --> Entered on_train_epoch_start")
 
         for name, module in self.named_children():
             if name not in ['classifier', 'masker']:
-                print(f"[DEBUG] Setting module {name} to eval()")
                 module.eval()
-        print("[DEBUG] Setting self.eval() and classifier/masker to train()")
         self.eval()
         self.classifier.train()
         self.masker.train()
