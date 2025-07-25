@@ -34,8 +34,8 @@ def topk_acc(class_truth, class_logits, k): # Top-K accuracy: correct hypo in to
     return top_k_accuracy_score(
         true_labels,    # the correct class index per event
         class_logits,   # score array
-        k,
-        np.arange(class_logits.shape[1]) # Ensures all possible class labels are considered
+        k=k,
+        labels=np.arange(class_logits.shape[1]) # Ensures all possible class labels are considered
     )
 
 
