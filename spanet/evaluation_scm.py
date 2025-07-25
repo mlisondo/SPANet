@@ -9,7 +9,7 @@ from rich import progress
 
 import time
 
-from spanet.options import Options
+from spanet.options import Options, Source
 from spanet.network.jet_reconstruction.jet_scm_eval_test import SCM_Eval_Test
 
 from collections import defaultdict
@@ -107,11 +107,11 @@ def evaluate_on_test_dataset(
         outputs = model.evaluate_scm_batch(sources)
         timer.stop()
 
-        for k, v in out.items():
+        for k, v in out.items():    # change to outputs.items() ?
             bank[k].append(v.cpu().numpy())
 
         if return_full_output:
-            full_outputs.append(tree_map(lambda x: x.cpu().numpy(), out))
+            full_outputs.append(tree_map(lambda x: x.cpu().numpy(), out))   # change to outputs ?
 
     print(f"Total combinatorics time: {timer.get_time():.2f} s")
 
