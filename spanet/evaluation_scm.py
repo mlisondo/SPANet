@@ -101,11 +101,11 @@ def evaluate_on_test_dataset(
     if progress:
         dataloader = progress.track(dataloader, description="Evaluating SCM model")
 
-    probe(dataloader, "dataloader")
-
     timer = Timer()
     for batch in dataloader:
         # sources = tuple(Source(x[0].to(model.device), x[1].to(model.device)) for x in batch.sources)
+        probe(batch, "batch")
+        batch = move_batch_to_device(batch, model.device)
         probe(batch, "batch")
         timer.start()
         outputs = model.evaluate_scm_batch(batch)
@@ -126,6 +126,15 @@ def evaluate_on_test_dataset(
     return arrays
 
 
+def move_batch_to_device(batch, device):
+    sources = [Source(x[0].to(device), x[1].to(device)) for x in batch[0]]
+    integers = batch[1].to(device)
+    assignments = []
+    for item in batch[2]:
+        idx = item[0].to(device)
+        mask = item[1].to(device)
+        assignments.append((idx, mask))
+    return (sources, integers, [AssignmentTargets(*a) for a in assignments], batch[3], batch[4])
 
 
 
