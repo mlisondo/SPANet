@@ -138,8 +138,14 @@ def main(
     fpr, tpr          = m_mask["_roc_curve"]
 
 
+    # Make numpy arrays JSON serializable
+    metrics_serializable = {
+        key: (value.tolist() if isinstance(value, np.ndarray) else value)
+        for key, value in metrics.items()
+    }
+
     with open(os.path.join(output_dir, "metrics.json"), "w") as f:
-        json.dump(metrics, f, indent=4)
+        json.dump(metrics_serializable, f, indent=4)
 
     # ------------------ figures ------------------
     with PdfPages(os.path.join(output_dir, "plots.pdf")) as pdf:
