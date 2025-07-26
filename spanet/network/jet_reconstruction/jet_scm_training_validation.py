@@ -45,7 +45,6 @@ class SCM_Training_Val(JetSecondaryLoader):
         self.masker     = tcompile(self.masker,    dynamic=True)
 
     def _compiled_core(self, features_arr, pred_truth, class_truth):
-        # print("[DEBUG] --> Entered _compiled_core")
 
         """Tensor-only slice of forward_scm."""
         events, K, branches, jets, feats = features_arr.shape
@@ -90,7 +89,6 @@ class SCM_Training_Val(JetSecondaryLoader):
     _compiled_core = tcompile(_compiled_core, dynamic=True)
 
     def forward_scm(self, batch):
-        # print("[DEBUG] --> Entered forward_scm")
 
         pred_truth, true_masks, features_arr, class_truth = self.topk_data(batch)
 
@@ -105,7 +103,6 @@ class SCM_Training_Val(JetSecondaryLoader):
 
         total_loss = class_loss + mask_loss
 
-        probe(class_loss, class_loss)
 
         self.log('train_classifier_loss', class_loss)
         self.log('train_masker_loss', mask_loss)
