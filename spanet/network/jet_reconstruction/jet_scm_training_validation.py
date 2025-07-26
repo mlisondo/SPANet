@@ -45,22 +45,13 @@ class SCM_Training_Val(JetSecondaryLoader):
         self.masker     = tcompile(self.masker,    dynamic=True)
 
     def _compiled_core(self, features_arr, pred_truth, class_truth):
-        print("[DEBUG] --> Inside _compiled_core")
-
-        e = 0
+        # print("[DEBUG] --> Entered _compiled_core")
 
         """Tensor-only slice of forward_scm."""
         events, K, branches, jets, feats = features_arr.shape
         class_in = features_arr.reshape(events, -1)
 
-        print("\n[DEBUG] Classifier Input [0]:")
-        print(class_in[e])  # Shape: (flat_dim,)
-
         class_logits = self.classifier(class_in)
-
-        print("[DEBUG] Classifier Output Logits [0]:")
-        print(class_logits[e])  # Shape: (K,)
-
 
         class_truth_int = class_truth.to(torch.int)
         class_first = torch.argmax(class_truth_int, 1)
@@ -82,40 +73,16 @@ class SCM_Training_Val(JetSecondaryLoader):
         class_loss = nn.CrossEntropyLoss(reduction="none")(
             masked_logits, chosen)[has_truth].mean()
 
-        print("[DEBUG] Classifier Truth (argmax) [0]:", class_first[e].item())
-        print("[DEBUG] Classifier Truth (raw):", class_truth[e])
-
-        # mask = ~class_truth.bool().clone()
-        # rows = torch.arange(events, device=class_logits.device)
-        
-        # mask[rows[has_truth], class_first[has_truth]] = False
-        # neg_inf = torch.finfo(class_logits.dtype).min
-        # masked_logits = class_logits.masked_fill(mask, neg_inf)
-
-        print("[DEBUG] Masked Classifier Logits [0]:")
-        print(masked_logits[e])
-        
-        # class_loss = nn.CrossEntropyLoss(reduction="none")(
-        #     class_logits, class_first)[has_truth].mean()
-        print(f"[DEBUG] Classifier Loss: {class_loss.item():.4f}")
-
         # vectorised masker
         flat = features_arr.reshape(events*K, branches*jets*feats)
-        print("\n[DEBUG] Masker Input [0]:")
-        print(flat[e * K])
 
         logits_all = self.masker(flat).view(events, K, branches)
-        print("[DEBUG] Masker Logits [0]:")
-        print(logits_all[e])  # Shape: (K, B)
 
         mask_loss  = nn.BCEWithLogitsLoss()(logits_all,
                                             pred_truth.float())
-        print(f"[DEBUG] Masker Loss: {mask_loss.item():.4f}")
         
         pred_k = torch.argmax(class_logits, 1)
-        print(f"[DEBUG] pred_k: {pred_k}")
         top1_acc = class_truth[rows, pred_k].float().mean()
-        print(f"[DEBUG] Top 1 Acc: {top1_acc}")
 
         return class_loss, mask_loss, top1_acc
     
@@ -123,27 +90,9 @@ class SCM_Training_Val(JetSecondaryLoader):
     _compiled_core = tcompile(_compiled_core, dynamic=True)
 
     def forward_scm(self, batch):
-        print("[DEBUG] --> Entered forward_scm")
+        # print("[DEBUG] --> Entered forward_scm")
 
         pred_truth, true_masks, features_arr, class_truth = self.topk_data(batch)
-
-        e = 0
-
-        print("\n======== FORWARD: Event 0 Inputs ========")
-        print("pred_truth[0]:")
-        print(pred_truth[e])  # (K, B)
-
-        print("true_masks[:, 0]:")
-        print(true_masks[:, e])  # (B,)
-
-        print("class_truth[0]:")
-        print(class_truth[e])  # (K,)
-
-        print("features_arr[0]:")
-        print(features_arr[e])  # (K, B, J, F)
-
-        print("=" * 40)
-
 
         return self._compiled_core(features_arr, pred_truth, class_truth)
 
@@ -156,13 +105,14 @@ class SCM_Training_Val(JetSecondaryLoader):
 
         total_loss = class_loss + mask_loss
 
+        probe(class_loss, class_loss)
+
         self.log('train_classifier_loss', class_loss)
         self.log('train_masker_loss', mask_loss)
         self.log('train_total_loss', total_loss)
         self.log('train_top1_acc', top1_acc)
 
-
-        raise RuntimeError("Debug break")
+        # raise RuntimeError("Debug break")
 
         return total_loss
         
@@ -179,7 +129,6 @@ class SCM_Training_Val(JetSecondaryLoader):
         return {'val_total_loss': total_loss}
     
     def on_train_epoch_start(self):
-
         for name, module in self.named_children():
             if name not in ['classifier', 'masker']:
                 module.eval()
