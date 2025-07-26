@@ -52,20 +52,8 @@ class SCM_Training_Val(JetSecondaryLoader):
         self.focal_gamma = 2.0
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
     def _compiled_core(self, features_arr, pred_truth, class_truth):
+        events, K, branches, jets, feats = features_arr.shape
         class_in = features_arr.reshape(events, -1)  # [N, K*B*J*F]
         expected_in = K * branches * jets * feats
 
@@ -112,11 +100,8 @@ class SCM_Training_Val(JetSecondaryLoader):
             pos_rate, avg_pos_weight
         )
 
-
-
-
     # Multi-positive classifier loss
-
+    # @staticmethod
     def _multi_positive_ce(class_logits: torch.Tensor, class_truth: torch.Tensor):
         N, C = class_logits.shape
         pos_mask = class_truth.bool()
@@ -141,6 +126,7 @@ class SCM_Training_Val(JetSecondaryLoader):
 
     # Focal loss to bias toward positive class and difficult examples
 
+    # @staticmethod
     def focal_bce_with_logits(logits, targets, alpha_pos=0.25, gamma=2.0, reduction="mean"):
         p = torch.sigmoid(logits)
         pt = torch.where(targets.bool(), p, 1 - p)  # p_t
@@ -158,6 +144,69 @@ class SCM_Training_Val(JetSecondaryLoader):
         if reduction == "sum":
             return loss.sum()
         return loss
+
+    # single call covers whole tensor graph
+    _compiled_core = tcompile(_compiled_core, dynamic=True)
+
+    def forward_scm(self, batch):
+        print("[DEBUG] -> enetered forward_scm")
+
+        pred_truth, true_masks, features_arr, class_truth, true_idx, jet_preds_tensor = self.topk_data(batch)
+
+        return self._compiled_core(features_arr, pred_truth, class_truth)
+
+    def training_step(self, batch: Batch, batch_idx: int):
+        self.on_train_epoch_start()
+        (
+            class_loss, mask_loss, top1_acc_truth,
+            has_truth_frac, num_pos_mean, ce_random_baseline,
+            pos_rate, avg_pos_weight
+        ) = self.forward_scm(batch)
+
+        total_loss = class_loss + mask_loss
+
+        self.log('train_classifier_loss', class_loss)
+        self.log('train_masker_loss', mask_loss)
+        self.log('train_total_loss', total_loss)
+        self.log('train_top1_acc_truth', top1_acc_truth)
+        self.log('train_has_truth_frac', has_truth_frac)
+        self.log('train_num_pos_mean', num_pos_mean)
+        self.log('train_ce_random_baseline', ce_random_baseline)
+        self.log('train_mask_pos_rate', pos_rate)
+        self.log('train_mask_pos_weight_mean', avg_pos_weight)
+
+        # raise RuntimeError("Debug break")
+
+        return total_loss
+
+    def validation_step(self, batch: Batch, batch_idx: int):
+        (
+            class_loss, mask_loss, top1_acc_truth,
+            has_truth_frac, num_pos_mean, ce_random_baseline,
+            pos_rate, avg_pos_weight
+        ) = self.forward_scm(batch)
+
+        total_loss = class_loss + mask_loss
+
+        self.log('val_classifier_loss', class_loss, on_epoch=True, prog_bar=True)
+        self.log('val_masker_loss', mask_loss, on_epoch=True, prog_bar=True)
+        self.log('val_total_loss', total_loss, on_epoch=True, prog_bar=True)
+        self.log('val_top1_acc_truth', top1_acc_truth, on_epoch=True, prog_bar=True)
+        self.log('val_has_truth_frac', has_truth_frac, on_epoch=True)
+        self.log('val_num_pos_mean', num_pos_mean, on_epoch=True)
+        self.log('val_ce_random_baseline', ce_random_baseline, on_epoch=True)
+        self.log('val_mask_pos_rate', pos_rate, on_epoch=True)
+        self.log('val_mask_pos_weight_mean', avg_pos_weight, on_epoch=True)
+
+        return {'val_total_loss': total_loss}
+
+
+
+
+
+
+
+
 
 
 
@@ -233,131 +282,6 @@ class SCM_Training_Val(JetSecondaryLoader):
     #     probe(top1_acc, "top1_acc")
 
     #     return class_loss, mask_loss, top1_acc
-
-
-
-
-
-
-
-    
-    # single call covers whole tensor graph
-    _compiled_core = tcompile(_compiled_core, dynamic=True)
-
-
-
-
-
-
-
-
-
-    def forward_scm(self, batch):
-        print("[DEBUG] -> enetered forward_scm")
-
-        pred_truth, true_masks, features_arr, class_truth, true_idx, jet_preds_tensor = self.topk_data(batch)
-
-        # probe(pred_truth, "pred_truth")
-        # probe(true_masks, "true_masks")
-        # probe(features_arr, "features_arr")
-        # probe(class_truth, "class_truth")
-        # probe(true_idx, "true_idx")
-        # probe(jet_preds_tensor, "jet_preds_tensor")
-
-        # true_event_idx_all = torch.nonzero(class_truth[:, 0]).squeeze(1)
-        # true_event_idx = true_event_idx_all[0]
-
-        # false_event_idx_all = ~torch.nonzero(class_truth[:, 0]).squeeze(1)
-        # false_event_idx = false_event_idx_all[0]
-
-        # one_one = [true_event_idx] + [false_event_idx]
-
-        # for e in one_one:
-        #     print(f"\n===== EVENT {int(e)} =====")
-
-        #     print("jet_preds_tensor:")
-        #     print(jet_preds_tensor[e])
-
-        #     print("true_idx:")
-        #     print(true_idx[:, e])
-
-        #     print("pred_truth matrix (K x B):")
-        #     print(pred_truth[e])
-
-        #     print("true_masks:")
-        #     print(true_masks[:, e])
-
-        #     print("class_truth row:")
-        #     print(class_truth[e])
-
-        #     print("=" * 30)
-
-        return self._compiled_core(features_arr, pred_truth, class_truth)
-
-
-
-
-
-
-
-
-
-
-    def training_step(self, batch: Batch, batch_idx: int):
-        self.on_train_epoch_start()
-        (
-            class_loss, mask_loss, top1_acc_truth,
-            has_truth_frac, num_pos_mean, ce_random_baseline,
-            pos_rate, avg_pos_weight
-        ) = self.forward_scm(batch)
-
-        total_loss = class_loss + mask_loss
-
-        self.log('train_classifier_loss', class_loss)
-        self.log('train_masker_loss', mask_loss)
-        self.log('train_total_loss', total_loss)
-        self.log('train_top1_acc_truth', top1_acc_truth)
-        self.log('train_has_truth_frac', has_truth_frac)
-        self.log('train_num_pos_mean', num_pos_mean)
-        self.log('train_ce_random_baseline', ce_random_baseline)
-        self.log('train_mask_pos_rate', pos_rate)
-        self.log('train_mask_pos_weight_mean', avg_pos_weight)
-
-        raise RuntimeError("Debug break")
-
-        return total_loss
-
-    def validation_step(self, batch: Batch, batch_idx: int):
-        (
-            class_loss, mask_loss, top1_acc_truth,
-            has_truth_frac, num_pos_mean, ce_random_baseline,
-            pos_rate, avg_pos_weight
-        ) = self.forward_scm(batch)
-
-        total_loss = class_loss + mask_loss
-
-        self.log('val_classifier_loss', class_loss, on_epoch=True, prog_bar=True)
-        self.log('val_masker_loss', mask_loss, on_epoch=True, prog_bar=True)
-        self.log('val_total_loss', total_loss, on_epoch=True, prog_bar=True)
-        self.log('val_top1_acc_truth', top1_acc_truth, on_epoch=True, prog_bar=True)
-        self.log('val_has_truth_frac', has_truth_frac, on_epoch=True)
-        self.log('val_num_pos_mean', num_pos_mean, on_epoch=True)
-        self.log('val_ce_random_baseline', ce_random_baseline, on_epoch=True)
-        self.log('val_mask_pos_rate', pos_rate, on_epoch=True)
-        self.log('val_mask_pos_weight_mean', avg_pos_weight, on_epoch=True)
-
-        return {'val_total_loss': total_loss}
-
-
-
-
-
-
-
-
-
-
-
 
 
     # def training_step(self, batch: Batch, batch_idx: int) -> Dict[str, torch.Tensor]:
