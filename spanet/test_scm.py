@@ -242,6 +242,20 @@ def main(
     metrics["pT_tot_mean_partial"] = float(pT_tot_partial.mean()) if len(pT_tot_partial) > 0 else float('nan')
     metrics["pT_tot_std_partial"]  = float(pT_tot_partial.std())  if len(pT_tot_partial) > 0 else float('nan')
 
+    # 1) Are MP really probabilities?
+    print("MP min/max/mean:", MP.min(), MP.max(), MP.mean())
+
+    # 2) Compare score distributions by label
+    pos = MP[MT == 1]; neg = MP[MT == 0]
+    print("pos mean:", pos.mean(), "neg mean:", neg.mean(), "pos>neg?", pos.mean() > neg.mean())
+
+    # 3) Try flipped scores
+    from sklearn.metrics import roc_auc_score, average_precision_score
+    print("ROC AUC (as-is):", roc_auc_score(MT.ravel(), MP.ravel()))
+    print("ROC AUC (flipped):", roc_auc_score(MT.ravel(), 1.0 - MP.ravel()))
+    print("AP (as-is):", average_precision_score(MT.ravel(), MP.ravel()))
+    print("AP (flipped):", average_precision_score(MT.ravel(), 1.0 - MP.ravel()))
+
     with open(os.path.join(output_dir, "metrics.json"), "w") as f:
         json.dump(metrics, f, indent=4)
 
@@ -293,22 +307,6 @@ def main(
         plt.title("Total $p_T$")
         plt.legend()
         pdf.savefig(); plt.close()
-
-
-
-# 1) Are MP really probabilities?
-print("MP min/max/mean:", MP.min(), MP.max(), MP.mean())
-
-# 2) Compare score distributions by label
-pos = MP[MT == 1]; neg = MP[MT == 0]
-print("pos mean:", pos.mean(), "neg mean:", neg.mean(), "pos>neg?", pos.mean() > neg.mean())
-
-# 3) Try flipped scores
-from sklearn.metrics import roc_auc_score, average_precision_score
-print("ROC AUC (as-is):", roc_auc_score(MT.ravel(), MP.ravel()))
-print("ROC AUC (flipped):", roc_auc_score(MT.ravel(), 1.0 - MP.ravel()))
-print("AP (as-is):", average_precision_score(MT.ravel(), MP.ravel()))
-print("AP (flipped):", average_precision_score(MT.ravel(), 1.0 - MP.ravel()))
 
 
 
