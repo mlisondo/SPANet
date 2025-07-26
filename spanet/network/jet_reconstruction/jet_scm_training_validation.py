@@ -113,11 +113,20 @@ class SCM_Training_Val(JetSecondaryLoader):
     def forward_scm(self, batch):
         print("[DEBUG] -> enetered forward_scm")
 
-        pred_truth, true_masks, features_arr, class_truth, true_idx = self.topk_data(batch)
+        pred_truth, true_masks, features_arr, class_truth, true_idx, jet_preds_tensor = self.topk_data(batch)
 
-        true_event_idx = torch.nonzero(class_truth[:, 0]).squeeze(1)[0]
+        probe(pred_truth, "pred_truth")
+        probe(true_masks, "true_masks")
+        probe(features_arr, "features_arr")
+        probe(class_truth, "class_truth")
+        probe(true_idx, "true_idx")
+        probe(jet_preds_tensor, "jet_preds_tensor")
 
-        false_event_idx = ~torch.nonzero(class_truth[:, 0]).squeeze(1)[0]
+        true_event_idx_all = torch.nonzero(class_truth[:, 0]).squeeze(1)
+        true_event_idx = true_event_idx_all[0]
+
+        false_event_idx_all = ~torch.nonzero(class_truth[:, 0]).squeeze(1)
+        false_event_idx = false_event_idx_all[0]
 
         one_one = [true_event_idx] + [false_event_idx]
 
