@@ -44,7 +44,10 @@ class SCM_Training_Val(JetSecondaryLoader):
         self.classifier = tcompile(self.classifier, dynamic=True)
         self.masker     = tcompile(self.masker,    dynamic=True)
 
-    def _compiled_core(self, features_arr, pred_truth, class_truth):
+    def _compiled_core(self, features_arr, pred_truth, class_truth, one_one):
+        print("[DEBUG] -> enetered _compiled_core")
+
+        print("one_one", one_one)
 
         """Tensor-only slice of forward_scm."""
         events, K, branches, jets, feats = features_arr.shape
@@ -83,19 +86,66 @@ class SCM_Training_Val(JetSecondaryLoader):
         pred_k = torch.argmax(class_logits, 1)
         top1_acc = class_truth[rows, pred_k].float().mean()
 
+
+        # PROBE STATION:
+        probe(class_in, "class_in")
+        probe(class_logits, "class_logits")
+        probe(class_truth_int, "class_truth_int")
+        probe(class_first, "class_first")
+        probe(has_truth, "has_truth")
+        probe(chosen, "chosen")
+        probe(mask, "mask")
+        probe(rows, "rows")
+        probe(neg_inf, "neg_inf")
+        probe(masked_logits, "masked_logits")
+        probe(class_loss, "class_loss")
+        probe(flat, "flat")
+        probe(logits_all, "logits_all")
+        probe(mask_loss, "mask_loss")
+        probe(pred_k, "pred_k")
+        probe(top1_acc, "top1_acc")
+
         return class_loss, mask_loss, top1_acc
     
     # single call covers whole tensor graph
     _compiled_core = tcompile(_compiled_core, dynamic=True)
 
     def forward_scm(self, batch):
+        print("[DEBUG] -> enetered forward_scm")
 
-        pred_truth, true_masks, features_arr, class_truth = self.topk_data(batch)
+        pred_truth, true_masks, features_arr, class_truth, true_idx = self.topk_data(batch)
 
-        return self._compiled_core(features_arr, pred_truth, class_truth)
+        true_event_idx = torch.nonzero(class_truth[:, 0]).squeeze(1)[0]
+
+        false_event_idx = ~torch.nonzero(class_truth[:, 0]).squeeze(1)[0]
+
+        one_one = [true_event_idx] + [false_event_idx]
+
+        for e in one_one:
+            print(f"\n===== EVENT {int(e)} =====")
+
+            print("jet_preds_tensor:")
+            print(jet_preds_tensor[e])
+
+            print("true_idx:")
+            print(true_idx[:, e])
+
+            print("pred_truth matrix (K x B):")
+            print(pred_truth[e])
+
+            print("true_masks:")
+            print(true_masks[:, e])
+
+            print("class_truth row:")
+            print(class_truth[e])
+
+            print("=" * 30)
+
+        return self._compiled_core(features_arr, pred_truth, class_truth, one_one)
 
 
     def training_step(self, batch: Batch, batch_idx: int) -> Dict[str, torch.Tensor]:
+        print("[DEBUG] -> enetered training_step")
 
         self.on_train_epoch_start()
 
@@ -103,13 +153,12 @@ class SCM_Training_Val(JetSecondaryLoader):
 
         total_loss = class_loss + mask_loss
 
-
         self.log('train_classifier_loss', class_loss)
         self.log('train_masker_loss', mask_loss)
         self.log('train_total_loss', total_loss)
         self.log('train_top1_acc', top1_acc)
 
-        # raise RuntimeError("Debug break")
+        raise RuntimeError("Debug break")
 
         return total_loss
         

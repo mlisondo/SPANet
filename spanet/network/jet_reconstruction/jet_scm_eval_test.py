@@ -33,7 +33,7 @@ class SCM_Eval_Test(SCM_Training_Val):
         i.e. EVERYTHING !
         """
 
-        pred_truth, true_masks, features_arr, class_truth = self.topk_data(batch)
+        pred_truth, true_masks, features_arr, class_truth, true_idx = self.topk_data(batch)
         true_masks = true_masks.permute(1, 0)  # (events, branches)
         events, K, branches, jets, features = features_arr.shape
 
