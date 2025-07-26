@@ -294,6 +294,24 @@ def main(
         plt.legend()
         pdf.savefig(); plt.close()
 
+
+
+# 1) Are MP really probabilities?
+print("MP min/max/mean:", MP.min(), MP.max(), MP.mean())
+
+# 2) Compare score distributions by label
+pos = MP[MT == 1]; neg = MP[MT == 0]
+print("pos mean:", pos.mean(), "neg mean:", neg.mean(), "pos>neg?", pos.mean() > neg.mean())
+
+# 3) Try flipped scores
+from sklearn.metrics import roc_auc_score, average_precision_score
+print("ROC AUC (as-is):", roc_auc_score(MT.ravel(), MP.ravel()))
+print("ROC AUC (flipped):", roc_auc_score(MT.ravel(), 1.0 - MP.ravel()))
+print("AP (as-is):", average_precision_score(MT.ravel(), MP.ravel()))
+print("AP (flipped):", average_precision_score(MT.ravel(), 1.0 - MP.ravel()))
+
+
+
 if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument("log_directory", type=str,
