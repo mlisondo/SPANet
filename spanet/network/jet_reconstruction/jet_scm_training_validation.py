@@ -59,7 +59,7 @@ class SCM_Training_Val(JetSecondaryLoader):
 
         class_logits = self.classifier(class_in)     # [N, real_K]
 
-        class_loss, has_truth, num_pos, ce_random_baseline = _multi_positive_ce(class_logits, class_truth)
+        class_loss, has_truth, num_pos, ce_random_baseline = self._multi_positive_ce(class_logits, class_truth)
 
         rows = torch.arange(events, device=class_logits.device)
         pred_k = torch.argmax(class_logits, dim=1)
@@ -84,7 +84,7 @@ class SCM_Training_Val(JetSecondaryLoader):
         eps = torch.finfo(t.dtype).eps
         pos_weight_b = (neg_per_branch / (pos_per_branch + eps)).clamp(max=self.pos_weight_cap)  # [B]
 
-        mask_loss = focal_bce_with_logits(
+        mask_loss = self.focal_bce_with_logits(
             logits_all, t,
             alpha_pos=self.focal_alpha_pos,
             gamma=self.focal_gamma,
@@ -101,7 +101,7 @@ class SCM_Training_Val(JetSecondaryLoader):
         )
 
     # Multi-positive classifier loss
-    # @staticmethod
+    @staticmethod
     def _multi_positive_ce(class_logits: torch.Tensor, class_truth: torch.Tensor):
         N, C = class_logits.shape
         pos_mask = class_truth.bool()
@@ -126,7 +126,7 @@ class SCM_Training_Val(JetSecondaryLoader):
 
     # Focal loss to bias toward positive class and difficult examples
 
-    # @staticmethod
+    @staticmethod
     def focal_bce_with_logits(logits, targets, alpha_pos=0.25, gamma=2.0, reduction="mean"):
         p = torch.sigmoid(logits)
         pt = torch.where(targets.bool(), p, 1 - p)  # p_t
