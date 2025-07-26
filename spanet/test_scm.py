@@ -89,75 +89,6 @@ def joint_metrics(class_truth : np.ndarray,
         "_partial_mask": partial_mask
     }
 
-# ------------------------------------------------------------- PHYSICS
-def reco_mass(features: np.ndarray,
-              class_pred: np.ndarray,
-              branch: int) -> np.ndarray:
-    """
-    Reconstruct invariant mass of a given branch for each event.
-    features : (E, K, B, J, F) with [mass, pt, eta, phi, ...]
-    """
-    jets = features[np.arange(features.shape[0]), class_pred, branch]   # (E,J,F)
-    m, pt, eta, phi = jets[..., 0], jets[..., 1], jets[..., 2], jets[..., 3]
-    px = pt * np.cos(phi)
-    py = pt * np.sin(phi)
-    pz = pt * np.sinh(eta)
-    E  = np.sqrt(m**2 + px**2 + py**2 + pz**2)
-
-    E_sum  = E.sum(axis=1)
-    px_sum = px.sum(axis=1)
-    py_sum = py.sum(axis=1)
-    pz_sum = pz.sum(axis=1)
-    return np.sqrt(np.clip(E_sum**2 - px_sum**2 - py_sum**2 - pz_sum**2, 0, None))
-
-def total_pT(features: np.ndarray,
-             class_pred: np.ndarray) -> np.ndarray:
-    """Sum transverse momentum of every jet in the chosen hypothesis."""
-    jets = features[np.arange(features.shape[0]), class_pred]  # (E,B,J,F)
-    pt, phi = jets[..., 1], jets[..., 3]
-    px, py  = pt * np.cos(phi), pt * np.sin(phi)
-    return np.sqrt(px.sum(axis=(1,2))**2 + py.sum(axis=(1,2))**2)
-
-def moments(arr):
-    return (float(arr.mean()) if arr.size else np.nan,
-            float(arr.std())  if arr.size else np.nan)
-
-def physics_metrics(features   : np.ndarray,
-                    class_pred : np.ndarray,
-                    full_mask  : np.ndarray,
-                    partial_mask: np.ndarray) -> Dict[str, float | np.ndarray]:
-    """Top-mass & total‑pT moments for all / full / partial events."""
-    m_top  = reco_mass(features, class_pred, branch=0)
-    pT_tot = total_pT(features, class_pred)
-
-    mt_mean,  mt_std  = moments(m_top)
-    pt_mean,  pt_std  = moments(pT_tot)
-    mt_full_mean, mt_full_std = moments(m_top[full_mask])
-    mt_part_mean, mt_part_std = moments(m_top[partial_mask])
-    pt_full_mean, pt_full_std = moments(pT_tot[full_mask])
-    pt_part_mean, pt_part_std = moments(pT_tot[partial_mask])
-
-    return {
-        "Top_mass_mean"      : mt_mean,
-        "Top_mass_std"       : mt_std,
-        "pT_tot_mean"        : pt_mean,
-        "pT_tot_std"         : pt_std,
-        "Top_mass_mean_full" : mt_full_mean,
-        "Top_mass_std_full"  : mt_full_std,
-        "Top_mass_mean_partial": mt_part_mean,
-        "Top_mass_std_partial" : mt_part_std,
-        "pT_tot_mean_full"   : pt_full_mean,
-        "pT_tot_std_full"    : pt_full_std,
-        "pT_tot_mean_partial": pt_part_mean,
-        "pT_tot_std_partial" : pt_part_std,
-        # raw arrays returned for histograms
-        "_m_top"       : m_top,
-        "_pT_tot"      : pT_tot,
-        "_m_top_full"  : m_top[full_mask],
-        "_m_top_part"  : m_top[partial_mask],
-        "_pT_full"     : pT_tot[full_mask],
-        "_pT_part"     : pT_tot[partial_mask],
-    }
 
 
 # ---------------------- MAIN ----------------------
@@ -202,22 +133,9 @@ def main(
     m_joint = joint_metrics(CT, CPd, MPd, MT)
     metrics.update({k:v for k,v in m_joint.items() if not k.startswith("_")})
 
-    m_phys  = physics_metrics(feats, CPd,
-                              m_joint["_full_mask"],
-                              m_joint["_partial_mask"])
-    metrics.update({k:v for k,v in m_phys.items() if not k.startswith("_")})
-
     # curves for PDF
     recall, precision = m_mask["_pr_curve"]
     fpr, tpr          = m_mask["_roc_curve"]
-
-    # arrays for physics histos
-    m_top       = m_phys["_m_top"]
-    pT_tot      = m_phys["_pT_tot"]
-    m_top_full  = m_phys["_m_top_full"]
-    m_top_partial = m_phys["_m_top_part"]
-    pT_tot_full   = m_phys["_pT_full"]
-    pT_tot_partial= m_phys["_pT_part"]
 
 
     with open(os.path.join(output_dir, "metrics.json"), "w") as f:
@@ -238,54 +156,12 @@ def main(
         plt.title("ROC")
         pdf.savefig(); plt.close()
 
-        # Top mass
+        # Confusion Matrix
         plt.figure()
-        plt.hist(m_top, bins=60)
-        plt.xlabel(r"$m_\mathrm{reco}^{\mathrm{top}}\;[\mathrm{GeV}]$")
-        plt.ylabel("Events")
-        pdf.savefig(); plt.close()
-
-        # Total pT
-        plt.figure()
-        plt.hist(pT_tot, bins=60)
-        plt.xlabel(r"$p_T^{\mathrm{tot}}\;[\mathrm{GeV}]$")
-        plt.ylabel("Events")
-        pdf.savefig(); plt.close()
-
-        # Plot mass: full
-        plt.figure()
-        plt.hist(m_top_full, bins=60, alpha=0.7, label="Full reco")
-        plt.xlabel(r"$m_\mathrm{reco}^{\mathrm{top}}\;[\mathrm{GeV}]$")
-        plt.ylabel("Events")
-        plt.title("Reconstructed Top Mass")
-        plt.legend()
-        pdf.savefig(); plt.close()
-
-        # Plot mass: partial
-        plt.figure()
-        plt.hist(m_top_partial, bins=60, alpha=0.7, label="Partial reco")
-        plt.xlabel(r"$m_\mathrm{reco}^{\mathrm{top}}\;[\mathrm{GeV}]$")
-        plt.ylabel("Events")
-        plt.title("Reconstructed Top Mass")
-        plt.legend()
-        pdf.savefig(); plt.close()
-
-        # Plot total pT: full
-        plt.figure()
-        plt.hist(pT_tot_full, bins=60, alpha=0.7, label="Full reco")
-        plt.xlabel(r"$p_T^{\mathrm{tot}}\;[\mathrm{GeV}]$")
-        plt.ylabel("Events")
-        plt.title("Total $p_T$")
-        plt.legend()
-        pdf.savefig(); plt.close()
-
-        # Plot total pT: partial
-        plt.figure()
-        plt.hist(pT_tot_partial, bins=60, alpha=0.7, label="Partial reco")
-        plt.xlabel(r"$p_T^{\mathrm{tot}}\;[\mathrm{GeV}]$")
-        plt.ylabel("Events")
-        plt.title("Total $p_T$")
-        plt.legend()
+        cm = m_mask["Confusion"]
+        disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=["Negative", "Positive"])
+        disp.plot(cmap="Blues", values_format='d')
+        plt.title("Confusion Matrix")
         pdf.savefig(); plt.close()
 
 
