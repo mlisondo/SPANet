@@ -149,7 +149,6 @@ class SCM_Training_Val(JetSecondaryLoader):
     _compiled_core = tcompile(_compiled_core, dynamic=True)
 
     def forward_scm(self, batch):
-        print("[DEBUG] -> enetered forward_scm")
 
         pred_truth, true_masks, features_arr, class_truth, true_idx, jet_preds_tensor = self.topk_data(batch)
 
@@ -175,8 +174,6 @@ class SCM_Training_Val(JetSecondaryLoader):
         self.log('train_mask_pos_rate', pos_rate)
         self.log('train_mask_pos_weight_mean', avg_pos_weight)
 
-        # raise RuntimeError("Debug break")
-
         return total_loss
 
     def validation_step(self, batch: Batch, batch_idx: int):
@@ -192,11 +189,11 @@ class SCM_Training_Val(JetSecondaryLoader):
         self.log('val_masker_loss', mask_loss, on_epoch=True, prog_bar=True)
         self.log('val_total_loss', total_loss, on_epoch=True, prog_bar=True)
         self.log('val_top1_acc_truth', top1_acc_truth, on_epoch=True, prog_bar=True)
-        self.log('val_has_truth_frac', has_truth_frac, on_epoch=True)
-        self.log('val_num_pos_mean', num_pos_mean, on_epoch=True)
-        self.log('val_ce_random_baseline', ce_random_baseline, on_epoch=True)
-        self.log('val_mask_pos_rate', pos_rate, on_epoch=True)
-        self.log('val_mask_pos_weight_mean', avg_pos_weight, on_epoch=True)
+        self.log('val_has_truth_frac', has_truth_frac, on_epoch=True, prog_bar=True)
+        self.log('val_num_pos_mean', num_pos_mean, on_epoch=True, prog_bar=True)
+        self.log('val_ce_random_baseline', ce_random_baseline, on_epoch=True, prog_bar=True)
+        self.log('val_mask_pos_rate', pos_rate, on_epoch=True, prog_bar=True)
+        self.log('val_mask_pos_weight_mean', avg_pos_weight, on_epoch=True, prog_bar=True)
 
         return {'val_total_loss': total_loss}
 
