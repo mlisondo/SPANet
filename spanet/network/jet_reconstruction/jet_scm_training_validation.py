@@ -292,7 +292,7 @@ class SCM_Training_Val(JetSecondaryLoader):
 
         #     print("=" * 30)
 
-        return self._compiled_core(features_arr, pred_truth, class_truth, one_one)
+        return self._compiled_core(features_arr, pred_truth, class_truth)
 
 
 
