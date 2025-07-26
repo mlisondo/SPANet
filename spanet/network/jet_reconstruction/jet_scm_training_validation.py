@@ -44,144 +44,351 @@ class SCM_Training_Val(JetSecondaryLoader):
         self.classifier = tcompile(self.classifier, dynamic=True)
         self.masker     = tcompile(self.masker,    dynamic=True)
 
-    def _compiled_core(self, features_arr, pred_truth, class_truth, one_one):
-        print("[DEBUG] -> enetered _compiled_core")
 
-        print("one_one", one_one)
+        # Configurable caps/defaults for imbalance handling
+        self.pos_weight_cap = 1000.0
+        self.use_focal_masker = "use_focal_masker"
+        self.focal_alpha_pos = 0.25
+        self.focal_gamma = 2.0
 
-        """Tensor-only slice of forward_scm."""
-        events, K, branches, jets, feats = features_arr.shape
-        class_in = features_arr.reshape(events, -1)
 
-        class_logits = self.classifier(class_in)
 
-        class_truth_int = class_truth.to(torch.int)
-        class_first = torch.argmax(class_truth_int, 1)
-        has_truth   = torch.any(class_truth_int == 1, 1)
 
-        has_truth = class_truth.any(dim=1)
 
-         # Pick one positive per row.
-        chosen = class_truth.to(torch.int).argmax(dim=1)
 
-         # Mask all other positions that were 1 (keep the chosen one unmasked).
-        mask = class_truth.bool().clone()
+
+
+
+
+
+
+
+
+
+    def _compiled_core(self, features_arr, pred_truth, class_truth):
+        class_in = features_arr.reshape(events, -1)  # [N, K*B*J*F]
+        expected_in = K * branches * jets * feats
+
+        class_logits = self.classifier(class_in)     # [N, real_K]
+
+        class_loss, has_truth, num_pos, ce_random_baseline = _multi_positive_ce(class_logits, class_truth)
+
         rows = torch.arange(events, device=class_logits.device)
-        mask[rows[has_truth], chosen[has_truth]] = False
+        pred_k = torch.argmax(class_logits, dim=1)
+        if has_truth.any():
+            top1_acc_truth = class_truth[rows[has_truth], pred_k[has_truth]].float().mean()
+            num_pos_mean = num_pos[has_truth].float().mean()
+        else:
+            top1_acc_truth = torch.tensor(0.0, device=class_logits.device)
+            num_pos_mean = num_pos.float().mean()
+        has_truth_frac = has_truth.float().mean()
 
-        neg_inf = torch.finfo(class_logits.dtype).min
-        masked_logits = class_logits.masked_fill(mask, neg_inf)
+        # Masker
+        flat = features_arr.reshape(events * K, branches * jets * feats)
+        logits_all = self.masker(flat).view(events, K, branches)  # [N, K, B]
 
-        class_loss = nn.CrossEntropyLoss(reduction="none")(
-            masked_logits, chosen)[has_truth].mean()
+        t = pred_truth.float()  # ensure {0,1}
+        # Per-branch prevalence
+        pos_per_branch = t.sum(dim=(0, 1))  # [B]
+        tot_per_branch = torch.tensor(events * K, device=t.device, dtype=t.dtype)
+        neg_per_branch = tot_per_branch - pos_per_branch
 
-        # vectorised masker
-        flat = features_arr.reshape(events*K, branches*jets*feats)
+        eps = torch.finfo(t.dtype).eps
+        pos_weight_b = (neg_per_branch / (pos_per_branch + eps)).clamp(max=self.pos_weight_cap)  # [B]
 
-        logits_all = self.masker(flat).view(events, K, branches)
+        mask_loss = focal_bce_with_logits(
+            logits_all, t,
+            alpha_pos=self.focal_alpha_pos,
+            gamma=self.focal_gamma,
+            reduction="mean",
+        )
 
-        mask_loss  = nn.BCEWithLogitsLoss()(logits_all,
-                                            pred_truth.float())
+        pos_rate = (pos_per_branch.sum() / (events * K * branches)).to(logits_all.dtype)
+        avg_pos_weight = pos_weight_b.mean()
+
+        return (
+            class_loss, mask_loss, top1_acc_truth,
+            has_truth_frac, num_pos_mean, ce_random_baseline,
+            pos_rate, avg_pos_weight
+        )
+
+
+
+
+    # Multi-positive classifier loss
+
+    def _multi_positive_ce(class_logits: torch.Tensor, class_truth: torch.Tensor):
+        N, C = class_logits.shape
+        pos_mask = class_truth.bool()
+        has_truth = pos_mask.any(dim=1)
+
+        log_probs = torch.log_softmax(class_logits, dim=1)
+
+        lp_masked = log_probs.masked_fill(~pos_mask, float("-inf"))
+        pos_lse = torch.logsumexp(lp_masked, dim=1)            # [N]
+        num_pos = pos_mask.sum(dim=1)                           # [N]
+        num_pos_clamped = num_pos.clamp_min(1).to(log_probs.dtype)
+
+        loss_vec = -(pos_lse - torch.log(num_pos_clamped))
+        loss = loss_vec[has_truth].mean() if has_truth.any() else loss_vec.mean()
+
+        with torch.no_grad():
+            ce_baseline = torch.log(torch.tensor(C, dtype=log_probs.dtype, device=log_probs.device)) \
+                        - torch.log(num_pos_clamped)
+            ce_baseline = ce_baseline[has_truth].mean() if has_truth.any() else ce_baseline.mean()
+
+        return loss, has_truth, num_pos, ce_baseline
+
+    # Focal loss to bias toward positive class and difficult examples
+
+    def focal_bce_with_logits(logits, targets, alpha_pos=0.25, gamma=2.0, reduction="mean"):
+        p = torch.sigmoid(logits)
+        pt = torch.where(targets.bool(), p, 1 - p)  # p_t
+        bce = F.binary_cross_entropy_with_logits(logits, targets, reduction="none")
+
+        alpha_t = torch.where(
+            targets.bool(),
+            torch.as_tensor(alpha_pos, device=logits.device, dtype=logits.dtype),
+            torch.as_tensor(1 - alpha_pos, device=logits.device, dtype=logits.dtype),
+        )
+        loss = alpha_t * (1 - pt).pow(gamma) * bce
+
+        if reduction == "mean":
+            return loss.mean()
+        if reduction == "sum":
+            return loss.sum()
+        return loss
+
+
+
+
+
+
+
+
+
+
+
+
+
+    # def _compiled_core(self, features_arr, pred_truth, class_truth, one_one):
+    #     print("[DEBUG] -> enetered _compiled_core")
+
+    #     print("one_one", one_one)
+
+    #     """Tensor-only slice of forward_scm."""
+    #     events, K, branches, jets, feats = features_arr.shape
+    #     class_in = features_arr.reshape(events, -1)
+
+    #     class_logits = self.classifier(class_in)
+
+    #     class_truth_int = class_truth.to(torch.int)
+    #     class_first = torch.argmax(class_truth_int, 1)
+    #     has_truth   = torch.any(class_truth_int == 1, 1)
+
+    #     has_truth = class_truth.any(dim=1)
+
+    #      # Pick one positive per row.
+    #     chosen = class_truth.to(torch.int).argmax(dim=1)
+
+    #      # Mask all other positions that were 1 (keep the chosen one unmasked).
+    #     mask = class_truth.bool().clone()
+    #     rows = torch.arange(events, device=class_logits.device)
+    #     mask[rows[has_truth], chosen[has_truth]] = False
+
+    #     neg_inf = torch.finfo(class_logits.dtype).min
+    #     masked_logits = class_logits.masked_fill(mask, neg_inf)
+
+    #     class_loss = nn.CrossEntropyLoss(reduction="none")(
+    #         masked_logits, chosen)[has_truth].mean()
+
+    #     # vectorised masker
+    #     flat = features_arr.reshape(events*K, branches*jets*feats)
+
+    #     logits_all = self.masker(flat).view(events, K, branches)
+
+    #     mask_loss  = nn.BCEWithLogitsLoss()(logits_all,
+    #                                         pred_truth.float())
         
-        pred_k = torch.argmax(class_logits, 1)
-        top1_acc = class_truth[rows, pred_k].float().mean()
+    #     pred_k = torch.argmax(class_logits, 1)
+    #     top1_acc = class_truth[rows, pred_k].float().mean()
 
 
-        # PROBE STATION:
-        probe(class_in, "class_in")
-        probe(class_logits, "class_logits")
-        probe(class_truth_int, "class_truth_int")
-        probe(class_first, "class_first")
-        probe(has_truth, "has_truth")
-        probe(chosen, "chosen")
-        probe(mask, "mask")
-        probe(rows, "rows")
-        probe(neg_inf, "neg_inf")
-        probe(masked_logits, "masked_logits")
-        probe(class_loss, "class_loss")
-        probe(flat, "flat")
-        probe(logits_all, "logits_all")
-        probe(mask_loss, "mask_loss")
-        probe(pred_k, "pred_k")
-        probe(top1_acc, "top1_acc")
+    #     # PROBE STATION:
+    #     probe(class_in, "class_in")
+    #     probe(class_logits, "class_logits")
+    #     probe(class_truth_int, "class_truth_int")
+    #     probe(class_first, "class_first")
+    #     probe(has_truth, "has_truth")
+    #     probe(chosen, "chosen")
+    #     probe(mask, "mask")
+    #     probe(rows, "rows")
+    #     probe(neg_inf, "neg_inf")
+    #     probe(masked_logits, "masked_logits")
+    #     probe(class_loss, "class_loss")
+    #     probe(flat, "flat")
+    #     probe(logits_all, "logits_all")
+    #     probe(mask_loss, "mask_loss")
+    #     probe(pred_k, "pred_k")
+    #     probe(top1_acc, "top1_acc")
 
-        return class_loss, mask_loss, top1_acc
+    #     return class_loss, mask_loss, top1_acc
+
+
+
+
+
+
+
     
     # single call covers whole tensor graph
     _compiled_core = tcompile(_compiled_core, dynamic=True)
+
+
+
+
+
+
+
+
 
     def forward_scm(self, batch):
         print("[DEBUG] -> enetered forward_scm")
 
         pred_truth, true_masks, features_arr, class_truth, true_idx, jet_preds_tensor = self.topk_data(batch)
 
-        probe(pred_truth, "pred_truth")
-        probe(true_masks, "true_masks")
-        probe(features_arr, "features_arr")
-        probe(class_truth, "class_truth")
-        probe(true_idx, "true_idx")
-        probe(jet_preds_tensor, "jet_preds_tensor")
+        # probe(pred_truth, "pred_truth")
+        # probe(true_masks, "true_masks")
+        # probe(features_arr, "features_arr")
+        # probe(class_truth, "class_truth")
+        # probe(true_idx, "true_idx")
+        # probe(jet_preds_tensor, "jet_preds_tensor")
 
-        true_event_idx_all = torch.nonzero(class_truth[:, 0]).squeeze(1)
-        true_event_idx = true_event_idx_all[0]
+        # true_event_idx_all = torch.nonzero(class_truth[:, 0]).squeeze(1)
+        # true_event_idx = true_event_idx_all[0]
 
-        false_event_idx_all = ~torch.nonzero(class_truth[:, 0]).squeeze(1)
-        false_event_idx = false_event_idx_all[0]
+        # false_event_idx_all = ~torch.nonzero(class_truth[:, 0]).squeeze(1)
+        # false_event_idx = false_event_idx_all[0]
 
-        one_one = [true_event_idx] + [false_event_idx]
+        # one_one = [true_event_idx] + [false_event_idx]
 
-        for e in one_one:
-            print(f"\n===== EVENT {int(e)} =====")
+        # for e in one_one:
+        #     print(f"\n===== EVENT {int(e)} =====")
 
-            print("jet_preds_tensor:")
-            print(jet_preds_tensor[e])
+        #     print("jet_preds_tensor:")
+        #     print(jet_preds_tensor[e])
 
-            print("true_idx:")
-            print(true_idx[:, e])
+        #     print("true_idx:")
+        #     print(true_idx[:, e])
 
-            print("pred_truth matrix (K x B):")
-            print(pred_truth[e])
+        #     print("pred_truth matrix (K x B):")
+        #     print(pred_truth[e])
 
-            print("true_masks:")
-            print(true_masks[:, e])
+        #     print("true_masks:")
+        #     print(true_masks[:, e])
 
-            print("class_truth row:")
-            print(class_truth[e])
+        #     print("class_truth row:")
+        #     print(class_truth[e])
 
-            print("=" * 30)
+        #     print("=" * 30)
 
         return self._compiled_core(features_arr, pred_truth, class_truth, one_one)
 
 
-    def training_step(self, batch: Batch, batch_idx: int) -> Dict[str, torch.Tensor]:
-        print("[DEBUG] -> enetered training_step")
 
+
+
+
+
+
+
+
+    def training_step(self, batch: Batch, batch_idx: int):
         self.on_train_epoch_start()
-
-        class_loss, mask_loss, top1_acc = self.forward_scm(batch)
+        (
+            class_loss, mask_loss, top1_acc_truth,
+            has_truth_frac, num_pos_mean, ce_random_baseline,
+            pos_rate, avg_pos_weight
+        ) = self.forward_scm(batch)
 
         total_loss = class_loss + mask_loss
 
         self.log('train_classifier_loss', class_loss)
         self.log('train_masker_loss', mask_loss)
         self.log('train_total_loss', total_loss)
-        self.log('train_top1_acc', top1_acc)
+        self.log('train_top1_acc_truth', top1_acc_truth)
+        self.log('train_has_truth_frac', has_truth_frac)
+        self.log('train_num_pos_mean', num_pos_mean)
+        self.log('train_ce_random_baseline', ce_random_baseline)
+        self.log('train_mask_pos_rate', pos_rate)
+        self.log('train_mask_pos_weight_mean', avg_pos_weight)
 
         raise RuntimeError("Debug break")
 
         return total_loss
-        
-    def validation_step(self, batch: Batch, batch_idx: int) -> Dict[str, torch.Tensor]:
 
-        class_loss, mask_loss, top1_acc = self.forward_scm(batch)
+    def validation_step(self, batch: Batch, batch_idx: int):
+        (
+            class_loss, mask_loss, top1_acc_truth,
+            has_truth_frac, num_pos_mean, ce_random_baseline,
+            pos_rate, avg_pos_weight
+        ) = self.forward_scm(batch)
+
         total_loss = class_loss + mask_loss
 
         self.log('val_classifier_loss', class_loss, on_epoch=True, prog_bar=True)
         self.log('val_masker_loss', mask_loss, on_epoch=True, prog_bar=True)
         self.log('val_total_loss', total_loss, on_epoch=True, prog_bar=True)
-        self.log('val_top1_acc', top1_acc, on_epoch=True, prog_bar=True)
+        self.log('val_top1_acc_truth', top1_acc_truth, on_epoch=True, prog_bar=True)
+        self.log('val_has_truth_frac', has_truth_frac, on_epoch=True)
+        self.log('val_num_pos_mean', num_pos_mean, on_epoch=True)
+        self.log('val_ce_random_baseline', ce_random_baseline, on_epoch=True)
+        self.log('val_mask_pos_rate', pos_rate, on_epoch=True)
+        self.log('val_mask_pos_weight_mean', avg_pos_weight, on_epoch=True)
 
         return {'val_total_loss': total_loss}
+
+
+
+
+
+
+
+
+
+
+
+
+
+    # def training_step(self, batch: Batch, batch_idx: int) -> Dict[str, torch.Tensor]:
+    #     print("[DEBUG] -> enetered training_step")
+
+    #     self.on_train_epoch_start()
+
+    #     class_loss, mask_loss, top1_acc = self.forward_scm(batch)
+
+    #     total_loss = class_loss + mask_loss
+
+    #     self.log('train_classifier_loss', class_loss)
+    #     self.log('train_masker_loss', mask_loss)
+    #     self.log('train_total_loss', total_loss)
+    #     self.log('train_top1_acc', top1_acc)
+
+    #     raise RuntimeError("Debug break")
+
+    #     return total_loss
+        
+    # def validation_step(self, batch: Batch, batch_idx: int) -> Dict[str, torch.Tensor]:
+
+    #     class_loss, mask_loss, top1_acc = self.forward_scm(batch)
+    #     total_loss = class_loss + mask_loss
+
+    #     self.log('val_classifier_loss', class_loss, on_epoch=True, prog_bar=True)
+    #     self.log('val_masker_loss', mask_loss, on_epoch=True, prog_bar=True)
+    #     self.log('val_total_loss', total_loss, on_epoch=True, prog_bar=True)
+    #     self.log('val_top1_acc', top1_acc, on_epoch=True, prog_bar=True)
+
+    #     return {'val_total_loss': total_loss}
     
     def on_train_epoch_start(self):
         for name, module in self.named_children():
