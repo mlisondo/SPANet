@@ -252,9 +252,17 @@ def main(
         plt.ylabel("Events")
         pdf.savefig(); plt.close()
 
-        # Plot mass: full vs partial
+        # Plot mass: full
         plt.figure()
         plt.hist(m_top_full, bins=60, alpha=0.7, label="Full reco")
+        plt.xlabel(r"$m_\mathrm{reco}^{\mathrm{top}}\;[\mathrm{GeV}]$")
+        plt.ylabel("Events")
+        plt.title("Reconstructed Top Mass")
+        plt.legend()
+        pdf.savefig(); plt.close()
+
+        # Plot mass: partial
+        plt.figure()
         plt.hist(m_top_partial, bins=60, alpha=0.7, label="Partial reco")
         plt.xlabel(r"$m_\mathrm{reco}^{\mathrm{top}}\;[\mathrm{GeV}]$")
         plt.ylabel("Events")
@@ -262,9 +270,17 @@ def main(
         plt.legend()
         pdf.savefig(); plt.close()
 
-        # Plot total pT: full vs partial
+        # Plot total pT: full
         plt.figure()
         plt.hist(pT_tot_full, bins=60, alpha=0.7, label="Full reco")
+        plt.xlabel(r"$p_T^{\mathrm{tot}}\;[\mathrm{GeV}]$")
+        plt.ylabel("Events")
+        plt.title("Total $p_T$")
+        plt.legend()
+        pdf.savefig(); plt.close()
+
+        # Plot total pT: partial
+        plt.figure()
         plt.hist(pT_tot_partial, bins=60, alpha=0.7, label="Partial reco")
         plt.xlabel(r"$p_T^{\mathrm{tot}}\;[\mathrm{GeV}]$")
         plt.ylabel("Events")
