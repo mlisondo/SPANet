@@ -59,7 +59,7 @@ def masker_metrics(mask_prob : np.ndarray,
     return {
         "AUC_PR"   : skl_auc(recall, precision),
         "AUC_ROC"  : skl_auc(fpr, tpr),
-        "Confusion": skl_cm(T, mask_pred.ravel()).tolist(),
+        "Confusion": skl_cm(T, mask_pred.ravel()),
         # curves returned for plotting
         "_pr_curve": (recall, precision),
         "_roc_curve": (fpr, tpr),
