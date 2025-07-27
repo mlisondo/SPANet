@@ -62,7 +62,7 @@
     "gradient_clip": 0.0,
     "dropout": 0.0,
 
-    "epochs": 50,
+    "epochs": 20,
     "num_gpu": 1,
     "verbose_output": true,
 
@@ -70,6 +70,6 @@
     "jet_max_dim": 3,
     "features_dim": 5,
     "k": 5,
-    "class_hidden_dims": [64, 64],
-    "mask_hidden_dims": [64, 64]
+    "class_hidden_dims": [256, 256, 256],
+    "mask_hidden_dims": [256, 256, 256]
 }
