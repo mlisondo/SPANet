@@ -48,7 +48,7 @@ class SCM_Training_Val(JetSecondaryLoader):
         # Configurable caps/defaults for imbalance handling
         self.pos_weight_cap = 1000.0
         self.use_focal_masker = "use_focal_masker"
-        self.focal_alpha_pos = 0.8
+        self.focal_alpha_pos = 0.7
         self.focal_gamma = 2.0
 
 
