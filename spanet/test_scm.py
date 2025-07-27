@@ -12,36 +12,78 @@ import json, os, matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 from spanet.evaluation_scm import evaluate_on_test_dataset, load_model
 
+from scipy.special import logsumexp
+import hashlib
 
-# ------------------------------------------------------------------ CLASSIFIER
-def topm_any_positive(class_truth: np.ndarray, class_logits: np.ndarray, m: int) -> float:
+def _group_event_by_features(features_e: np.ndarray, precision: int = 6):
     """
-    Success if ANY true class (class_truth==1) is within the top-m scores.
-    class_truth : (E, K)  multi-hot
-    class_logits: (E, K)  raw logits
+    Group duplicate hypotheses for one event by exact feature identity (within rounding).
+    features_e: (K, B, J, F)
+    Returns:
+        groups: list[np.ndarray] each with member k indices
+    """
+    K = features_e.shape[0]
+    flat = np.round(features_e.reshape(K, -1), precision)
+    keys = [hashlib.sha1(row.tobytes()).hexdigest() for row in flat]
+    key_to_members = {}
+    for k, key in enumerate(keys):
+        key_to_members.setdefault(key, []).append(k)
+    return [np.asarray(m, dtype=np.int32) for m in key_to_members.values()]
+
+def _topm_any_positive_grouped(class_truth_e: np.ndarray,
+                               class_logits_e: np.ndarray,
+                               groups: list[np.ndarray],
+                               m: int) -> bool:
+    """
+    One event: success if ANY positive group is within top-m by LSE-aggregated logits.
+    """
+    G = len(groups)
+    g_logits = np.empty(G, dtype=class_logits_e.dtype)
+    g_truth  = np.empty(G, dtype=bool)
+    for g, members in enumerate(groups):
+        g_logits[g] = logsumexp(class_logits_e[members])
+        g_truth[g]  = class_truth_e[members].astype(bool).any()
+
+    m = min(m, G)
+    top_idx = np.argpartition(g_logits, -m)[-m:]
+    return bool(g_truth[top_idx].any())
+
+def classifier_metrics(class_truth: np.ndarray,
+                       class_logits: np.ndarray,
+                       class_pred: np.ndarray,
+                       features_arr: np.ndarray,
+                       k: int) -> dict[str, float]:
+    """
+    Group duplicates per event using features, aggregate logits with log-sum-exp,
+    and compute Top-m(any-positive) in group space.
+    Also reports Top-1_chosen: whether your chosen index lies in a positive group.
     """
     E, K = class_logits.shape
-    m = min(m, K)
-    pos = class_truth.astype(bool)
-    # Get indices of the top-m scores per row (O(K) via argpartition; order inside chunk is arbitrary)
-    top_idx = np.argpartition(class_logits, -m, axis=1)[:, -m:]  # not fully sorted
-    # Check membership of any positive in those indices
-    hit = pos[np.arange(E)[:, None], top_idx].any(axis=1)
-    return float(hit.mean())
-
-def classifier_metrics(
-    class_truth: np.ndarray, class_logits: np.ndarray, class_pred: np.ndarray, k: int
-):
-    E, K = class_logits.shape
-    pos = class_truth.astype(bool)
-
     metrics = {}
-    # Top-1: predicted class is one of the positives
-    metrics["Top-1"] = float(pos[np.arange(E), class_pred].mean())
 
-    # Top-m for m=2..(2k-1) capped at K
-    for m in range(2, min(2 * k, K) + 1):
-        metrics[f"Top-{m}"] = topm_any_positive(class_truth, class_logits, m)
+    # Build groups per event once
+    groups_per_event = [_group_event_by_features(features_arr[e]) for e in range(E)]
+
+    # Top-1 (grouped, logits-based)
+    hits_top1 = []
+    for e in range(E):
+        hit = _topm_any_positive_grouped(class_truth[e], class_logits[e], groups_per_event[e], m=1)
+        hits_top1.append(hit)
+    metrics["Top-1"] = float(np.mean(hits_top1))
+
+    # Top-m
+    max_m = min(2 * k, max(len(g) for g in groups_per_event))
+    for m in range(2, max_m + 1):
+        hits = []
+        for e in range(E):
+            hits.append(_topm_any_positive_grouped(class_truth[e], class_logits[e], groups_per_event[e], m))
+        metrics[f"Top-{m}"] = float(np.mean(hits))
+
+    # Optional diagnostic: was the chosen class inside any positive group?
+    pos = class_truth.astype(bool)
+    chosen_positive = pos[np.arange(E), class_pred]
+    metrics["Top-1_chosen"] = float(chosen_positive.mean())
+
     return metrics
 
 # ------------------------------------------------------------------ MASKER
