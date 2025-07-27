@@ -64,7 +64,7 @@ class ClassifierTransformerHead(nn.Module):
         token_scores, _ = per_token_branch.max(dim=-1)  # (N, K)
 
         logits = per_token_branch.reshape(N, K * B)
-        logits = logits[:, :real_K]
+        logits = logits[:, :K]
         
         return logits, token_scores
 
