@@ -14,36 +14,34 @@ from spanet.evaluation_scm import evaluate_on_test_dataset, load_model
 
 
 # ------------------------------------------------------------------ CLASSIFIER
-def classifier_metrics(class_truth: np.ndarray,
-                       class_logits: np.ndarray,
-                       class_pred: np.ndarray,
-                       k: int) -> Dict[str, float]:
+def topm_any_positive(class_truth: np.ndarray, class_logits: np.ndarray, m: int) -> float:
     """
-    Return Top-1 plus a bunch of Top-m accuracies for m = 2 ... (2k-1).
-
-    Parameters
-    ----------
-    class_truth  : (E, K) one-hot truth
-    class_logits : (E, K) raw logits
-    class_pred   : (E,)   argmax prediction per event
-    k            : int    reference window size; report up to 2k-1
+    Success if ANY true class (class_truth==1) is within the top-m scores.
+    class_truth : (E, K)  multi-hot
+    class_logits: (E, K)  raw logits
     """
-    true_labels = class_truth.argmax(axis=1)
-    num_classes = class_logits.shape[1]
+    E, K = class_logits.shape
+    m = min(m, K)
+    pos = class_truth.astype(bool)
+    # Get indices of the top-m scores per row (O(K) via argpartition; order inside chunk is arbitrary)
+    top_idx = np.argpartition(class_logits, -m, axis=1)[:, -m:]  # not fully sorted
+    # Check membership of any positive in those indices
+    hit = pos[np.arange(E)[:, None], top_idx].any(axis=1)
+    return float(hit.mean())
 
-    # Always include Top-1
-    metrics = {
-        "Top-1": accuracy_score(true_labels, class_pred)
-    }
+def classifier_metrics(
+    class_truth: np.ndarray, class_logits: np.ndarray, class_pred: np.ndarray, k: int
+):
+    E, K = class_logits.shape
+    pos = class_truth.astype(bool)
 
-    # Add Top-m
-    for m in range(1, min(2 * k, num_classes) + 1):
-        metrics[f"Top-{m}"] = top_k_accuracy_score(
-            true_labels,
-            class_logits,
-            k=m,
-            labels=np.arange(num_classes)
-        )
+    metrics = {}
+    # Top-1: predicted class is one of the positives
+    metrics["Top-1"] = float(pos[np.arange(E), class_pred].mean())
+
+    # Top-m for m=2..(2k-1) capped at K
+    for m in range(2, min(2 * k, K) + 1):
+        metrics[f"Top-{m}"] = topm_any_positive(class_truth, class_logits, m)
     return metrics
 
 # ------------------------------------------------------------------ MASKER
