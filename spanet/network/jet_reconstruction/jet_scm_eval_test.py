@@ -33,8 +33,9 @@ class SCM_Eval_Test(SCM_Training_Val):
         events, K, branches, jets, features = features_arr.shape
     
         # ----------- Classifier Head -----------
-        class_in = features_arr.reshape(events, -1)
-        class_logits = self.classifier(class_in)                 # (events, K)
+        # class_in = features_arr.reshape(events, -1) # this was for the MLP
+        # class_logits = self.classifier(class_in)                 # (events, K)
+        class_logits, token_scores = self.classifier(features_arr)  # token_scores are not used
         class_probs  = torch.softmax(class_logits, dim=1)        # (events, K)
     
         # LSE-style evaluation: if any positives exist for an event, choose the
@@ -50,7 +51,8 @@ class SCM_Eval_Test(SCM_Training_Val):
         # ----------- Masker Head -----------
         mask_logits_list, mask_probs_list, mask_preds_list = [], [], []
         for k in range(K):
-            hypo_arr = features_arr[:, k].reshape(events, branches * jets * features)
+            # hypo_arr = features_arr[:, k].reshape(events, branches * jets * features) # this was for the MLP
+            hypo_arr = features_arr[:, k]
             logits_k = self.masker(hypo_arr)                     # (events, branches)
             probs_k  = torch.sigmoid(logits_k)                   # (events, branches)
             preds_k  = (probs_k > 0.5).long()                    # (events, branches)
