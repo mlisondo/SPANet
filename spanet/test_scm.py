@@ -48,43 +48,43 @@ def _topm_any_positive_grouped(class_truth_e: np.ndarray,
     top_idx = np.argpartition(g_logits, -m)[-m:]
     return bool(g_truth[top_idx].any())
 
-def classifier_metrics(class_truth: np.ndarray,
-                       class_logits: np.ndarray,
-                       class_pred: np.ndarray,
-                       features_arr: np.ndarray,
-                       k: int) -> dict[str, float]:
+# ------------------------------------------------------------------ CLASSIFIER
+def classifier_metrics(
+    class_truth : np.ndarray,        # (E, K)   multi-hot
+    class_logits: np.ndarray,        # (E, K)   raw logits
+    class_pred : np.ndarray,         # (E,)     “chosen” index (still logged)
+    k           : int
+) -> Dict[str, float]:
     """
-    Group duplicates per event using features, aggregate logits with log-sum-exp,
-    and compute Top-m(any-positive) in group space.
-    Also reports Top-1_chosen: whether your chosen index lies in a positive group.
+    Top-m(any-positive) *only on events that have >=1 positive class.
+    Adds two diagnostics:
+      • has_truth_frac  – fraction of events that were evaluated
+      • Top-1_chosen    – hit-rate of the user-supplied class_pred
     """
     E, K = class_logits.shape
-    metrics = {}
+    has_truth = class_truth.any(axis=1)            # (E,)
 
-    # Build groups per event once
-    groups_per_event = [_group_event_by_features(features_arr[e]) for e in range(E)]
+    if not has_truth.any():                        # degenerate edge-case
+        return {f"Top-{m}": float('nan') for m in range(1, 2*k)} | {
+                "has_truth_frac": 0.0, "Top-1_chosen": float('nan')}
 
-    # Top-1 (grouped, logits-based)
-    hits_top1 = []
-    for e in range(E):
-        hit = _topm_any_positive_grouped(class_truth[e], class_logits[e], groups_per_event[e], m=1)
-        hits_top1.append(hit)
-    metrics["Top-1"] = float(np.mean(hits_top1))
+    truth_valid  = class_truth [has_truth]
+    logits_valid = class_logits[has_truth]
 
-    # Top-m
-    max_m = min(2 * k, max(len(g) for g in groups_per_event))
-    for m in range(2, max_m + 1):
-        hits = []
-        for e in range(E):
-            hits.append(_topm_any_positive_grouped(class_truth[e], class_logits[e], groups_per_event[e], m))
-        metrics[f"Top-{m}"] = float(np.mean(hits))
+    metrics: Dict[str, float] = {}
+    metrics["Top-1"] = topm_any_positive(truth_valid, logits_valid, 1)
 
-    # Optional diagnostic: was the chosen class inside any positive group?
-    pos = class_truth.astype(bool)
-    chosen_positive = pos[np.arange(E), class_pred]
-    metrics["Top-1_chosen"] = float(chosen_positive.mean())
+    for m in range(2, min(2*k, K) + 1):
+        metrics[f"Top-{m}"] = topm_any_positive(truth_valid, logits_valid, m)
 
+    # Diagnostics
+    metrics["has_truth_frac"] = float(has_truth.mean())
+    metrics["Top-1_chosen"]   = float(
+        class_truth[has_truth].astype(bool)
+        [np.arange(has_truth.sum()), class_pred[has_truth]].mean()
+    )
     return metrics
+
 
 # ------------------------------------------------------------------ MASKER
 def masker_metrics(mask_prob : np.ndarray,
@@ -111,22 +111,29 @@ def joint_metrics(class_truth : np.ndarray,
                   mask_pred   : np.ndarray,
                   mask_truth  : np.ndarray) -> Dict[str, float]:
     """
-    Event reconstruction efficiency (all branches right) and
-    partial reconstruction rate (at least one branch right).
+    Event efficiency and partial-reconstruction evaluated only where a
+    positive class exists.
     """
-    E, K, B       = mask_pred.shape
-    correct_class = class_truth[np.arange(E), class_pred] == 1
-    matches       = (mask_pred[np.arange(E), class_pred] == mask_truth[np.arange(E), class_pred])
-    n_correct     = matches.sum(axis=1)
+    E, K, B = mask_pred.shape
+    has_truth = class_truth.any(axis=1)            # (E,)
+    if not has_truth.any():
+        return {"Event_eff": float('nan'), "Partial_rec": float('nan')}
 
-    full_mask   = (n_correct == B)
-    partial_mask= (n_correct > 0) & (n_correct < B)
+    idx            = np.where(has_truth)[0]        # indices to keep
+    correct_class  = class_truth[idx, class_pred[idx]] == 1
+    matches        = (mask_pred[idx, class_pred[idx]] ==
+                      mask_truth[idx, class_pred[idx]])
+    n_correct      = matches.sum(axis=1)
+
+    full_mask      = (n_correct == B)
+    partial_mask   = (n_correct > 0) & (n_correct < B)
 
     return {
         "Event_eff"  : float(np.mean(correct_class & full_mask)),
         "Partial_rec": float(np.mean(correct_class & partial_mask)),
-        "_full_mask" : full_mask,   # keep for later physics slicing
-        "_partial_mask": partial_mask
+        # keep masks for later slicing
+        "_full_mask"   : full_mask,
+        "_partial_mask": partial_mask,
     }
 
 
