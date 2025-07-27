@@ -62,11 +62,7 @@ class ClassifierTransformerHead(nn.Module):
 
         # For logging a single best-K index: score each token by its best branch logit
         token_scores, _ = per_token_branch.max(dim=-1)  # (N, K)
-
-        # Flatten to (N, K*B) to match old classifier head, then truncate to real_K
-        flat = per_token_branch.reshape(N, K * B)
-        real_K = B * K - 1
-        logits = flat[:, :real_K]  # (N, real_K)
+        
         return logits, token_scores
 
 
