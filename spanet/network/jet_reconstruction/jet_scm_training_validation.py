@@ -200,7 +200,50 @@ class SCM_Training_Val(JetSecondaryLoader):
             pos_rate, avg_pos_weight
         )
 
-    # (rest of your helper methods unchanged: _multi_positive_ce, focal_bce_with_logits)
+
+    # Multi-positive classifier loss
+    @staticmethod
+    def _multi_positive_ce(class_logits: torch.Tensor, class_truth: torch.Tensor):
+        N, C = class_logits.shape
+        pos_mask = class_truth.bool()
+        has_truth = pos_mask.any(dim=1)
+
+        log_probs = torch.log_softmax(class_logits, dim=1)
+
+        lp_masked = log_probs.masked_fill(~pos_mask, float("-inf"))
+        pos_lse = torch.logsumexp(lp_masked, dim=1)            # [N]
+        num_pos = pos_mask.sum(dim=1)                           # [N]
+        num_pos_clamped = num_pos.clamp_min(1).to(log_probs.dtype)
+
+        loss_vec = -(pos_lse - torch.log(num_pos_clamped))
+        loss = loss_vec[has_truth].mean() if has_truth.any() else loss_vec.mean()
+
+        with torch.no_grad():
+            ce_baseline = torch.log(torch.tensor(C, dtype=log_probs.dtype, device=log_probs.device)) \
+                        - torch.log(num_pos_clamped)
+            ce_baseline = ce_baseline[has_truth].mean() if has_truth.any() else ce_baseline.mean()
+
+        return loss, has_truth, num_pos, ce_baseline
+
+    # Focal loss to bias toward positive class and difficult examples
+    @staticmethod
+    def focal_bce_with_logits(logits, targets, alpha_pos=0.25, gamma=2.0, reduction="mean"):
+        p = torch.sigmoid(logits)
+        pt = torch.where(targets.bool(), p, 1 - p)  # p_t
+        bce = F.binary_cross_entropy_with_logits(logits, targets, reduction="none")
+
+        alpha_t = torch.where(
+            targets.bool(),
+            torch.as_tensor(alpha_pos, device=logits.device, dtype=logits.dtype),
+            torch.as_tensor(1 - alpha_pos, device=logits.device, dtype=logits.dtype),
+        )
+        loss = alpha_t * (1 - pt).pow(gamma) * bce
+
+        if reduction == "mean":
+            return loss.mean()
+        if reduction == "sum":
+            return loss.sum()
+        return loss
 
     _compiled_core = tcompile(_compiled_core, dynamic=True)
 
