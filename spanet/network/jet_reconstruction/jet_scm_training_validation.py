@@ -48,17 +48,12 @@ class ClassifierTransformerHead(nn.Module):
 
     def forward(self, features_arr):
         N, K, B, J, Fdim = features_arr.shape
-        
-        probe(features_arr, "features_arr (classifier input)")
 
         # tokens: (N, K, B*J*F)
         tokens = features_arr.reshape(N, K, B * J * Fdim)
         x = self.proj(tokens)           # (N, K, E)
         x = self.tr(x)                  # (N, K, E)
         per_token_branch = self.head(x) # (N, K, B)
-
-        probe(tokens, "tokens")
-
 
         # For logging a single best-K index: score each token by its best branch logit
         token_scores, _ = per_token_branch.max(dim=-1)  # (N, K)
@@ -214,12 +209,6 @@ class SCM_Training_Val(JetSecondaryLoader):
 
         log_probs = torch.log_softmax(class_logits, dim=1)
 
-        # --- DEBUG SHAPES BEFORE masked_fill ---
-        probe(class_logits, "class_logits")
-        probe(class_truth, "class_truth")
-        probe(log_probs, "log_probs")
-        probe(pos_mask, "pos_mask")
-
         lp_masked = log_probs.masked_fill(~pos_mask, float("-inf"))
 
         pos_lse = torch.logsumexp(lp_masked, dim=1)            # [N]
@@ -261,11 +250,6 @@ class SCM_Training_Val(JetSecondaryLoader):
     def forward_scm(self, batch):
         pred_truth, true_masks, features_arr, class_truth, true_idx, jet_preds_tensor = self.topk_data(batch)
 
-        probe(features_arr, "features_arr")
-        probe(class_truth, "class_truth")
-        
-        print(f"[CONFIG] K={self.options.k}, B={self.options.branch_dim}, real_K={self.real_K}")
-
         return self._compiled_core(features_arr, pred_truth, class_truth)
 
     def training_step(self, batch: Batch, batch_idx: int):
@@ -287,8 +271,6 @@ class SCM_Training_Val(JetSecondaryLoader):
         self.log('train_ce_random_baseline', ce_random_baseline)
         self.log('train_mask_pos_rate', pos_rate)
         self.log('train_mask_pos_weight_mean', avg_pos_weight)
-
-        raise RuntimeError("Debug break")
 
         return total_loss
 
