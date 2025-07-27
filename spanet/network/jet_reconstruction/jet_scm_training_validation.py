@@ -26,6 +26,7 @@ class SCM_Training_Val(JetSecondaryLoader):
         for in_d, out_d in zip(class_dims[:-1], class_dims[1:]):
             classifier_layers.append(nn.Linear(in_d, out_d))
             if out_d != real_K:
+                classifier_layers.append(nn.BatchNorm1d(out_d))
                 classifier_layers.append(nn.ReLU())
         self.classifier = nn.Sequential(*classifier_layers)
 
@@ -37,6 +38,7 @@ class SCM_Training_Val(JetSecondaryLoader):
         for in_d, out_d in zip(mask_dims[:-1], mask_dims[1:]):
             masker_layers.append(nn.Linear(in_d, out_d))
             if out_d != self.options.branch_dim:
+                masker_layers.append(nn.BatchNorm1d(out_d))
                 masker_layers.append(nn.ReLU())
         self.masker = nn.Sequential(*masker_layers)
 
