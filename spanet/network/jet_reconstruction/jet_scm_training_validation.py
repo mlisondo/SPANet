@@ -288,6 +288,8 @@ class SCM_Training_Val(JetSecondaryLoader):
         self.log('train_mask_pos_rate', pos_rate)
         self.log('train_mask_pos_weight_mean', avg_pos_weight)
 
+        raise RuntimeError("Debug break")
+
         return total_loss
 
     def validation_step(self, batch: Batch, batch_idx: int):
