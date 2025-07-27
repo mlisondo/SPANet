@@ -37,7 +37,7 @@ def classifier_metrics(class_truth: np.ndarray,
     }
 
     # Add Top-m
-    for m in range(2, min(2 * k, num_classes) + 1):
+    for m in range(1, min(2 * k, num_classes) + 1):
         metrics[f"Top-{m}"] = top_k_accuracy_score(
             true_labels,
             class_logits,
