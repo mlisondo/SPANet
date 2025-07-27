@@ -165,7 +165,7 @@ def main(
 
     # ------------------ numeric + physics metrics ------------------
     metrics = {}
-    metrics.update(classifier_metrics(CT, CL, CPd, model.options.k))
+    metrics.update(classifier_metrics(CT, CL, CPd, feats, model.options.k))
 
     m_mask = masker_metrics(MP, MPd, MT)
     metrics.update({k:v for k,v in m_mask.items() if not k.startswith("_")})
