@@ -187,7 +187,12 @@ class Options(Namespace):
         self.branch_dim: int = 2
         self.jet_max_dim: int = 3
         self.features_dim: int = 5
-
+        self.class_embed_dim: int = 128
+        self.mask_embed_dim: int  = 128
+        self.class_nhead: int     = 4
+        self.mask_nhead: int      = 4
+        self.class_layers: int    = 2
+        self.mask_layers: int     = 2
         # =========================================================================================
         # Training Options
         # =========================================================================================
