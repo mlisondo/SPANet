@@ -210,7 +210,14 @@ class SCM_Training_Val(JetSecondaryLoader):
 
         log_probs = torch.log_softmax(class_logits, dim=1)
 
+        # --- DEBUG SHAPES BEFORE masked_fill ---
+        probe(class_logits, "class_logits")
+        probe(class_truth, "class_truth")
+        probe(log_probs, "log_probs")
+        probe(pos_mask, "pos_mask")
+
         lp_masked = log_probs.masked_fill(~pos_mask, float("-inf"))
+
         pos_lse = torch.logsumexp(lp_masked, dim=1)            # [N]
         num_pos = pos_mask.sum(dim=1)                           # [N]
         num_pos_clamped = num_pos.clamp_min(1).to(log_probs.dtype)
