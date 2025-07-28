@@ -177,7 +177,8 @@ def main(
     CT  = arrays["class_truth"]        # (events, K)
     MT  = arrays["mask_truth"]         # (events, K, branches)
     feats = arrays["features_arr"]     # (events, K, branches, jets, features)
-    RV = arrays["raw_valid"]  
+    RV = arrays["raw_valid"]           # (events,)
+    TM = arrays["true_masks"]          # (events, branches)
 
     # ------------------ numeric + physics metrics ------------------
     # Classifier metrics
@@ -189,7 +190,7 @@ def main(
     metrics.update({k:v for k,v in m_mask.items() if not k.startswith("_")})
 
     # Joint event-level metrics
-    m_joint = joint_metrics(CT, CPd, MPd, MT, feats, valid_mask=RV)
+    m_joint = joint_metrics(CT, CPd, MPd, MT, feats, TM, valid_mask=RV)
     metrics.update({k:v for k,v in m_joint.items() if not k.startswith("_")})
 
     # curves for PDF
