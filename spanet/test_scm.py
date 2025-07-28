@@ -101,6 +101,12 @@ def joint_metrics(class_truth  : np.ndarray,        # (E, K)
                 ["Event_eff", "Partial_rec", "Event_eff_base", "Partial_rec_base"]}
 
     idx = np.where(keep)[0]
+    probe(has_truth, "has_truth")
+    probe(valid_mask, "valid_mask")
+    print("has_truth[:10]",has_truth[:10])
+    print("valid_mask[:10]",valid_mask[:10])
+    probe(idx, "idx")
+    print(idx)
 
     # ========== Truth-based eligibility ==========
     branch_counts = (mask_truth * class_truth[..., None])[idx].sum(axis=2)  # (N_keep, K)
@@ -260,3 +266,48 @@ if __name__ == '__main__':
 
     arguments = parser.parse_args()
     main(**arguments.__dict__)
+
+
+
+
+def probe(o, name=None):
+    obj = type(o)
+    header = f"Object '{name}'"
+    print(f"\n{header}: {obj.__module__}.{obj.__name__}")
+
+    # NumPy-style introspection
+    if hasattr(o, 'shape'):
+        print(f"shape: {o.shape}")
+    if hasattr(o, 'ndim'):
+        print(f"ndim: {o.ndim}")
+    if hasattr(o, 'dtype'):
+        print(f"dtype: {o.dtype}")
+
+    # size attribute
+    if hasattr(o, 'size') and not callable(o.size):
+        print(f"size: {o.size}")
+
+    # Pythonic length
+    try:
+        print(f"len: {len(o)}")
+    except Exception:
+        pass
+
+    # Recursive descent into lists
+    try:
+        if isinstance(o, (list, tuple)):
+            for idx, item in enumerate(o):
+                probe(item, f"{name}[{idx}]")
+    except Exception:
+        pass
+
+    # PyTorch tensors
+    if isinstance(o, torch.Tensor):
+        print(f"shape: {tuple(o.size())}")
+        print(f"dtype: {o.dtype}")
+        print(f"numel: {o.numel()}")
+
+        print(f"shape: {tuple(o.size())}")
+        print(f"dtype: {o.dtype}")
+        print(f"numel: {o.numel()}")
+        print(f"device: {o.device}")
