@@ -208,7 +208,7 @@ class SCM_Training_Val(JetSecondaryLoader):
         return (
             class_loss, mask_loss, top1_acc_truth,
             has_truth_frac, num_pos_mean, ce_random_baseline,
-            pos_rate, avg_pos_weight
+            pos_rate#, avg_pos_weight
         )
 
 
@@ -280,7 +280,7 @@ class SCM_Training_Val(JetSecondaryLoader):
         (
             class_loss, mask_loss, top1_acc_truth,
             has_truth_frac, num_pos_mean, ce_random_baseline,
-            pos_rate, avg_pos_weight
+            pos_rate#, avg_pos_weight
         ) = self.forward_scm(batch)
 
         # print("\n" * 5, end="")
@@ -296,7 +296,7 @@ class SCM_Training_Val(JetSecondaryLoader):
         self.log('train_num_pos_mean', num_pos_mean)
         self.log('train_ce_random_baseline', ce_random_baseline)
         self.log('train_mask_pos_rate', pos_rate)
-        self.log('train_mask_pos_weight_mean', avg_pos_weight)
+        # self.log('train_mask_pos_weight_mean', avg_pos_weight)
 
         # raise RuntimeError("Debug break") 
 
@@ -306,7 +306,7 @@ class SCM_Training_Val(JetSecondaryLoader):
         (
             class_loss, mask_loss, top1_acc_truth,
             has_truth_frac, num_pos_mean, ce_random_baseline,
-            pos_rate, avg_pos_weight
+            pos_rate#, avg_pos_weight
         ) = self.forward_scm(batch)
 
         total_loss = class_loss + mask_loss
@@ -319,7 +319,7 @@ class SCM_Training_Val(JetSecondaryLoader):
         self.log('val_num_pos_mean', num_pos_mean, on_epoch=True, prog_bar=True)
         self.log('val_ce_random_baseline', ce_random_baseline, on_epoch=True, prog_bar=True)
         self.log('val_mask_pos_rate', pos_rate, on_epoch=True, prog_bar=True)
-        self.log('val_mask_pos_weight_mean', avg_pos_weight, on_epoch=True, prog_bar=True)
+        # self.log('val_mask_pos_weight_mean', avg_pos_weight, on_epoch=True, prog_bar=True)
 
         return {'val_total_loss': total_loss}
 
