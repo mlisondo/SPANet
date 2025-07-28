@@ -122,7 +122,7 @@ class JetSecondaryLoader(JetReconstructionNetwork):
 
             print("=" * 30)
 
-        # raise RuntimeError("Debug break")
+        raise RuntimeError("Debug break")
 
         return pred_truth, true_masks, features_arr, class_truth, true_idx, jet_preds_tensor
 
