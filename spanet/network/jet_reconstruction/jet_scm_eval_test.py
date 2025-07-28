@@ -66,7 +66,7 @@ class SCM_Eval_Test(SCM_Training_Val):
         mask_preds  = torch.cat(mask_preds_list,  dim=1)
 
         # require at least one branch to be reconstructable 
-        raw_valid = true_mask.any(dim=-1) # (E,)
+        raw_valid = true_masks.any(dim=-1) # (E,)
     
         # ----------- Return (same keys / order) -----------
         return {
