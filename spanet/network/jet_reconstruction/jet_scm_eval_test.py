@@ -65,10 +65,8 @@ class SCM_Eval_Test(SCM_Training_Val):
         mask_probs  = torch.cat(mask_probs_list,  dim=1)
         mask_preds  = torch.cat(mask_preds_list,  dim=1)
 
-        # Raw-level valid mask: require at least 2 valid hypotheses
-        pad_mask   = (features_arr == -1).any(dim=-1).any(dim=-1).any(dim=-1)   # (E, K) True = has -1
-        hypo_valid = ~pad_mask                                                  # (E, K)
-        raw_valid  = (hypo_valid.sum(dim=1) >= 2) 
+        # require at least one branch to be reconstructable 
+        raw_valid = true_mask.any(dim=-1) # (E,)
     
         # ----------- Return (same keys / order) -----------
         return {
