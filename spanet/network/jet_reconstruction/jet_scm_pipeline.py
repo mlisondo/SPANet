@@ -93,6 +93,15 @@ class JetSecondaryLoader(JetReconstructionNetwork):
 
         one_one = [true_event_idx] + [false_event_idx]
 
+        probe(sources[0], "sources[0]")
+        probe(jet_preds_tensor,"jet_preds_tensor")
+        probe(true_idx,"true_idx")
+        probe(pred_truth,"pred_truth")
+        probe(true_masks,"true_masks")
+        probe(class_truth,"class_truth")
+        probe(jet_data,"jet_data")
+        probe(features_arr,"features_arr")
+
         for e in one_one:
             print(f"\n===== EVENT {int(e)} =====")
 
@@ -107,9 +116,6 @@ class JetSecondaryLoader(JetReconstructionNetwork):
 
             print("true_masks:")
             print(true_masks[:, e])
-
-            print("class_truth row:")
-            print(class_truth[e])
 
             print("class_truth row:")
             print(class_truth[e])
