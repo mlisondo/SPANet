@@ -15,6 +15,21 @@ from spanet.evaluation_scm import evaluate_on_test_dataset, load_model
 from scipy.special import logsumexp
 import hashlib
 
+def topm_any_positive(class_truth: np.ndarray, class_logits: np.ndarray, m: int) -> float:
+    """
+    Success if ANY true class (class_truth==1) is within the top-m scores.
+    class_truth : (E, K)  multi-hot
+    class_logits: (E, K)  raw logits
+    """
+    E, K = class_logits.shape
+    m = min(m, K)
+    pos = class_truth.astype(bool)
+    # Get indices of the top-m scores per row (O(K) via argpartition; order inside chunk is arbitrary)
+    top_idx = np.argpartition(class_logits, -m, axis=1)[:, -m:]  # not fully sorted
+    # Check membership of any positive in those indices
+    hit = pos[np.arange(E)[:, None], top_idx].any(axis=1)
+    return float(hit.mean())
+
 def _group_event_by_features(features_e: np.ndarray, precision: int = 6):
     """
     Group duplicate hypotheses for one event by exact feature identity (within rounding).
