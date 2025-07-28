@@ -49,47 +49,76 @@ def _topm_any_positive_grouped(class_truth_e: np.ndarray,
     return bool(g_truth[top_idx].any())
 
 # ------------------------------------------------------------------ CLASSIFIER
+# def classifier_metrics(
+#     class_truth : np.ndarray,        # (E, K)
+#     class_logits: np.ndarray,        # (E, K)
+#     class_pred : np.ndarray,         # (E,)
+#     k           : int,
+#     features_arr: np.ndarray         # (E, K, B, J, F)
+# ) -> Dict[str, float]:
+#     """
+#     Top-m(any-positive) evaluated using hypothesis groupings, for events with >=1 positive class.
+#     Adds:
+#       • has_truth_frac  – fraction of events with class_truth
+#       • Top-1_chosen    – was chosen hypothesis positive
+#     """
+#     E, K = class_logits.shape
+#     has_truth = class_truth.any(axis=1)            # (E,)
+
+#     if not has_truth.any():
+#         return {f"Top-{m}": float('nan') for m in range(1, 2*k)} | {
+#                 "has_truth_frac": 0.0, "Top-1_chosen": float('nan')}
+
+#     truth_valid  = class_truth [has_truth]         # (E_valid, K)
+#     logits_valid = class_logits[has_truth]         # (E_valid, K)
+#     feats_valid  = features_arr[has_truth]         # (E_valid, K, B, J, F)
+
+#     metrics: Dict[str, float] = {}
+
+#     for m in range(1, min(2*k, K) + 1):
+#         topm_hits = 0
+#         for i in range(truth_valid.shape[0]):
+#             features_e     = feats_valid[i]         # (K, B, J, F)
+#             class_truth_e  = truth_valid[i]         # (K,)
+#             class_logits_e = logits_valid[i]        # (K,)
+#             groups         = _group_event_by_features(features_e)
+#             topm_hits     += _topm_any_positive_grouped(class_truth_e, class_logits_e, groups, m)
+#         metrics[f"Top-{m}"] = topm_hits / truth_valid.shape[0]
+        
+#     metrics["has_truth_frac"] = float(has_truth.mean())
+#     metrics["Top-1_chosen"] = float(
+#         class_truth[has_truth].astype(bool)
+#         [np.arange(has_truth.sum()), class_pred[has_truth]].mean()
+#     )
+#     return metrics
 def classifier_metrics(
-    class_truth : np.ndarray,        # (E, K)
-    class_logits: np.ndarray,        # (E, K)
-    class_pred : np.ndarray,         # (E,)
+    class_truth : np.ndarray,           # (E, K)
+    class_logits: np.ndarray,           # (E, K)
     k           : int,
-    features_arr: np.ndarray         # (E, K, B, J, F)
+    valid_mask  : Optional[np.ndarray] = None    # (E,)
 ) -> Dict[str, float]:
-    """
-    Top-m(any-positive) evaluated using hypothesis groupings, for events with >=1 positive class.
-    Adds:
-      • has_truth_frac  – fraction of events with class_truth
-      • Top-1_chosen    – was chosen hypothesis positive
-    """
     E, K = class_logits.shape
-    has_truth = class_truth.any(axis=1)            # (E,)
+    has_truth = class_truth.any(axis=1)
+    if valid_mask is None:
+        valid_mask = np.ones(E, dtype=bool)
 
-    if not has_truth.any():
-        return {f"Top-{m}": float('nan') for m in range(1, 2*k)} | {
-                "has_truth_frac": 0.0, "Top-1_chosen": float('nan')}
+    keep = has_truth & valid_mask
+    if not keep.any():
+        return {"Top-1": float("nan"), "Top-1_base": float("nan"),
+                **{f"Top-{m}": float("nan") for m in range(2, 2*k)},
+                "has_truth_frac": 0.0}
 
-    truth_valid  = class_truth [has_truth]         # (E_valid, K)
-    logits_valid = class_logits[has_truth]         # (E_valid, K)
-    feats_valid  = features_arr[has_truth]         # (E_valid, K, B, J, F)
+    truth_v  = class_truth [keep]
+    logits_v = class_logits[keep]
 
     metrics: Dict[str, float] = {}
+    metrics["Top-1"] = topm_any_positive(truth_v, logits_v, 1)
+    for m in range(2, min(2*k, K) + 1):
+        metrics[f"Top-{m}"] = topm_any_positive(truth_v, logits_v, m)
 
-    for m in range(1, min(2*k, K) + 1):
-        topm_hits = 0
-        for i in range(truth_valid.shape[0]):
-            features_e     = feats_valid[i]         # (K, B, J, F)
-            class_truth_e  = truth_valid[i]         # (K,)
-            class_logits_e = logits_valid[i]        # (K,)
-            groups         = _group_event_by_features(features_e)
-            topm_hits     += _topm_any_positive_grouped(class_truth_e, class_logits_e, groups, m)
-        metrics[f"Top-{m}"] = topm_hits / truth_valid.shape[0]
-        
-    metrics["has_truth_frac"] = float(has_truth.mean())
-    metrics["Top-1_chosen"] = float(
-        class_truth[has_truth].astype(bool)
-        [np.arange(has_truth.sum()), class_pred[has_truth]].mean()
-    )
+    last_idx = K - 1
+    metrics["Top-1_base"] = float((truth_v[:, last_idx] == 1).mean())
+    metrics["has_truth_frac"] = float(keep.mean())
     return metrics
 
 
@@ -113,34 +142,78 @@ def masker_metrics(mask_prob : np.ndarray,
     }
 
 # --------------------------------------------------------- EVENT-LEVEL JOINT
-def joint_metrics(class_truth : np.ndarray,
-                  class_pred  : np.ndarray,
-                  mask_pred   : np.ndarray,
-                  mask_truth  : np.ndarray) -> Dict[str, float]:
-    """
-    Event efficiency and partial-reconstruction evaluated only where a
-    positive class exists.
-    """
+# def joint_metrics(class_truth : np.ndarray,
+#                   class_pred  : np.ndarray,
+#                   mask_pred   : np.ndarray,
+#                   mask_truth  : np.ndarray) -> Dict[str, float]:
+#     """
+#     Event efficiency and partial-reconstruction evaluated only where a
+#     positive class exists.
+#     """
+#     E, K, B = mask_pred.shape
+#     has_truth = class_truth.any(axis=1)            # (E,)
+#     if not has_truth.any():
+#         return {"Event_eff": float('nan'), "Partial_rec": float('nan')}
+
+#     idx            = np.where(has_truth)[0]        # indices to keep
+#     correct_class  = class_truth[idx, class_pred[idx]] == 1
+#     matches        = (mask_pred[idx, class_pred[idx]] ==
+#                       mask_truth[idx, class_pred[idx]])
+#     n_correct      = matches.sum(axis=1)
+
+#     full_mask      = (n_correct == B)
+#     partial_mask   = (n_correct > 0) & (n_correct < B)
+
+#     return {
+#         "Event_eff"  : float(np.mean(correct_class & full_mask)),
+#         "Partial_rec": float(np.mean(correct_class & partial_mask)),
+#         # keep masks for later slicing
+#         "_full_mask"   : full_mask,
+#         "_partial_mask": partial_mask,
+#     }
+def joint_metrics(class_truth  : np.ndarray,        # (E, K)
+                  class_pred   : np.ndarray,        # (E,)
+                  mask_pred    : np.ndarray,        # (E, K, B)
+                  mask_truth   : np.ndarray,        # (E, K, B)
+                  features_arr : np.ndarray,        # (E, K, B, J, F)
+                  valid_mask   : Optional[np.ndarray] = None
+) -> Dict[str, float]:
     E, K, B = mask_pred.shape
-    has_truth = class_truth.any(axis=1)            # (E,)
-    if not has_truth.any():
-        return {"Event_eff": float('nan'), "Partial_rec": float('nan')}
+    has_truth = class_truth.any(axis=1)
+    if valid_mask is None:
+        valid_mask = np.ones(E, dtype=bool)
 
-    idx            = np.where(has_truth)[0]        # indices to keep
-    correct_class  = class_truth[idx, class_pred[idx]] == 1
-    matches        = (mask_pred[idx, class_pred[idx]] ==
-                      mask_truth[idx, class_pred[idx]])
-    n_correct      = matches.sum(axis=1)
+    keep = has_truth & valid_mask
+    if not keep.any():
+        return {"Event_eff": float("nan"),       "Partial_rec": float("nan"),
+                "Event_eff_base": float("nan"), "Partial_rec_base": float("nan")}
 
-    full_mask      = (n_correct == B)
-    partial_mask   = (n_correct > 0) & (n_correct < B)
+    idx = np.where(keep)[0]
+
+    # Secondary model
+    sec_correct_cls = class_truth[idx, class_pred[idx]] == 1
+    sec_matches     = (mask_pred[idx, class_pred[idx]] ==
+                       mask_truth[idx, class_pred[idx]])
+    n_sec_correct   = sec_matches.sum(axis=1)
+    sec_full    = (n_sec_correct == B)
+    sec_partial = (n_sec_correct > 0) & (n_sec_correct < B)
+
+    # Baseline SPANet (last hypothesis)
+    base_k        = K - 1
+    branch_valid  = ~(features_arr[idx, base_k] == -1).any(axis=-1).any(axis=-1)
+    base_correct_cls = class_truth[idx, base_k] == 1
+    base_matches     = (branch_valid == mask_truth[idx, base_k])
+    n_base_correct   = base_matches.sum(axis=1)
+    base_full    = (n_base_correct == B)
+    base_partial = (n_base_correct > 0) & (n_base_correct < B)
 
     return {
-        "Event_eff"  : float(np.mean(correct_class & full_mask)),
-        "Partial_rec": float(np.mean(correct_class & partial_mask)),
-        # keep masks for later slicing
-        "_full_mask"   : full_mask,
-        "_partial_mask": partial_mask,
+        "Event_eff"         : float(np.mean(sec_correct_cls & sec_full)),
+        "Partial_rec"       : float(np.mean(sec_correct_cls & sec_partial)),
+        "Event_eff_base"    : float(np.mean(base_correct_cls & base_full)),
+        "Partial_rec_base"  : float(np.mean(base_correct_cls & base_partial)),
+        "_full_mask"        : sec_full,
+        "_partial_mask"     : sec_partial,
     }
 
 
@@ -176,15 +249,19 @@ def main(
     CT  = arrays["class_truth"]        # (events, K)
     MT  = arrays["mask_truth"]         # (events, K, branches)
     feats = arrays["features_arr"]     # (events, K, branches, jets, features)
+    RV = arrays["raw_valid"]  
 
     # ------------------ numeric + physics metrics ------------------
+    # Classifier metrics
     metrics = {}
-    metrics.update(classifier_metrics(CT, CL, CPd, model.options.k))
+    metrics.update(classifier_metrics(CT, CL, model.options.k, valid_mask=RV))
 
+    # Masker metrics
     m_mask = masker_metrics(MP, MPd, MT)
     metrics.update({k:v for k,v in m_mask.items() if not k.startswith("_")})
 
-    m_joint = joint_metrics(CT, CPd, MPd, MT)
+    # Joint event-level metrics
+    m_joint = joint_metrics(CT, CPd, MPd, MT, feats, valid_mask=RV)
     metrics.update({k:v for k,v in m_joint.items() if not k.startswith("_")})
 
     # curves for PDF

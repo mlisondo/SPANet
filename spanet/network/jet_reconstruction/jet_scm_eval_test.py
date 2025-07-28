@@ -64,6 +64,11 @@ class SCM_Eval_Test(SCM_Training_Val):
         mask_logits = torch.cat(mask_logits_list, dim=1)         # (events, K, branches)
         mask_probs  = torch.cat(mask_probs_list,  dim=1)
         mask_preds  = torch.cat(mask_preds_list,  dim=1)
+
+        # Raw-level valid mask: require at least 2 valid hypotheses
+        pad_mask   = (features_arr == -1).any(dim=-1).any(dim=-1).any(dim=-1)   # (E, K) True = has -1
+        hypo_valid = ~pad_mask                                                  # (E, K)
+        raw_valid  = (hypo_valid.sum(dim=1) >= 2) 
     
         # ----------- Return (same keys / order) -----------
         return {
@@ -77,4 +82,5 @@ class SCM_Eval_Test(SCM_Training_Val):
             "mask_truth":   pred_truth,          # MT
             "features_arr": features_arr,        # FA
             "true_masks":   true_masks           # TM
+            "raw_valid":    raw_valid            # RV
         }
