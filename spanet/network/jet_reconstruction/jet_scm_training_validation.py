@@ -192,24 +192,17 @@ class SCM_Training_Val(JetSecondaryLoader):
     
         # MASKER
         # Reshape: feed every hypothesis separately but in one call
-        flat_feat = features_arr.reshape(N * K, B, J, Fdim)      # (N·K, B, J, F)
-        logits_b  = self.masker(flat_feat)                       # (N·K, B)
+        flat_feat = features_arr.reshape(N * K, B, J, Fdim)      # (N*K, B, J, F)
+        logits_b  = self.masker(flat_feat)                       # (N*K, B)
         logits_kb = logits_b.view(N, K, B)                       # (N, K, B)
     
-        # Target is exactly the (N, K, B) tensor used at validation
         t_kb      = pred_truth.float()                           # (N, K, B)
-    
-        # Optional: focal or plain BCE
-        mask_loss = self.focal_bce_with_logits(
-            logits_kb, t_kb,
-            alpha_pos=self.focal_alpha_pos,
-            gamma=self.focal_gamma,
-            reduction="mean",
-        )
-    
-        # Batch imbalance diagnostics
-        pos_rate       = t_kb.mean()
-        avg_pos_weight = ( (1 - t_kb).sum() / (t_kb.sum() + 1e-8) ).clamp(max=self.pos_weight_cap)
+        
+        # Optional: BCE
+        pos_weight = ((1 - t_kb[has_truth]).sum() / (t_kb[has_truth].sum() + 1e-8)).clamp(max=self.pos_weight_cap)
+        bce = F.binary_cross_entropy_with_logits(
+                logits_kb, t_kb, reduction='none', pos_weight=pos_weight)[has_truth]
+        mask_loss = bce.mean()
     
         return (
             class_loss, mask_loss, top1_acc_truth,
@@ -243,26 +236,6 @@ class SCM_Training_Val(JetSecondaryLoader):
             ce_baseline = ce_baseline[has_truth].mean() if has_truth.any() else ce_baseline.mean()
 
         return loss, has_truth, num_pos, ce_baseline
-
-    # Focal loss to bias toward positive class and difficult examples
-    @staticmethod
-    def focal_bce_with_logits(logits, targets, alpha_pos=0.25, gamma=2.0, reduction="mean"):
-        p = torch.sigmoid(logits)
-        pt = torch.where(targets.bool(), p, 1 - p)  # p_t
-        bce = F.binary_cross_entropy_with_logits(logits, targets, reduction="none")
-
-        alpha_t = torch.where(
-            targets.bool(),
-            torch.as_tensor(alpha_pos, device=logits.device, dtype=logits.dtype),
-            torch.as_tensor(1 - alpha_pos, device=logits.device, dtype=logits.dtype),
-        )
-        loss = alpha_t * (1 - pt).pow(gamma) * bce
-
-        if reduction == "mean":
-            return loss.mean()
-        if reduction == "sum":
-            return loss.sum()
-        return loss
 
     _compiled_core = tcompile(_compiled_core, dynamic=True)
 
