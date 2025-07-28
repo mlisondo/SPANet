@@ -166,131 +166,57 @@ class SCM_Training_Val(JetSecondaryLoader):
         self.focal_gamma = 2.0
 
     def _compiled_core(self, features_arr, pred_truth, class_truth, one_one):
-        # print("\n" * 5, end="")
-        # print("[Debug] -> entered _compiled_core")
-
-        # features_arr: (N, real_K, B, J, F)
+        """
+        Make masker loss use the *same (N, K, B) task* that evaluation uses.
+        """
         N, K, B, J, Fdim = features_arr.shape
-
-        class_logits, token_scores = self.classifier(features_arr)  # (N, real_K), (N, K)
-        # print("\n" * 5, end="")
-        # print("[Debug] -> entered _compiled_core (from classifier)")
-
-        # probe(class_logits, "class_logits")
-        # probe(token_scores, "token_scores")
-
-        # for e in one_one:
-            # print(f"\n===== EVENT {int(e)} =====")
-
-            # print("class_logits:")
-            # print(class_logits[e])
-
-            # print("token_scores:")
-            # print(token_scores[e])
-
-            # print("=" * 30)
-
-        class_loss, has_truth, num_pos, ce_random_baseline = self._multi_positive_ce(class_logits, class_truth)
-
-        rows = torch.arange(N, device=class_logits.device)
-        pred_k = torch.argmax(token_scores, dim=1)  # best hypothesis index by max token score
+    
+        # CLASSIFIER
+        class_logits, token_scores = self.classifier(features_arr)
+        class_loss, has_truth, num_pos, ce_random_baseline = \
+            self._multi_positive_ce(class_logits, class_truth)
+    
+        rows   = torch.arange(N, device=class_logits.device)
+        pred_k = token_scores.argmax(dim=1)
+    
+        top1_acc_truth = torch.tensor(0., device=class_logits.device)
+        num_pos_mean   = num_pos.float().mean()
         if has_truth.any():
-
-            
-            # Build a K-hot truth over hypotheses: treat a class index block per K of size B
-            # A token is considered "true" if any of its B branch entries is true in class_truth.
-            # class_truth is (N, real_K) corresponding to [k0:b0..bB-1, k1:..., ...] minus the last slot.
-            # Rebuild a padded view to (N, K, B) with a trailing zero column to restore full K*B.
             padded = torch.zeros(N, K * B, device=class_logits.device, dtype=class_truth.dtype)
             padded[:, :self.real_K] = class_truth
             truth_kb = padded.view(N, K, B)
-            truth_k = truth_kb.any(dim=2)  # (N, K)
+            truth_k  = truth_kb.any(dim=2)
             top1_acc_truth = truth_k[rows[has_truth], pred_k[has_truth]].float().mean()
-            num_pos_mean = num_pos[has_truth].float().mean()
-
-            
-            # print("\n" * 5, end="")
-            # print("[Debug] -> entered if has_truth.any():")
-            # for e in one_one:
-                # print(f"\n-- Event {int(e)} --")
-                # probe(class_logits[e], f"class_logits[{e}]")
-                # probe(token_scores[e], f"token_scores[{e}]")
-                # print(f"truth_k[{e}] = {truth_k[e]}")
-                # print(f"pred_k[{e}] = {int(pred_k[e])}")
-                # print(f"Prediction is correct? {bool(truth_k[e, pred_k[e]])}")
-                # print(f"class_truth[{e}] = {class_truth[e]}")
-                # print(f"truth_kb[{e}] (K x B):\n{truth_kb[e]}")
-                # print(f"num_pos[{e}] = {num_pos[e]}")
-        else:
-            top1_acc_truth = torch.tensor(0.0, device=class_logits.device)
-            num_pos_mean = num_pos.float().mean()
+            num_pos_mean   = num_pos[has_truth].float().mean()
         has_truth_frac = has_truth.float().mean()
-
-        # ---- Masker via Transformer over jets per branch ----
-        # Reduce targets from (N, K, B) -> (N, B)
-        t_kb = pred_truth.float()
-        if self.mask_reduction == "any":
-            t_branch = t_kb.bool().any(dim=1).float()
-        elif self.mask_reduction == "mean":
-            t_branch = t_kb.float().mean(dim=1)  # in [0,1]
-        elif self.mask_reduction == "max":
-            t_branch = t_kb.float().amax(dim=1)
-        else:
-            raise ValueError(f"Unknown mask_target_reduction: {self.mask_reduction}")
-
-        # Build masker inputs: (N, B, J, F)
-        # Take the first K hypothesis (or we could average features over K). To stay order-free, use mean over K.
-        features_branch = features_arr.mean(dim=1)  # (N, B, J, F)
-        logits_branch = self.masker(features_branch)  # (N, B)
-        # print("\n" * 5, end="")
-        # print("[Debug] -> entered _compiled_core (from masker)")
-
-
-        
-        # Imbalance stats per branch (using reduced targets)
-        t = t_branch
-        pos_per_branch = t.sum(dim=0)  # (B,)
-        tot_per_branch = torch.tensor(N, device=t.device, dtype=t.dtype)
-        neg_per_branch = tot_per_branch - pos_per_branch
-        eps = torch.finfo(t.dtype).eps
-        pos_weight_b = (neg_per_branch / (pos_per_branch + eps)).clamp(max=self.pos_weight_cap)
-
-
-
-        # for e in one_one:
-            # print(f"\n[Debug] -- Masker diagnostics for event {int(e)} --")
-
-            # probe(features_branch[e], f"features_branch[{e}] (B, J, F)")
-            # print(f"features_branch[{e}, 0] =\n{features_branch[e, 0]}")  # example: branch 0 jet features
-
-            # probe(logits_branch[e], f"logits_branch[{e}] (B,)")
-            # print(f"sigmoid(logits_branch[{e}]) =\n{torch.sigmoid(logits_branch[e])}")
-
-            # print(f"t_branch[{e}] = {t[e]}")
-
-
-        # print("\n[Masker Stats]")
-        # print("pos_per_branch:", pos_per_branch)
-        # print("neg_per_branch:", neg_per_branch)
-        # print("pos_weight_b:", pos_weight_b)
-        # print("avg pos_weight_b:", pos_weight_b.mean())
-        # print(f"Pos rate: {(pos_per_branch.sum() / (N * B)).item():.4f}")
-
+    
+        # MASKER
+        # Reshape: feed every hypothesis separately but in one call
+        flat_feat = features_arr.reshape(N * K, B, J, Fdim)      # (N·K, B, J, F)
+        logits_b  = self.masker(flat_feat)                       # (N·K, B)
+        logits_kb = logits_b.view(N, K, B)                       # (N, K, B)
+    
+        # Target is exactly the (N, K, B) tensor used at validation
+        t_kb      = pred_truth.float()                           # (N, K, B)
+    
+        # Optional: focal or plain BCE
         mask_loss = self.focal_bce_with_logits(
-            logits_branch, t_branch,
+            logits_kb, t_kb,
             alpha_pos=self.focal_alpha_pos,
             gamma=self.focal_gamma,
             reduction="mean",
         )
-
-        pos_rate = (pos_per_branch.sum() / (N * B)).to(logits_branch.dtype)
-        avg_pos_weight = pos_weight_b.mean()
-
+    
+        # Batch imbalance diagnostics
+        pos_rate       = t_kb.mean()
+        avg_pos_weight = ( (1 - t_kb).sum() / (t_kb.sum() + 1e-8) ).clamp(max=self.pos_weight_cap)
+    
         return (
             class_loss, mask_loss, top1_acc_truth,
             has_truth_frac, num_pos_mean, ce_random_baseline,
             pos_rate, avg_pos_weight
         )
+
 
 
     # Multi-positive classifier loss
