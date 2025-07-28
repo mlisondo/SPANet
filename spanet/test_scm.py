@@ -15,97 +15,7 @@ from spanet.evaluation_scm import evaluate_on_test_dataset, load_model
 from scipy.special import logsumexp
 import hashlib
 
-def topm_any_positive(class_truth: np.ndarray, class_logits: np.ndarray, m: int) -> float:
-    """
-    Success if ANY true class (class_truth==1) is within the top-m scores.
-    class_truth : (E, K)  multi-hot
-    class_logits: (E, K)  raw logits
-    """
-    E, K = class_logits.shape
-    m = min(m, K)
-    pos = class_truth.astype(bool)
-    # Get indices of the top-m scores per row (O(K) via argpartition; order inside chunk is arbitrary)
-    top_idx = np.argpartition(class_logits, -m, axis=1)[:, -m:]  # not fully sorted
-    # Check membership of any positive in those indices
-    hit = pos[np.arange(E)[:, None], top_idx].any(axis=1)
-    return float(hit.mean())
-
-def _group_event_by_features(features_e: np.ndarray, precision: int = 6):
-    """
-    Group duplicate hypotheses for one event by exact feature identity (within rounding).
-    features_e: (K, B, J, F)
-    Returns:
-        groups: list[np.ndarray] each with member k indices
-    """
-    K = features_e.shape[0]
-    flat = np.round(features_e.reshape(K, -1), precision)
-    keys = [hashlib.sha1(row.tobytes()).hexdigest() for row in flat]
-    key_to_members = {}
-    for k, key in enumerate(keys):
-        key_to_members.setdefault(key, []).append(k)
-    return [np.asarray(m, dtype=np.int32) for m in key_to_members.values()]
-
-def _topm_any_positive_grouped(class_truth_e: np.ndarray,
-                               class_logits_e: np.ndarray,
-                               groups: list[np.ndarray],
-                               m: int) -> bool:
-    """
-    One event: success if ANY positive group is within top-m by LSE-aggregated logits.
-    """
-    G = len(groups)
-    g_logits = np.empty(G, dtype=class_logits_e.dtype)
-    g_truth  = np.empty(G, dtype=bool)
-    for g, members in enumerate(groups):
-        g_logits[g] = logsumexp(class_logits_e[members])
-        g_truth[g]  = class_truth_e[members].astype(bool).any()
-
-    m = min(m, G)
-    top_idx = np.argpartition(g_logits, -m)[-m:]
-    return bool(g_truth[top_idx].any())
-
 # ------------------------------------------------------------------ CLASSIFIER
-# def classifier_metrics(
-#     class_truth : np.ndarray,        # (E, K)
-#     class_logits: np.ndarray,        # (E, K)
-#     class_pred : np.ndarray,         # (E,)
-#     k           : int,
-#     features_arr: np.ndarray         # (E, K, B, J, F)
-# ) -> Dict[str, float]:
-#     """
-#     Top-m(any-positive) evaluated using hypothesis groupings, for events with >=1 positive class.
-#     Adds:
-#       • has_truth_frac  – fraction of events with class_truth
-#       • Top-1_chosen    – was chosen hypothesis positive
-#     """
-#     E, K = class_logits.shape
-#     has_truth = class_truth.any(axis=1)            # (E,)
-
-#     if not has_truth.any():
-#         return {f"Top-{m}": float('nan') for m in range(1, 2*k)} | {
-#                 "has_truth_frac": 0.0, "Top-1_chosen": float('nan')}
-
-#     truth_valid  = class_truth [has_truth]         # (E_valid, K)
-#     logits_valid = class_logits[has_truth]         # (E_valid, K)
-#     feats_valid  = features_arr[has_truth]         # (E_valid, K, B, J, F)
-
-#     metrics: Dict[str, float] = {}
-
-#     for m in range(1, min(2*k, K) + 1):
-#         topm_hits = 0
-#         for i in range(truth_valid.shape[0]):
-#             features_e     = feats_valid[i]         # (K, B, J, F)
-#             class_truth_e  = truth_valid[i]         # (K,)
-#             class_logits_e = logits_valid[i]        # (K,)
-#             groups         = _group_event_by_features(features_e)
-#             topm_hits     += _topm_any_positive_grouped(class_truth_e, class_logits_e, groups, m)
-#         metrics[f"Top-{m}"] = topm_hits / truth_valid.shape[0]
-        
-#     metrics["has_truth_frac"] = float(has_truth.mean())
-#     metrics["Top-1_chosen"] = float(
-#         class_truth[has_truth].astype(bool)
-#         [np.arange(has_truth.sum()), class_pred[has_truth]].mean()
-#     )
-#     return metrics
 def classifier_metrics(
     class_truth : np.ndarray,           # (E, K)
     class_logits: np.ndarray,           # (E, K)
@@ -136,6 +46,21 @@ def classifier_metrics(
     metrics["has_truth_frac"] = float(keep.mean())
     return metrics
 
+# helper function
+def topm_any_positive(class_truth: np.ndarray, class_logits: np.ndarray, m: int) -> float:
+    """
+    Success if ANY true class (class_truth==1) is within the top-m scores.
+    class_truth : (E, K)  multi-hot
+    class_logits: (E, K)  raw logits
+    """
+    E, K = class_logits.shape
+    m = min(m, K)
+    pos = class_truth.astype(bool)
+    # Get indices of the top-m scores per row (O(K) via argpartition; order inside chunk is arbitrary)
+    top_idx = np.argpartition(class_logits, -m, axis=1)[:, -m:]  # not fully sorted
+    # Check membership of any positive in those indices
+    hit = pos[np.arange(E)[:, None], top_idx].any(axis=1)
+    return float(hit.mean())
 
 # ------------------------------------------------------------------ MASKER
 def masker_metrics(mask_prob : np.ndarray,
@@ -156,37 +81,7 @@ def masker_metrics(mask_prob : np.ndarray,
         "_roc_curve": (fpr, tpr),
     }
 
-# --------------------------------------------------------- EVENT-LEVEL JOINT
-# def joint_metrics(class_truth : np.ndarray,
-#                   class_pred  : np.ndarray,
-#                   mask_pred   : np.ndarray,
-#                   mask_truth  : np.ndarray) -> Dict[str, float]:
-#     """
-#     Event efficiency and partial-reconstruction evaluated only where a
-#     positive class exists.
-#     """
-#     E, K, B = mask_pred.shape
-#     has_truth = class_truth.any(axis=1)            # (E,)
-#     if not has_truth.any():
-#         return {"Event_eff": float('nan'), "Partial_rec": float('nan')}
-
-#     idx            = np.where(has_truth)[0]        # indices to keep
-#     correct_class  = class_truth[idx, class_pred[idx]] == 1
-#     matches        = (mask_pred[idx, class_pred[idx]] ==
-#                       mask_truth[idx, class_pred[idx]])
-#     n_correct      = matches.sum(axis=1)
-
-#     full_mask      = (n_correct == B)
-#     partial_mask   = (n_correct > 0) & (n_correct < B)
-
-#     return {
-#         "Event_eff"  : float(np.mean(correct_class & full_mask)),
-#         "Partial_rec": float(np.mean(correct_class & partial_mask)),
-#         # keep masks for later slicing
-#         "_full_mask"   : full_mask,
-#         "_partial_mask": partial_mask,
-#     }
-# --------------------------------------------------------- EVENT‑LEVEL JOINT
+# ------------------------------------------------------------------ JOINT
 def joint_metrics(class_truth  : np.ndarray,        # (E, K)
                   class_pred   : np.ndarray,        # (E,)       secondary
                   mask_pred    : np.ndarray,        # (E, K, B)  secondary
