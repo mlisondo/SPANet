@@ -183,11 +183,22 @@ def joint_metrics(class_truth  : np.ndarray,        # (E, K)
     event_eff_base   = correct_base_both[is_full_reco].mean()    if n_full_reco else float('nan')
     partial_eff_base = correct_base_both[is_partial_reco].mean() if n_partial_reco else float('nan')
 
+    # 5. NO MASKER METRICS
+    event_eff_no_mask           = correct_hypothesis[is_full_reco].mean()    if n_full_reco else float('nan')
+    partial_eff_no_mask         = correct_hypothesis[is_partial_reco].mean() if n_partial_reco else float('nan')
+    event_eff_base_no_mask      = correct_base_hypothesis[is_full_reco].mean()    if n_full_reco else float('nan')
+    partial_eff_base_no_mask    = correct_base_hypothesis[is_partial_reco].mean() if n_partial_reco else float('nan')
+
+
     return {
         "Event_eff"        : float(event_eff),
         "Partial_rec"      : float(partial_eff),
         "Event_eff_base"   : float(event_eff_base),
         "Partial_rec_base" : float(partial_eff_base),
+        "event_eff_no_mask"         : float(event_eff_no_mask),
+        "partial_eff_no_mask"       : float(partial_eff_no_mask),
+        "event_eff_base_no_mask"    : float(event_eff_base_no_mask),
+        "partial_eff_base_no_mask"  : float(partial_eff_base_no_mask),
         "_n_full_eligible"    : int(n_full_reco),
         "_n_partial_eligible" : int(n_partial_reco),
     }
