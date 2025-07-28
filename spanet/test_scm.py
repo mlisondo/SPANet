@@ -186,11 +186,12 @@ def masker_metrics(mask_prob : np.ndarray,
 #         "_full_mask"   : full_mask,
 #         "_partial_mask": partial_mask,
 #     }
+# --------------------------------------------------------- EVENT‑LEVEL JOINT
 def joint_metrics(class_truth  : np.ndarray,        # (E, K)
-                  class_pred   : np.ndarray,        # (E,)
-                  mask_pred    : np.ndarray,        # (E, K, B)
+                  class_pred   : np.ndarray,        # (E,)       secondary
+                  mask_pred    : np.ndarray,        # (E, K, B)  secondary
                   mask_truth   : np.ndarray,        # (E, K, B)
-                  features_arr : np.ndarray,        # (E, K, B, J, F)
+                  features_arr : np.ndarray,        # (E, K, B, J, F)  raw inputs
                   valid_mask   : Optional[np.ndarray] = None
 ) -> Dict[str, float]:
     E, K, B = mask_pred.shape
@@ -200,35 +201,45 @@ def joint_metrics(class_truth  : np.ndarray,        # (E, K)
 
     keep = has_truth & valid_mask
     if not keep.any():
-        return {"Event_eff": float("nan"),       "Partial_rec": float("nan"),
-                "Event_eff_base": float("nan"), "Partial_rec_base": float("nan")}
+        return {k: float("nan") for k in
+                ["Event_eff","Partial_rec","Event_eff_base","Partial_rec_base"]}
 
     idx = np.where(keep)[0]
 
-    # Secondary model
-    sec_correct_cls = class_truth[idx, class_pred[idx]] == 1
-    sec_matches     = (mask_pred[idx, class_pred[idx]] ==
-                       mask_truth[idx, class_pred[idx]])
-    n_sec_correct   = sec_matches.sum(axis=1)
-    sec_full    = (n_sec_correct == B)
-    sec_partial = (n_sec_correct > 0) & (n_sec_correct < B)
+    branch_counts = (mask_truth * class_truth[..., None])[idx].sum(axis=2)  # (N_keep, K)
+    full_eligible     = (branch_counts == B).any(axis=1)                    # (N_keep,)
+    partial_eligible  = ((branch_counts > 0) & (branch_counts < B)).any(axis=1)
 
-    # Baseline SPANet (last hypothesis)
+    sec_correct_cls = class_truth[idx, class_pred[idx]] == 1
+    sec_matches     = (mask_pred[idx, class_pred[idx]] == mask_truth[idx, class_pred[idx]])
+    n_sec_correct   = sec_matches.sum(axis=1)
+    sec_full_ok     = sec_correct_cls & (n_sec_correct == B)
+    sec_partial_ok  = sec_correct_cls & (n_sec_correct > 0) & (n_sec_correct < B)
+
     base_k        = K - 1
-    branch_valid  = ~(features_arr[idx, base_k] == -1).any(axis=-1).any(axis=-1)
     base_correct_cls = class_truth[idx, base_k] == 1
-    base_matches     = (branch_valid == mask_truth[idx, base_k])
-    n_base_correct   = base_matches.sum(axis=1)
-    base_full    = (n_base_correct == B)
-    base_partial = (n_base_correct > 0) & (n_base_correct < B)
+    branch_valid  = ~(features_arr[idx, base_k] == -1).any(axis=-1).any(axis=-1)
+    base_matches  = (branch_valid == mask_truth[idx, base_k])
+    n_base_correct = base_matches.sum(axis=1)
+    base_full_ok    = base_correct_cls & (n_base_correct == B)
+    base_partial_ok = base_correct_cls & (n_base_correct > 0) & (n_base_correct < B)
+
+    n_full_elig     = full_eligible.sum()
+    n_partial_elig  = partial_eligible.sum()
+
+    event_eff        = float(sec_full_ok[full_eligible].mean())   if n_full_elig else float("nan")
+    partial_rec      = float(sec_partial_ok[partial_eligible].mean()) if n_partial_elig else float("nan")
+    event_eff_base   = float(base_full_ok[full_eligible].mean())  if n_full_elig else float("nan")
+    partial_rec_base = float(base_partial_ok[partial_eligible].mean()) if n_partial_elig else float("nan")
 
     return {
-        "Event_eff"         : float(np.mean(sec_correct_cls & sec_full)),
-        "Partial_rec"       : float(np.mean(sec_correct_cls & sec_partial)),
-        "Event_eff_base"    : float(np.mean(base_correct_cls & base_full)),
-        "Partial_rec_base"  : float(np.mean(base_correct_cls & base_partial)),
-        "_full_mask"        : sec_full,
-        "_partial_mask"     : sec_partial,
+        "Event_eff"        : event_eff,
+        "Partial_rec"      : partial_rec,
+        "Event_eff_base"   : event_eff_base,
+        "Partial_rec_base" : partial_rec_base,
+        # optional denominators for transparency
+        "_n_full_eligible"    : int(n_full_elig),
+        "_n_partial_eligible" : int(n_partial_elig),
     }
 
 
