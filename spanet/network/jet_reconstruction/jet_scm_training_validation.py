@@ -197,6 +197,7 @@ class SCM_Training_Val(JetSecondaryLoader):
         logits_kb = logits_b.view(N, K, B)                       # (N, K, B)
     
         t_kb      = pred_truth.float()                           # (N, K, B)
+        pos_rate       = t_kb.mean()
         
         # Optional: BCE
         pos_weight = ((1 - t_kb[has_truth]).sum() / (t_kb[has_truth].sum() + 1e-8)).clamp(max=self.pos_weight_cap)
