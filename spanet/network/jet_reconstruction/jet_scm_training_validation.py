@@ -47,6 +47,9 @@ class ClassifierTransformerHead(nn.Module):
         self.head = nn.Linear(class_embed_dim, branch_dim)
 
     def forward(self, features_arr):
+        print("\n" * 5, end="")
+        print("[Debug] -> entered ClassifierTransformerHead (forward)")
+
         N, K, B, J, Fdim = features_arr.shape
 
         # tokens: (N, K, B*J*F)
@@ -60,6 +63,17 @@ class ClassifierTransformerHead(nn.Module):
 
         logits = per_token_branch.reshape(N, K * B)
         logits = logits[:, :K]
+
+        probe(features_arr, "features_arr")
+        probe(tokens, "tokens")
+        probe(x, "projected + transformer output")
+        probe(per_token_branch, "per_token_branch")
+        probe(token_scores, "token_scores")
+        probe(logits, "final logits")
+
+        print("token_scores[0] =", token_scores[0])
+        print("per_token_branch[0, 0] =", per_token_branch[0, 0])
+        print("logits[0] =", logits[0])
         
         return logits, token_scores
 
@@ -78,13 +92,32 @@ class MaskerTransformerHead(nn.Module):
         self.head = nn.Linear(mask_embed_dim, 1)
 
     def forward(self, x):
+        print("\n" * 5, end="")
+        print("[Debug] -> entered MaskerTransformerHead (forward)")
+
         N, B, J, Fdim = x.shape
         # reshape to process each branch independently: batch B groups
-        x = x.reshape(N * B, J, Fdim)    # (N*B, J, F)
-        x = self.proj(x)                 # (N*B, J, E)
-        x = self.tr(x)                   # (N*B, J, E)
-        x = x.mean(dim=1)                # mean pool over jets -> (N*B, E)
-        logits = self.head(x).squeeze(-1).reshape(N, B)  # (N, B)
+
+        N, B, J, Fdim = x.shape
+        probe(x, "features_branch (input)")
+
+        x = x.reshape(N * B, J, Fdim)
+        probe(x, "reshaped (N*B, J, F)")
+
+        x = self.proj(x)
+        probe(x, "projected (N*B, J, E)")
+
+        x = self.tr(x)
+        probe(x, "transformer output (N*B, J, E)")
+
+        x = x.mean(dim=1)
+        probe(x, "mean pooled (N*B, E)")
+
+        logits = self.head(x).squeeze(-1).reshape(N, B)
+        probe(logits, "masker logits (N, B)")
+
+        print("logits[0] =", logits[0])        # All branches for first event
+        print("logits[0].sigmoid() =", torch.sigmoid(logits[0]))  # Optional: sigmoid probabilities
         return logits
 
 
@@ -132,17 +165,38 @@ class SCM_Training_Val(JetSecondaryLoader):
         self.focal_alpha_pos = 0.7
         self.focal_gamma = 2.0
 
-    def _compiled_core(self, features_arr, pred_truth, class_truth):
-        # features_arr: (N, K, B, J, F)
+    def _compiled_core(self, features_arr, pred_truth, class_truth, one_one):
+        print("\n" * 5, end="")
+        print("[Debug] -> entered _compiled_core")
+
+        # features_arr: (N, real_K, B, J, F)
         N, K, B, J, Fdim = features_arr.shape
 
         class_logits, token_scores = self.classifier(features_arr)  # (N, real_K), (N, K)
+        print("\n" * 5, end="")
+        print("[Debug] -> entered _compiled_core (from classifier)")
+
+        probe(class_logits, "class_logits")
+        probe(token_scores, "token_scores")
+
+        for e in one_one:
+            print(f"\n===== EVENT {int(e)} =====")
+
+            print("class_logits:")
+            print(class_logits[e])
+
+            print("token_scores:")
+            print(token_scores[e])
+
+            print("=" * 30)
 
         class_loss, has_truth, num_pos, ce_random_baseline = self._multi_positive_ce(class_logits, class_truth)
 
         rows = torch.arange(N, device=class_logits.device)
         pred_k = torch.argmax(token_scores, dim=1)  # best hypothesis index by max token score
         if has_truth.any():
+
+            
             # Build a K-hot truth over hypotheses: treat a class index block per K of size B
             # A token is considered "true" if any of its B branch entries is true in class_truth.
             # class_truth is (N, real_K) corresponding to [k0:b0..bB-1, k1:..., ...] minus the last slot.
@@ -153,6 +207,20 @@ class SCM_Training_Val(JetSecondaryLoader):
             truth_k = truth_kb.any(dim=2)  # (N, K)
             top1_acc_truth = truth_k[rows[has_truth], pred_k[has_truth]].float().mean()
             num_pos_mean = num_pos[has_truth].float().mean()
+
+            
+            print("\n" * 5, end="")
+            print("[Debug] -> entered if has_truth.any():")
+            for e in one_one:
+                print(f"\n-- Event {int(e)} --")
+                probe(class_logits[e], f"class_logits[{e}]")
+                probe(token_scores[e], f"token_scores[{e}]")
+                print(f"truth_k[{e}] = {truth_k[e]}")
+                print(f"pred_k[{e}] = {int(pred_k[e])}")
+                print(f"Prediction is correct? {bool(truth_k[e, pred_k[e]])}")
+                print(f"class_truth[{e}] = {class_truth[e]}")
+                print(f"truth_kb[{e}] (K x B):\n{truth_kb[e]}")
+                print(f"num_pos[{e}] = {num_pos[e]}")
         else:
             top1_acc_truth = torch.tensor(0.0, device=class_logits.device)
             num_pos_mean = num_pos.float().mean()
@@ -174,7 +242,11 @@ class SCM_Training_Val(JetSecondaryLoader):
         # Take the first K hypothesis (or we could average features over K). To stay order-free, use mean over K.
         features_branch = features_arr.mean(dim=1)  # (N, B, J, F)
         logits_branch = self.masker(features_branch)  # (N, B)
+        print("\n" * 5, end="")
+        print("[Debug] -> entered _compiled_core (from masker)")
 
+
+        
         # Imbalance stats per branch (using reduced targets)
         t = t_branch
         pos_per_branch = t.sum(dim=0)  # (B,)
@@ -182,6 +254,27 @@ class SCM_Training_Val(JetSecondaryLoader):
         neg_per_branch = tot_per_branch - pos_per_branch
         eps = torch.finfo(t.dtype).eps
         pos_weight_b = (neg_per_branch / (pos_per_branch + eps)).clamp(max=self.pos_weight_cap)
+
+
+
+        for e in one_one:
+            print(f"\n[Debug] -- Masker diagnostics for event {int(e)} --")
+
+            probe(features_branch[e], f"features_branch[{e}] (B, J, F)")
+            print(f"features_branch[{e}, 0] =\n{features_branch[e, 0]}")  # example: branch 0 jet features
+
+            probe(logits_branch[e], f"logits_branch[{e}] (B,)")
+            print(f"sigmoid(logits_branch[{e}]) =\n{torch.sigmoid(logits_branch[e])}")
+
+            print(f"t_branch[{e}] = {t[e]}")
+
+
+        print("\n[Masker Stats]")
+        print("pos_per_branch:", pos_per_branch)
+        print("neg_per_branch:", neg_per_branch)
+        print("pos_weight_b:", pos_weight_b)
+        print("avg pos_weight_b:", pos_weight_b.mean())
+        print(f"Pos rate: {(pos_per_branch.sum() / (N * B)).item():.4f}")
 
         mask_loss = self.focal_bce_with_logits(
             logits_branch, t_branch,
@@ -248,17 +341,50 @@ class SCM_Training_Val(JetSecondaryLoader):
     _compiled_core = tcompile(_compiled_core, dynamic=True)
 
     def forward_scm(self, batch):
+        print("\n" * 5, end="")
+        print("[Debug] -> entered forward_scm")
         pred_truth, true_masks, features_arr, class_truth, true_idx, jet_preds_tensor = self.topk_data(batch)
 
-        return self._compiled_core(features_arr, pred_truth, class_truth)
+        true_event_idx = torch.nonzero(class_truth[:, 0]).squeeze(1)[0]
+
+        false_event_idx = torch.nonzero(~class_truth[:, 0]).squeeze(1)[0]
+
+        one_one = [true_event_idx] + [false_event_idx]
+
+        for e in one_one:
+            print(f"\n===== EVENT {int(e)} =====")
+
+            print("jet_preds_tensor:")
+            print(jet_preds_tensor[e])
+
+            print("true_idx:")
+            print(true_idx[:, e])
+
+            print("pred_truth matrix (K x B):")
+            print(pred_truth[e])
+
+            print("true_masks:")
+            print(true_masks[:, e])
+
+            print("class_truth row:")
+            print(class_truth[e])
+
+            print("=" * 30)
+
+        return self._compiled_core(features_arr, pred_truth, class_truth, one_one)
 
     def training_step(self, batch: Batch, batch_idx: int):
+        print("\n" * 5, end="")
+        print("[Debug] -> entered training_step")
         self.on_train_epoch_start()
         (
             class_loss, mask_loss, top1_acc_truth,
             has_truth_frac, num_pos_mean, ce_random_baseline,
             pos_rate, avg_pos_weight
         ) = self.forward_scm(batch)
+
+        print("\n" * 5, end="")
+        print("[Debug] -> entered training_step (from forward_scm)")
 
         total_loss = class_loss + mask_loss
 
@@ -271,6 +397,8 @@ class SCM_Training_Val(JetSecondaryLoader):
         self.log('train_ce_random_baseline', ce_random_baseline)
         self.log('train_mask_pos_rate', pos_rate)
         self.log('train_mask_pos_weight_mean', avg_pos_weight)
+
+        raise RuntimeError("Debug break") 
 
         return total_loss
 
