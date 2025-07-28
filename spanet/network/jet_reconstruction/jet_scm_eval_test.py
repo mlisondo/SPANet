@@ -77,7 +77,7 @@ class SCM_Eval_Test(SCM_Training_Val):
             "mask_probs":   mask_probs,          # MP
             "mask_preds":   mask_preds,          # MPd
             "class_truth":  class_truth,         # CT
-            "mask_truth":   pred_truth,          # MT
+            "pred_truth":   pred_truth,          # PT
             "features_arr": features_arr,        # FA
             "true_masks":   true_masks,           # TM
             "raw_valid":    raw_valid            # RV

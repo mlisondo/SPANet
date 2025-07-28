@@ -65,11 +65,11 @@ def topm_any_positive(class_truth: np.ndarray, class_logits: np.ndarray, m: int)
 # ------------------------------------------------------------------ MASKER
 def masker_metrics(mask_prob : np.ndarray,
                    mask_pred : np.ndarray,
-                   mask_truth: np.ndarray) -> Dict[str, float | list]:
+                   pred_truth: np.ndarray) -> Dict[str, float | list]:
     """
     Precision-Recall, ROC and confusion matrix for the mask head.
     """
-    P, T = mask_prob.ravel(), mask_truth.ravel()
+    P, T = mask_prob.ravel(), pred_truth.ravel()
     precision, recall, _ = skl_prc(T, P)
     fpr, tpr, _          = skl_roc(T, P)
     return {
@@ -85,9 +85,9 @@ def masker_metrics(mask_prob : np.ndarray,
 def joint_metrics(class_truth  : np.ndarray,        # (E, K)
                   class_pred   : np.ndarray,        # (E,)       secondary
                   mask_pred    : np.ndarray,        # (E, K, B)  secondary
-                  mask_truth   : np.ndarray,        # (E, K, B)
+                  pred_truth   : np.ndarray,        # (E, K, B)
                   features_arr : np.ndarray,        # (E, K, B, J, F)
-                  true_masks   : np.ndarray,        # (E, K) boolean mask
+                  true_masks   : np.ndarray,        # (E, B) boolean mask
                   valid_mask   : Optional[np.ndarray] = None  # override if needed
 ) -> Dict[str, float]:
     E, K, B = mask_pred.shape
@@ -109,13 +109,13 @@ def joint_metrics(class_truth  : np.ndarray,        # (E, K)
     print(idx)
 
     # ========== Truth-based eligibility ==========
-    branch_counts = (mask_truth * class_truth[..., None])[idx].sum(axis=2)  # (N_keep, K)
+    branch_counts = (pred_truth * class_truth[..., None])[idx].sum(axis=2)  # (N_keep, K)
     full_eligible = (branch_counts == B).any(axis=1)                         # (N_keep,)
     partial_eligible = ((branch_counts > 0) & (branch_counts < B)).any(axis=1)
 
     # ========== Secondary classifier metrics ==========
     sec_correct_cls = class_truth[idx, class_pred[idx]] == 1
-    sec_matches     = (mask_pred[idx, class_pred[idx]] == mask_truth[idx, class_pred[idx]])
+    sec_matches     = (mask_pred[idx, class_pred[idx]] == pred_truth[idx, class_pred[idx]])
     n_sec_correct   = sec_matches.sum(axis=1)
     sec_full_ok     = sec_correct_cls & (n_sec_correct == B)
     sec_partial_ok  = sec_correct_cls & (n_sec_correct > 0) & (n_sec_correct < B)
@@ -127,7 +127,7 @@ def joint_metrics(class_truth  : np.ndarray,        # (E, K)
     # ========== Branch-level validity from true_masks ==========
     # branch_valid  = ~(features_arr[idx, base_k] == -1).any(axis=-1).any(axis=-1)        # CHANGED
     branch_valid = true_masks[idx, base_k]  # shape: (N_keep,)
-    base_matches  = (branch_valid == mask_truth[idx, base_k])
+    base_matches  = (branch_valid == pred_truth[idx, base_k])
     n_base_correct = base_matches.sum(axis=1)
     base_full_ok    = base_correct_cls & (n_base_correct == B)
     base_partial_ok = base_correct_cls & (n_base_correct > 0) & (n_base_correct < B)
@@ -224,7 +224,7 @@ def main(
     MP  = arrays["mask_probs"]         # (events, K, branches)
     MPd = arrays["mask_preds"]         # (events, K, branches)
     CT  = arrays["class_truth"]        # (events, K)
-    MT  = arrays["mask_truth"]         # (events, K, branches)
+    PT  = arrays["pred_truth"]         # (events, K, branches)
     feats = arrays["features_arr"]     # (events, K, branches, jets, features)
     RV = arrays["raw_valid"]           # (events,)
     TM = arrays["true_masks"]          # (events, branches)
@@ -235,11 +235,11 @@ def main(
     metrics.update(classifier_metrics(CT, CL, model.options.k, valid_mask=RV))
 
     # Masker metrics
-    m_mask = masker_metrics(MP, MPd, MT)
+    m_mask = masker_metrics(MP, MPd, PT)
     metrics.update({k:v for k,v in m_mask.items() if not k.startswith("_")})
 
     # Joint event-level metrics
-    m_joint = joint_metrics(CT, CPd, MPd, MT, feats, TM, valid_mask=RV)
+    m_joint = joint_metrics(CT, CPd, MPd, PT, feats, TM, valid_mask=RV)
     metrics.update({k:v for k,v in m_joint.items() if not k.startswith("_")})
 
     # curves for PDF
