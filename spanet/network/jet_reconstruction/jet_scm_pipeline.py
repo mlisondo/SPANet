@@ -87,48 +87,48 @@ class JetSecondaryLoader(JetReconstructionNetwork):
             jet_data, jet_preds_tensor, true_idx, true_masks
         )
 
-        true_event_idx = torch.nonzero(class_truth[:, 0]).squeeze(1)[0]
+        # true_event_idx = torch.nonzero(class_truth[:, 0]).squeeze(1)[0]
 
-        false_event_idx = torch.nonzero(~class_truth[:, 0]).squeeze(1)[0]
+        # false_event_idx = torch.nonzero(~class_truth[:, 0]).squeeze(1)[0]
 
-        one_one = [true_event_idx] + [false_event_idx]
+        # one_one = [true_event_idx] + [false_event_idx]
 
-        probe(sources[0], "sources[0]")
-        probe(jet_preds_tensor,"jet_preds_tensor")
-        probe(true_idx,"true_idx")
-        probe(pred_truth,"pred_truth")
-        probe(true_masks,"true_masks")
-        probe(class_truth,"class_truth")
-        probe(jet_data,"jet_data")
-        probe(features_arr,"features_arr")
+        # probe(sources[0], "sources[0]")
+        # probe(jet_preds_tensor,"jet_preds_tensor")
+        # probe(true_idx,"true_idx")
+        # probe(pred_truth,"pred_truth")
+        # probe(true_masks,"true_masks")
+        # probe(class_truth,"class_truth")
+        # probe(jet_data,"jet_data")
+        # probe(features_arr,"features_arr")
 
-        for e in one_one:
-            print(f"\n===== EVENT {int(e)} =====")
+        # for e in one_one:
+        #     print(f"\n===== EVENT {int(e)} =====")
 
-            print("jet_preds_tensor:")
-            print(jet_preds_tensor[e])
+        #     print("jet_preds_tensor:")
+        #     print(jet_preds_tensor[e])
 
-            print("true_idx:")
-            print(true_idx[:, e])
+        #     print("true_idx:")
+        #     print(true_idx[:, e])
 
-            print("pred_truth matrix (K x B):")
-            print(pred_truth[e])
+        #     print("pred_truth matrix (K x B):")
+        #     print(pred_truth[e])
 
-            print("true_masks:")
-            print(true_masks[:, e])
+        #     print("true_masks:")
+        #     print(true_masks[:, e])
 
-            print("class_truth row:")
-            print(class_truth[e])
+        #     print("class_truth row:")
+        #     print(class_truth[e])
 
-            print("Jet data for events:")
-            print(jet_data[e])
+        #     print("Jet data for events:")
+        #     print(jet_data[e])
 
-            print("feature for selected events:")
-            print(features_arr[e])
+        #     print("feature for selected events:")
+        #     print(features_arr[e])
 
-            print("=" * 30)
+        #     print("=" * 30)
 
-        raise RuntimeError("Debug break")
+        # raise RuntimeError("Debug break")
 
         return pred_truth, true_masks, features_arr, class_truth, true_idx, jet_preds_tensor
 
