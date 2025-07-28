@@ -81,6 +81,6 @@ class SCM_Eval_Test(SCM_Training_Val):
             "class_truth":  class_truth,         # CT
             "mask_truth":   pred_truth,          # MT
             "features_arr": features_arr,        # FA
-            "true_masks":   true_masks           # TM
+            "true_masks":   true_masks,           # TM
             "raw_valid":    raw_valid            # RV
         }
