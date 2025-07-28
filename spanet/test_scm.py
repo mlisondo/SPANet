@@ -50,36 +50,43 @@ def _topm_any_positive_grouped(class_truth_e: np.ndarray,
 
 # ------------------------------------------------------------------ CLASSIFIER
 def classifier_metrics(
-    class_truth : np.ndarray,        # (E, K)   multi-hot
-    class_logits: np.ndarray,        # (E, K)   raw logits
-    class_pred : np.ndarray,         # (E,)     “chosen” index (still logged)
-    k           : int
+    class_truth : np.ndarray,        # (E, K)
+    class_logits: np.ndarray,        # (E, K)
+    class_pred : np.ndarray,         # (E,)
+    k           : int,
+    features_arr: np.ndarray         # (E, K, B, J, F)
 ) -> Dict[str, float]:
     """
-    Top-m(any-positive) *only on events that have >=1 positive class.
-    Adds two diagnostics:
-      • has_truth_frac  – fraction of events that were evaluated
-      • Top-1_chosen    – hit-rate of the user-supplied class_pred
+    Top-m(any-positive) evaluated using hypothesis groupings, for events with >=1 positive class.
+    Adds:
+      • has_truth_frac  – fraction of events with class_truth
+      • Top-1_chosen    – was chosen hypothesis positive
     """
     E, K = class_logits.shape
     has_truth = class_truth.any(axis=1)            # (E,)
 
-    if not has_truth.any():                        # degenerate edge-case
+    if not has_truth.any():
         return {f"Top-{m}": float('nan') for m in range(1, 2*k)} | {
                 "has_truth_frac": 0.0, "Top-1_chosen": float('nan')}
 
-    truth_valid  = class_truth [has_truth]
-    logits_valid = class_logits[has_truth]
+    truth_valid  = class_truth [has_truth]         # (E_valid, K)
+    logits_valid = class_logits[has_truth]         # (E_valid, K)
+    feats_valid  = features_arr[has_truth]         # (E_valid, K, B, J, F)
 
     metrics: Dict[str, float] = {}
-    metrics["Top-1"] = topm_any_positive(truth_valid, logits_valid, 1)
 
-    for m in range(2, min(2*k, K) + 1):
-        metrics[f"Top-{m}"] = topm_any_positive(truth_valid, logits_valid, m)
-
-    # Diagnostics
+    for m in range(1, min(2*k, K) + 1):
+        topm_hits = 0
+        for i in range(truth_valid.shape[0]):
+            features_e     = feats_valid[i]         # (K, B, J, F)
+            class_truth_e  = truth_valid[i]         # (K,)
+            class_logits_e = logits_valid[i]        # (K,)
+            groups         = _group_event_by_features(features_e)
+            topm_hits     += _topm_any_positive_grouped(class_truth_e, class_logits_e, groups, m)
+        metrics[f"Top-{m}"] = topm_hits / truth_valid.shape[0]
+        
     metrics["has_truth_frac"] = float(has_truth.mean())
-    metrics["Top-1_chosen"]   = float(
+    metrics["Top-1_chosen"] = float(
         class_truth[has_truth].astype(bool)
         [np.arange(has_truth.sum()), class_pred[has_truth]].mean()
     )
