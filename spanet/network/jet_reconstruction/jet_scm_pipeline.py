@@ -111,7 +111,7 @@ class JetSecondaryLoader(JetReconstructionNetwork):
         branch_ok   = (pred_truth == mask_exp).all(dim=2)                  # (E, K)
         class_truth = branch_ok & has_rec.expand_as(branch_ok)            # (E, K)
 
-        return pred_truth, class_truth, features_arr
+        return pred_truth, class_truth, features_arr, canon_truth, canon_masks
 
     @torch.no_grad()
     def topk_data(self, batch):
@@ -136,7 +136,7 @@ class JetSecondaryLoader(JetReconstructionNetwork):
         true_idx   = torch.stack(true_idx)   # (B,E,p_max)
         true_masks = torch.stack(true_masks) # (B,E)
     
-        pred_truth, class_truth, features_arr = self._topk_core(
+        pred_truth, class_truth, features_arr, canon_truth, canon_masks = self._topk_core(
             jet_data, jet_preds_tensor, true_idx, true_masks
         )
 
@@ -173,8 +173,14 @@ class JetSecondaryLoader(JetReconstructionNetwork):
             print("true_idx:")
             print(true_idx[:, e])
 
+            print("canon_truth:")
+            print(canon_truth[:, e])
+
             print("true_masks:")
             print(true_masks[:, e])
+
+            print("canon_masks")
+            print(canon_masks[:, e])
 
             print("pred_truth matrix (K x B):")
             print(pred_truth[e])
@@ -189,7 +195,7 @@ class JetSecondaryLoader(JetReconstructionNetwork):
 
         raise RuntimeError("Debug break")
 
-        return pred_truth, true_masks, features_arr, class_truth, true_idx, jet_preds_tensor
+        return pred_truth, canon_masks, features_arr, class_truth, canon_truth, jet_preds_tensor
 
 
 
