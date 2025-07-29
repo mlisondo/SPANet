@@ -139,23 +139,30 @@ class JetSecondaryLoader(JetReconstructionNetwork):
             jet_data, jet_preds_tensor, true_idx, true_masks
         )
 
-        true_event_idx = torch.nonzero(class_truth[:, 0]).squeeze(1)[0]
+        true_event_idx = torch.nonzero(class_truth[:, 0]).squeeze(1)[:2]
 
-        false_event_idx = torch.nonzero(~class_truth[:, 0]).squeeze(1)[0]
+        false_event_idx = torch.nonzero(~class_truth[:, 0]).squeeze(1)[:2]
 
         one_one = [true_event_idx] + [false_event_idx]
 
         probe(sources[0], "sources[0]")
-        probe(jet_preds_tensor,"jet_preds_tensor")
-        probe(true_idx,"true_idx")
-        probe(pred_truth,"pred_truth")
-        probe(true_masks,"true_masks")
-        probe(class_truth,"class_truth")
-        probe(jet_data,"jet_data")
-        probe(features_arr,"features_arr")
+        probe(jet_data, "jet_data")
+        probe(jet_preds_tensor, "jet_preds_tensor")
+        probe(true_idx, "true_idx")
+        probe(true_masks, "true_masks")
+        probe(pred_truth, "pred_truth")
+        probe(class_truth, "class_truth")
+        probe(features_arr, "features_arr")
+        probe(jet_data, "jet_data")
+        probe(jet_preds_tensor, "jet_preds_tensor")
+        probe(true_idx, "true_idx")
+        probe(true_masks, "true_masks")
 
         for e in one_one:
             print(f"\n===== EVENT {int(e)} =====")
+
+            print("Jet data for events:")
+            print(jet_data[e])
 
             print("jet_preds_tensor:")
             print(jet_preds_tensor[e])
@@ -163,17 +170,14 @@ class JetSecondaryLoader(JetReconstructionNetwork):
             print("true_idx:")
             print(true_idx[:, e])
 
-            print("pred_truth matrix (K x B):")
-            print(pred_truth[e])
-
             print("true_masks:")
             print(true_masks[:, e])
 
+            print("pred_truth matrix (K x B):")
+            print(pred_truth[e])
+
             print("class_truth row:")
             print(class_truth[e])
-
-            print("Jet data for events:")
-            print(jet_data[e])
 
             print("feature for selected events:")
             print(features_arr[e])
