@@ -47,8 +47,6 @@ class ClassifierTransformerHead(nn.Module):
         self.head = nn.Linear(class_embed_dim, branch_dim)
 
     def forward(self, features_arr):
-        # print("\n" * 5, end="")
-        # print("[Debug] -> entered ClassifierTransformerHead (forward)")
 
         N, K, B, J, Fdim = features_arr.shape
 
@@ -63,17 +61,6 @@ class ClassifierTransformerHead(nn.Module):
 
         logits = per_token_branch.reshape(N, K * B)
         logits = logits[:, :K]
-
-        # probe(features_arr, "features_arr")
-        # probe(tokens, "tokens")
-        # probe(x, "projected + transformer output")
-        # probe(per_token_branch, "per_token_branch")
-        # probe(token_scores, "token_scores")
-        # probe(logits, "final logits")
-
-        # print("token_scores[0] =", token_scores[0])
-        # print("per_token_branch[0, 0] =", per_token_branch[0, 0])
-        # print("logits[0] =", logits[0])
         
         return logits, token_scores
 
@@ -92,32 +79,21 @@ class MaskerTransformerHead(nn.Module):
         self.head = nn.Linear(mask_embed_dim, 1)
 
     def forward(self, x):
-        # print("\n" * 5, end="")
-        # print("[Debug] -> entered MaskerTransformerHead (forward)")
 
         N, B, J, Fdim = x.shape
         # reshape to process each branch independently: batch B groups
 
         N, B, J, Fdim = x.shape
-        # probe(x, "features_branch (input)")
 
         x = x.reshape(N * B, J, Fdim)
-        # probe(x, "reshaped (N*B, J, F)")
 
         x = self.proj(x)
-        # probe(x, "projected (N*B, J, E)")
 
         x = self.tr(x)
-        # probe(x, "transformer output (N*B, J, E)")
 
         x = x.mean(dim=1)
-        # probe(x, "mean pooled (N*B, E)")
 
         logits = self.head(x).squeeze(-1).reshape(N, B)
-        # probe(logits, "masker logits (N, B)")
-
-        # print("logits[0] =", logits[0])        # All branches for first event
-        # print("logits[0].sigmoid() =", torch.sigmoid(logits[0]))  # Optional: sigmoid probabilities
         return logits
 
 
@@ -203,15 +179,39 @@ class SCM_Training_Val(JetSecondaryLoader):
         pos_weight = ((1 - t_kb[has_truth]).sum() / (t_kb[has_truth].sum() + 1e-8)).clamp(max=self.pos_weight_cap)
         bce = F.binary_cross_entropy_with_logits(
                 logits_kb, t_kb, reduction='none', pos_weight=pos_weight)[has_truth]
+
         mask_loss = bce.mean()
+        # mask_loss = focal_bce_with_logits(
+        #     logits_kb[has_truth], t_kb[has_truth],
+        #     alpha_pos=self.focal_alpha_pos,
+        #     gamma=self.focal_gamma,
+        #     reduction="mean"
+        # )
     
         return (
             class_loss, mask_loss, top1_acc_truth,
             has_truth_frac, num_pos_mean, ce_random_baseline,
             pos_rate#, avg_pos_weight
         )
+    
+    @staticmethod
+    def focal_bce_with_logits(logits, targets, alpha_pos=0.25, gamma=2.0, reduction="mean"):
+        p = torch.sigmoid(logits)
+        pt = torch.where(targets.bool(), p, 1 - p)  # p_t
+        bce = F.binary_cross_entropy_with_logits(logits, targets, reduction="none")
 
+        alpha_t = torch.where(
+            targets.bool(),
+            torch.as_tensor(alpha_pos, device=logits.device, dtype=logits.dtype),
+            torch.as_tensor(1 - alpha_pos, device=logits.device, dtype=logits.dtype),
+        )
+        loss = alpha_t * (1 - pt).pow(gamma) * bce
 
+        if reduction == "mean":
+            return loss.mean()
+        if reduction == "sum":
+            return loss.sum()
+        return loss
 
     # Multi-positive classifier loss
     @staticmethod
@@ -274,17 +274,12 @@ class SCM_Training_Val(JetSecondaryLoader):
         return self._compiled_core(features_arr, pred_truth, class_truth, one_one)
 
     def training_step(self, batch: Batch, batch_idx: int):
-        # print("\n" * 5, end="")
-        # print("[Debug] -> entered training_step")
         self.on_train_epoch_start()
         (
             class_loss, mask_loss, top1_acc_truth,
             has_truth_frac, num_pos_mean, ce_random_baseline,
             pos_rate#, avg_pos_weight
         ) = self.forward_scm(batch)
-
-        # print("\n" * 5, end="")
-        # print("[Debug] -> entered training_step (from forward_scm)")
 
         total_loss = class_loss + mask_loss
 
@@ -298,7 +293,6 @@ class SCM_Training_Val(JetSecondaryLoader):
         self.log('train_mask_pos_rate', pos_rate)
         # self.log('train_mask_pos_weight_mean', avg_pos_weight)
 
-        # raise RuntimeError("Debug break") 
 
         return total_loss
 
