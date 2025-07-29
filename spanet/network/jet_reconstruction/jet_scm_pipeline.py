@@ -144,7 +144,7 @@ class JetSecondaryLoader(JetReconstructionNetwork):
 
         false_event_idx = torch.nonzero(~class_truth[:, 0]).squeeze(1)[:2]
 
-        one_one = [true_event_idx] + [false_event_idx]
+        one_one = torch.cat([true_event_idx, false_event_idx])  
 
         probe(sources[0], "sources[0]")
         probe(jet_data, "jet_data")
