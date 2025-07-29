@@ -180,13 +180,13 @@ class SCM_Training_Val(JetSecondaryLoader):
         bce = F.binary_cross_entropy_with_logits(
                 logits_kb, t_kb, reduction='none', pos_weight=pos_weight)[has_truth]
 
-        mask_loss = bce.mean()
-        # mask_loss = focal_bce_with_logits(
-        #     logits_kb[has_truth], t_kb[has_truth],
-        #     alpha_pos=self.focal_alpha_pos,
-        #     gamma=self.focal_gamma,
-        #     reduction="mean"
-        # )
+        # mask_loss = bce.mean()
+        mask_loss = focal_bce_with_logits(
+            logits_kb[has_truth], t_kb[has_truth],
+            alpha_pos=self.focal_alpha_pos,
+            gamma=self.focal_gamma,
+            reduction="mean"
+        )
     
         return (
             class_loss, mask_loss, top1_acc_truth,
