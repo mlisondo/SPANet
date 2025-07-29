@@ -43,6 +43,7 @@ class ClassifierTransformerHead(nn.Module):
       features_arr: (N, K, B, J, F)
     Outputs:
       logits: (N, real_K) where real_K = B*K - 1
+      token_scores: (N, K) optional per-K score for argmax monitoring
     """
     def __init__(self, branch_dim: int, jets: int, feats: int,
                  class_embed_dim: int, nhead: int, num_layers: int, dropout: float):
@@ -53,8 +54,7 @@ class ClassifierTransformerHead(nn.Module):
         self.tr = SimpleTransformerEncoder(class_embed_dim, nhead, num_layers, dropout)
         # Per-token predicts branch_dim logits
         self.head = nn.Linear(class_embed_dim, branch_dim)
-        self.pool = AttentionPooling(branch_dim)  # NEW: learnable pooling over B branches
-        self.logit_head = nn.Linear(branch_dim, 1)
+
     def forward(self, features_arr):
 
         N, K, B, J, Fdim = features_arr.shape
@@ -65,12 +65,14 @@ class ClassifierTransformerHead(nn.Module):
         x = self.tr(x)                  # (N, K, E)
         per_token_branch = self.head(x) # (N, K, B)
 
-        # Attention-pool across branches to summarize each hypothesis
-        pooled = self.pool(per_branch)  # (N, K, branch_dim)
+        # For logging a single best-K index: score each token by its best branch logit
+        token_scores, _ = per_token_branch.max(dim=-1)  # (N, K)
 
-        class_logits = self.logit_head(pooled).squeeze(-1)  # (N, K)
+        logits = per_token_branch.reshape(N, K * B)
+        logits = logits[:, :K]
         
-        return class_logits
+        return logits, token_scores
+
 
 class MaskerTransformerHead(nn.Module):
     """
@@ -156,12 +158,12 @@ class SCM_Training_Val(JetSecondaryLoader):
         N, K, B, J, Fdim = features_arr.shape
     
         # CLASSIFIER
-        class_logits = self.classifier(features_arr)
+        class_logits, token_scores = self.classifier(features_arr)
         class_loss, has_truth, num_pos, ce_random_baseline = \
             self._multi_positive_ce(class_logits, class_truth)
     
         rows   = torch.arange(N, device=class_logits.device)
-        pred_k = class_logits.argmax(dim=1)
+        pred_k = token_scores.argmax(dim=1)
     
         top1_acc_truth = torch.tensor(0., device=class_logits.device)
         num_pos_mean   = num_pos.float().mean()
@@ -186,6 +188,14 @@ class SCM_Training_Val(JetSecondaryLoader):
             gamma=self.focal_gamma,
             reduction="mean"
         )
+
+        # ONLY CALCUALTE LOSS ON EVENTS THAT HAVE AT LEAST ONE VALID PRED
+        # mask_loss = self.focal_bce_with_logits(
+        #     logits[has_truth], flat_truth[has_truth],
+        #     alpha_pos=self.focal_alpha_pos,
+        #     gamma=self.focal_gamma,
+        #     reduction="mean"
+        # )
 
         return (
             class_loss, mask_loss, top1_acc_truth,
