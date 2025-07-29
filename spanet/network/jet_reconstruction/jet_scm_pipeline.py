@@ -67,7 +67,7 @@ class JetSecondaryLoader(JetReconstructionNetwork):
                         best_truth[e] = truth_perm[e]
                         best_mask[e]  = mask_perm[e]
 
-        return best_truth.transpose(0, 1), best_mask.transpose(0, 1), best_pred_truth
+        return best_truth, best_mask, best_pred_truth
     
     @torch.compile(dynamic=True)
     def _topk_core(
@@ -139,6 +139,8 @@ class JetSecondaryLoader(JetReconstructionNetwork):
         pred_truth, class_truth, features_arr, canon_idx, canon_masks = self._topk_core(
             jet_data, jet_preds_tensor, true_idx, true_masks
         )
+        canon_idx = canon_idx.permute(1, 0, 2)
+        canon_masks = canon_masks.permute(1, 0)
 
         super_true_event_idx = torch.nonzero(true_masks.all(dim=0)).squeeze(1)[:2]
 
