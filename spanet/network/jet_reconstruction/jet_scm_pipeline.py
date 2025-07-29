@@ -67,7 +67,7 @@ class JetSecondaryLoader(JetReconstructionNetwork):
                         best_truth[e] = truth_perm[e]
                         best_mask[e]  = mask_perm[e]
 
-        return best_truth, best_mask, best_pred_truth
+        return best_truth.transpose(0, 1), best_mask.transpose(0, 1), best_pred_truth
     
     @torch.compile(dynamic=True)
     def _topk_core(
@@ -95,7 +95,7 @@ class JetSecondaryLoader(JetReconstructionNetwork):
         mask_matrix  = true_masks_tensor.permute(1, 0)                                     # (E, B)
 
         # Step 2: Canonicalize truth via best permutation to match each prediction
-        canon_truth, canon_masks, pred_truth = self.best_truth_permutation(
+        canon_idx, canon_masks, pred_truth = self.best_truth_permutation(
             pred_sorted, truth_sorted, mask_matrix, PAD
         )
 
@@ -111,7 +111,7 @@ class JetSecondaryLoader(JetReconstructionNetwork):
         branch_ok   = (pred_truth == mask_exp).all(dim=2)                  # (E, K)
         class_truth = branch_ok & has_rec.expand_as(branch_ok)            # (E, K)
 
-        return pred_truth, class_truth, features_arr, canon_truth, canon_masks
+        return pred_truth, class_truth, features_arr, canon_idx, canon_masks
 
     @torch.no_grad()
     def topk_data(self, batch):
@@ -136,7 +136,7 @@ class JetSecondaryLoader(JetReconstructionNetwork):
         true_idx   = torch.stack(true_idx)   # (B,E,p_max)
         true_masks = torch.stack(true_masks) # (B,E)
     
-        pred_truth, class_truth, features_arr, canon_truth, canon_masks = self._topk_core(
+        pred_truth, class_truth, features_arr, canon_idx, canon_masks = self._topk_core(
             jet_data, jet_preds_tensor, true_idx, true_masks
         )
 
@@ -158,7 +158,7 @@ class JetSecondaryLoader(JetReconstructionNetwork):
         probe(features_arr, "features_arr")
         probe(jet_data, "jet_data")
         probe(jet_preds_tensor, "jet_preds_tensor")
-        probe(canon_truth, "canon_truth")
+        probe(canon_idx, "canon_idx")
         probe(canon_masks, "canon_masks")
 
         for e in one_one:
@@ -173,8 +173,8 @@ class JetSecondaryLoader(JetReconstructionNetwork):
             print("true_idx:")
             print(true_idx[:, e])
 
-            print("canon_truth:")
-            print(canon_truth[:, e])
+            print("canon_idx:")
+            print(canon_idx[:, e])
 
             print("true_masks:")
             print(true_masks[:, e])
@@ -195,7 +195,7 @@ class JetSecondaryLoader(JetReconstructionNetwork):
 
         raise RuntimeError("Debug break")
 
-        return pred_truth, canon_masks, features_arr, class_truth, canon_truth, jet_preds_tensor
+        return pred_truth, canon_masks, features_arr, class_truth, canon_idx, jet_preds_tensor
 
 
 
