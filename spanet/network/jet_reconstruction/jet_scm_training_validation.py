@@ -1,3 +1,5 @@
+is this correct?
+
 import torch
 import torch.nn as nn
 import numpy as np
@@ -27,6 +29,15 @@ class SimpleTransformerEncoder(nn.Module):
         # x: (N, S, E)
         return self.enc(x)
 
+
+class AttentionPooling(nn.Module):
+    def __init__(self, embed_dim):
+        super().__init__()
+        self.attn = nn.Linear(embed_dim, 1)
+
+    def forward(self, x):
+        weights = torch.softmax(self.attn(x), dim=1)
+        return (x * weights).sum(dim=1)
 
 class ClassifierTransformerHead(nn.Module):
     """
@@ -64,7 +75,6 @@ class ClassifierTransformerHead(nn.Module):
         
         return logits, token_scores
 
-
 class MaskerTransformerHead(nn.Module):
     """
     Inputs:
@@ -76,6 +86,7 @@ class MaskerTransformerHead(nn.Module):
         super().__init__()
         self.proj = nn.Linear(feats, mask_embed_dim)
         self.tr = SimpleTransformerEncoder(mask_embed_dim, nhead, num_layers, dropout)
+        self.pool = AttentionPooling(mask_embed_dim) # add attention pooling
         self.head = nn.Linear(mask_embed_dim, 1)
 
     def forward(self, x):
@@ -91,7 +102,7 @@ class MaskerTransformerHead(nn.Module):
 
         x = self.tr(x)
 
-        x = x.mean(dim=1)
+        x = self.pool(x)  # Attention pooling
 
         logits = self.head(x).squeeze(-1).reshape(N, B)
         return logits
@@ -138,7 +149,7 @@ class SCM_Training_Val(JetSecondaryLoader):
         # Imbalance / focal
         self.pos_weight_cap = 1000.0
         self.use_focal_masker = "use_focal_masker"
-        self.focal_alpha_pos = 0.7
+        self.focal_alpha_pos = 0.9
         self.focal_gamma = 2.0
 
     def _compiled_core(self, features_arr, pred_truth, class_truth, one_one):
@@ -167,27 +178,26 @@ class SCM_Training_Val(JetSecondaryLoader):
         has_truth_frac = has_truth.float().mean()
     
         # MASKER
-        # Reshape: feed every hypothesis separately but in one call
-        flat_feat = features_arr.reshape(N * K, B, J, Fdim)      # (N*K, B, J, F)
-        logits_b  = self.masker(flat_feat)                       # (N*K, B)
-        logits_kb = logits_b.view(N, K, B)                       # (N, K, B)
-    
-        t_kb      = pred_truth.float()                           # (N, K, B)
-        pos_rate       = t_kb.mean()
-        
-        # Optional: BCE
-        pos_weight = ((1 - t_kb[has_truth]).sum() / (t_kb[has_truth].sum() + 1e-8)).clamp(max=self.pos_weight_cap)
-        bce = F.binary_cross_entropy_with_logits(
-                logits_kb, t_kb, reduction='none', pos_weight=pos_weight)[has_truth]
+        # train on top_k classifer output (is not real_K = top_k * B - 1; its just top_k)
+        top_k = self.options.k
+        _, topk_indices = torch.topk(token_scores.detach(), top_k, dim=1)
+        topk_feat = torch.gather(features_arr, 1, topk_indices[:, :, None, None, None].expand(-1, -1, B, J, Fdim))
+        topk_truth = torch.gather(pred_truth, 1, topk_indices[:, :, None].expand(-1, -1, B))
 
-        # mask_loss = bce.mean()
-        mask_loss = focal_bce_with_logits(
-            logits_kb[has_truth], t_kb[has_truth],
+        flat_feat = topk_feat.reshape(N * top_k, B, J, Fdim)
+        flat_truth = topk_truth.reshape(N * top_k, B)
+
+        pos_rate = flat_truth.float().mean()
+
+        logits = self.masker(flat_feat)  # (N*top_k, B)
+
+        mask_loss = self.focal_bce_with_logits(
+            logits, flat_truth,
             alpha_pos=self.focal_alpha_pos,
             gamma=self.focal_gamma,
             reduction="mean"
         )
-    
+
         return (
             class_loss, mask_loss, top1_acc_truth,
             has_truth_frac, num_pos_mean, ce_random_baseline,
