@@ -174,20 +174,6 @@ class SCM_Training_Val(JetSecondaryLoader):
             num_pos_mean   = num_pos[has_truth].float().mean()
         has_truth_frac = has_truth.float().mean()
     
-        # --------------------------- MASKER
-        # # train on top_k classifer output (is not real_K = top_k * B - 1; its just top_k)
-        # top_k = self.options.k
-        # _, topk_indices = torch.topk(class_logits.detach(), top_k, dim=1)
-        # topk_feat = torch.gather(features_arr, 1, topk_indices[:, :, None, None, None].expand(-1, -1, B, J, Fdim))
-        # topk_truth = torch.gather(pred_truth, 1, topk_indices[:, :, None].expand(-1, -1, B))
-
-        # flat_feat = topk_feat.reshape(N * top_k, B, J, Fdim)
-        # flat_truth = topk_truth.reshape(N * top_k, B)
-
-        # pos_rate = flat_truth.float().mean()
-
-        # logits = self.masker(flat_feat)  # (N*top_k, B)
-
         # # ------- MASKER : train on all K hypotheses (set focal alpha high)
         flat_feat  = features_arr.reshape(N * K, B, J, Fdim)
         flat_truth = pred_truth.reshape(N * K, B)
