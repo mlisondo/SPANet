@@ -158,8 +158,8 @@ class JetSecondaryLoader(JetReconstructionNetwork):
         probe(features_arr, "features_arr")
         probe(jet_data, "jet_data")
         probe(jet_preds_tensor, "jet_preds_tensor")
-        probe(true_idx, "true_idx")
-        probe(true_masks, "true_masks")
+        probe(canon_truth, "canon_truth")
+        probe(canon_masks, "canon_masks")
 
         for e in one_one:
             print(f"\n===== EVENT {int(e)} =====")
