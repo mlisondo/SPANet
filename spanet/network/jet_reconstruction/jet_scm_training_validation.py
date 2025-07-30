@@ -202,8 +202,6 @@ class SCM_Training_Val(JetSecondaryLoader):
         #     reduction="mean"
         # )
 
-        self.focal_alpha_pos = 1 - pos_rate # dynamically changing
-
         return (
             class_loss, mask_loss, top1_acc_truth,
             has_truth_frac, num_pos_mean, ce_random_baseline,
