@@ -10,7 +10,7 @@ from spanet.dataset.types import Batch
 tcompile = torch.compile
 
 class SimpleTransformerEncoder(nn.Module):
-    def __init__(self, embed_dim: int, nhead: int, num_layers: int, dropout: float = 0.0):
+    def __init__(self, embed_dim: int, nhead: int, num_layers: int, dropout: float = 0.1): # changed dropout 0.0 -> 0.1
         super().__init__()
         layer = nn.TransformerEncoderLayer(
             d_model=embed_dim,
@@ -54,6 +54,7 @@ class ClassifierTransformerHead(nn.Module):
         self.tr = SimpleTransformerEncoder(class_embed_dim, nhead, num_layers, dropout)
         # Per-token predicts branch_dim logits
         self.head = nn.Linear(class_embed_dim, branch_dim)
+        self.norm = nn.LayerNorm(class_embed_dim) # added this
 
     def forward(self, features_arr):
 
@@ -62,6 +63,8 @@ class ClassifierTransformerHead(nn.Module):
         # tokens: (N, K, B*J*F)
         tokens = features_arr.reshape(N, K, B * J * Fdim)
         x = self.proj(tokens)           # (N, K, E)
+        x = self.norm(x) # added this
+
         x = self.tr(x)                  # (N, K, E)
         per_token_branch = self.head(x) # (N, K, B)
 
@@ -87,6 +90,7 @@ class MaskerTransformerHead(nn.Module):
         self.tr = SimpleTransformerEncoder(mask_embed_dim, nhead, num_layers, dropout)
         self.pool = AttentionPooling(mask_embed_dim) # add attention pooling
         self.head = nn.Linear(mask_embed_dim, 1)
+        self.norm = nn.LayerNorm(class_embed_dim) # added this
 
     def forward(self, x):
 
@@ -98,6 +102,7 @@ class MaskerTransformerHead(nn.Module):
         x = x.reshape(N * B, J, Fdim)
 
         x = self.proj(x)
+        x = self.norm(x) # added this
 
         x = self.tr(x)
 
@@ -148,7 +153,7 @@ class SCM_Training_Val(JetSecondaryLoader):
         # Imbalance / focal
         self.pos_weight_cap = 1000.0
         self.use_focal_masker = "use_focal_masker"
-        self.focal_alpha_pos = 0.9
+        self.focal_alpha_pos = 0.7
         self.focal_gamma = 2.0
 
     def _compiled_core(self, features_arr, pred_truth, class_truth, one_one):
@@ -196,6 +201,8 @@ class SCM_Training_Val(JetSecondaryLoader):
         #     gamma=self.focal_gamma,
         #     reduction="mean"
         # )
+
+        self.focal_alpha_pos = 1 - pos_rate # dynamically changing
 
         return (
             class_loss, mask_loss, top1_acc_truth,
