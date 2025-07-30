@@ -94,19 +94,22 @@ def joint_metrics(class_truth  : np.ndarray,        # (E, K)
     # 1. Reconstruction categorization
     branch_valid_count = true_masks.sum(axis=1)
     is_full_reco       = (branch_valid_count == B)
-    is_partial_reco    = (branch_valid_count == 1)
+    is_partial_reco    = (branch_valid_count > 0) & (branch_valid_count < B)
 
     n_full_reco    = is_full_reco.sum()
     n_partial_reco = is_partial_reco.sum()
 
-    # 2. Classifier correctness
-    # correct_hypothesis = class_truth[np.arange(E), class_pred] == 1
-    correct_hypothesis = np.all(pred_truth[np.arange(E), class_pred], axis=1)
-    correct_mask       = np.all(mask_pred[np.arange(E), class_pred] == pred_truth[np.arange(E), class_pred], axis=1)
-    correct_both       = correct_hypothesis & correct_mask
+    # 2. SCM correctness
+    # Classifier
+    chosen_truth  = pred_truth[np.arange(E), class_pred]  # (E,B)
+    correct_hypothesis = np.all(chosen_truth | ~true_masks, axis=1)
+    # Masker
+    mask_chosen  = mask_pred[np.arange(E), class_pred]   # (E, B)
+    correct_mask = np.all(mask_chosen == true_masks, axis=1)
+    # Joint
+    correct_both = correct_hypothesis & correct_mask
 
     # 3. Baseline SPANet correctness
-    # correct_base_hypothesis = class_truth[:, base_k] == 1
     correct_base_hypothesis = np.all(pred_truth[:, base_k], axis=1)
     correct_base_mask       = np.all(mask_pred[:, base_k] == pred_truth[:, base_k], axis=1)
     correct_base_both       = correct_base_hypothesis & correct_base_mask
