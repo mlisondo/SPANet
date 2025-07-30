@@ -5,14 +5,13 @@ from argparse import ArgumentParser
 import numpy as np
 import torch                                 
 
-from sklearn.metrics import accuracy_score, top_k_accuracy_score, ConfusionMatrixDisplay, precision_recall_curve as skl_prc
+from sklearn.metrics import ConfusionMatrixDisplay, precision_recall_curve as skl_prc
 from sklearn.metrics import roc_curve as skl_roc, auc as skl_auc, confusion_matrix as skl_cm
 
 import json, os, matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 from spanet.evaluation_scm import evaluate_on_test_dataset, load_model
 
-from scipy.special import logsumexp
 import hashlib
 
 # # ------------------------------------------------------------------ CLASSIFIER
