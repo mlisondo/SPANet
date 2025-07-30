@@ -90,7 +90,7 @@ class MaskerTransformerHead(nn.Module):
         self.tr = SimpleTransformerEncoder(mask_embed_dim, nhead, num_layers, dropout)
         self.pool = AttentionPooling(mask_embed_dim) # add attention pooling
         self.head = nn.Linear(mask_embed_dim, 1)
-        self.norm = nn.LayerNorm(class_embed_dim) # added this
+        self.norm = nn.LayerNorm(mask_embed_dim) # added this
 
     def forward(self, x):
 
