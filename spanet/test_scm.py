@@ -15,52 +15,116 @@ from spanet.evaluation_scm import evaluate_on_test_dataset, load_model
 from scipy.special import logsumexp
 import hashlib
 
+# # ------------------------------------------------------------------ CLASSIFIER
+# def classifier_metrics(
+#     class_truth : np.ndarray,           # (E, K)
+#     class_logits: np.ndarray,           # (E, K)
+#     k           : int,
+#     valid_mask  : Optional[np.ndarray] = None    # (E,)
+# ) -> Dict[str, float]:
+#     E, K = class_logits.shape
+#     has_truth = class_truth.any(axis=1)
+#     if valid_mask is None:
+#         valid_mask = np.ones(E, dtype=bool)
+
+#     keep = has_truth & valid_mask
+#     if not keep.any():
+#         return {"Top-1": float("nan"), "Top-1_base": float("nan"),
+#                 **{f"Top-{m}": float("nan") for m in range(2, 2*k)},
+#                 "has_truth_frac": 0.0}
+
+#     truth_v  = class_truth [keep]
+#     logits_v = class_logits[keep]
+
+#     metrics: Dict[str, float] = {}
+#     metrics["Top-1"] = topm_any_positive(truth_v, logits_v, 1)
+#     for m in range(2, min(2*k, K) + 1):
+#         metrics[f"Top-{m}"] = topm_any_positive(truth_v, logits_v, m)
+
+#     last_idx = K - 1
+#     metrics["Top-1_base"] = float((truth_v[:, last_idx] == 1).mean())
+#     metrics["has_truth_frac"] = float(keep.mean())
+#     return metrics
+
+# # helper function
+# def topm_any_positive(class_truth: np.ndarray, class_logits: np.ndarray, m: int) -> float:
+#     """
+#     Success if ANY true class (class_truth==1) is within the top-m scores.
+#     class_truth : (E, K)  multi-hot
+#     class_logits: (E, K)  raw logits
+#     """
+#     E, K = class_logits.shape
+#     m = min(m, K)
+#     pos = class_truth.astype(bool)
+#     # Get indices of the top-m scores per row (O(K) via argpartition; order inside chunk is arbitrary)
+#     top_idx = np.argpartition(class_logits, -m, axis=1)[:, -m:]  # not fully sorted
+#     # Check membership of any positive in those indices
+#     hit = pos[np.arange(E)[:, None], top_idx].any(axis=1)
+#     return float(hit.mean())
+
+
+
+
 # ------------------------------------------------------------------ CLASSIFIER
 def classifier_metrics(
-    class_truth : np.ndarray,           # (E, K)
-    class_logits: np.ndarray,           # (E, K)
-    k           : int,
-    valid_mask  : Optional[np.ndarray] = None    # (E,)
+    class_truth : np.ndarray,           # (E, K)  multi‑hot labels
+    class_logits: np.ndarray,           # (E, K)  raw logits
+    k           : int,                  # K-best beam used by SCM
+    valid_mask  : Optional[np.ndarray] = None      # (E,)
 ) -> Dict[str, float]:
     E, K = class_logits.shape
-    has_truth = class_truth.any(axis=1)
     if valid_mask is None:
         valid_mask = np.ones(E, dtype=bool)
 
-    keep = has_truth & valid_mask
+    # 1.  Eligibility mask: events that actually contain at least 1 positive label
+    has_truth = class_truth.any(axis=1)
+    keep      = has_truth & valid_mask
     if not keep.any():
-        return {"Top-1": float("nan"), "Top-1_base": float("nan"),
-                **{f"Top-{m}": float("nan") for m in range(2, 2*k)},
-                "has_truth_frac": 0.0}
+        nan = float("nan")
+        return {
+            **{f"Top-{m}"          : nan for m in range(1, min(2 * k, K) + 1)},
+            **{f"Top-{m}_strict"   : nan for m in range(1, min(2 * k, K) + 1)},
+            "Top-1_base"           : nan,
+            "Top-1_base_strict"    : nan,
+            "has_truth_frac"       : 0.0,
+        }
 
-    truth_v  = class_truth [keep]
-    logits_v = class_logits[keep]
+    truth_v  = class_truth[keep].astype(bool)   # (N, K)
+    logits_v = class_logits[keep]              # (N, K)
+    N        = truth_v.shape[0]
 
+    # 2.  Sort logits once -> easy top-m slices
+    sorted_idx = np.argsort(-logits_v, axis=1)  # (N, K) descending
+
+    # 3.  Lenient & strict Top-m metrics
     metrics: Dict[str, float] = {}
-    metrics["Top-1"] = topm_any_positive(truth_v, logits_v, 1)
-    for m in range(2, min(2*k, K) + 1):
-        metrics[f"Top-{m}"] = topm_any_positive(truth_v, logits_v, m)
+    for m in range(1, min(2 * k, K) + 1):
+        topm_idx = sorted_idx[:, :m]            # (N, m)
 
-    last_idx = K - 1
-    metrics["Top-1_base"] = float((truth_v[:, last_idx] == 1).mean())
-    metrics["has_truth_frac"] = float(keep.mean())
+        # lenient: at least one positive label among top-m
+        hit_any = truth_v[np.arange(N)[:, None], topm_idx].any(axis=1)
+
+        # strict: every positive label lies inside top-m
+        in_topm = truth_v[np.arange(N)[:, None], topm_idx]
+        hit_all = in_topm.all(axis=1) & (truth_v.sum(axis=1) <= m)
+
+        key      = "Top-1" if m == 1 else f"Top-{m}"
+        strict_k = "Top-1_strict" if m == 1 else f"{key}_strict"
+
+        metrics[key]      = float(hit_any.mean())
+        metrics[strict_k] = float(hit_all.mean())
+
+    # 4.  Baseline SPANet hypothesis (index K-1)
+    base_idx          = K - 1
+    base_is_pos       = truth_v[:, base_idx]                    # lenient
+    base_is_pos_str   = base_is_pos & (truth_v.sum(axis=1) == 1)  # strict
+
+    metrics["Top-1_base"]        = float(base_is_pos.mean())
+    metrics["Top-1_base_strict"] = float(base_is_pos_str.mean())
+
+    metrics["has_truth_frac"] = float(keep.mean()) # extra
     return metrics
 
-# helper function
-def topm_any_positive(class_truth: np.ndarray, class_logits: np.ndarray, m: int) -> float:
-    """
-    Success if ANY true class (class_truth==1) is within the top-m scores.
-    class_truth : (E, K)  multi-hot
-    class_logits: (E, K)  raw logits
-    """
-    E, K = class_logits.shape
-    m = min(m, K)
-    pos = class_truth.astype(bool)
-    # Get indices of the top-m scores per row (O(K) via argpartition; order inside chunk is arbitrary)
-    top_idx = np.argpartition(class_logits, -m, axis=1)[:, -m:]  # not fully sorted
-    # Check membership of any positive in those indices
-    hit = pos[np.arange(E)[:, None], top_idx].any(axis=1)
-    return float(hit.mean())
 
 # ------------------------------------------------------------------ MASKER
 def masker_metrics(mask_prob : np.ndarray,
@@ -114,7 +178,7 @@ def joint_metrics(class_truth  : np.ndarray,        # (E, K)
     correct_base_mask       = np.all(mask_pred[:, base_k] == pred_truth[:, base_k], axis=1)
     correct_base_both       = correct_base_hypothesis & correct_base_mask
 
-    # 4. Metrics
+    # 4. Metrics: Masker + Classifier | SPANet
     event_eff        = correct_both[is_full_reco].mean()    if n_full_reco else float('nan')
     partial_eff      = correct_both[is_partial_reco].mean() if n_partial_reco else float('nan')
     event_eff_base   = correct_base_both[is_full_reco].mean()    if n_full_reco else float('nan')
@@ -126,6 +190,22 @@ def joint_metrics(class_truth  : np.ndarray,        # (E, K)
     event_eff_base_no_mask      = correct_base_hypothesis[is_full_reco].mean()    if n_full_reco else float('nan')
     partial_eff_base_no_mask    = correct_base_hypothesis[is_partial_reco].mean() if n_partial_reco else float('nan')
 
+    # 6. STRICT METRICS: every branch (valid or not) must match the ground-truth mask
+    strict_correct_hypothesis = np.all(pred_truth[np.arange(E), class_pred] == true_masks, axis=1)
+    strict_correct_both = strict_correct_hypothesis & correct_mask
+
+    strict_correct_hypothesis_base = np.all(pred_truth[:, base_k] == true_masks, axis=1)
+    strict_correct_both_base = strict_correct_hypothesis_base & correct_base_mask
+
+    strict_event_eff        = strict_correct_both[is_full_reco].mean()         if n_full_reco else float('nan')
+    strict_partial_eff      = strict_correct_both[is_partial_reco].mean()      if n_partial_reco else float('nan')
+    strict_event_eff_no_mask   = strict_correct_hypothesis[is_full_reco].mean()    if n_full_reco else float('nan')
+    strict_partial_eff_no_mask = strict_correct_hypothesis[is_partial_reco].mean() if n_partial_reco else float('nan')
+
+    strict_event_eff_base        = strict_correct_both_base[is_full_reco].mean()         if n_full_reco else float('nan')
+    strict_partial_eff_base      = strict_correct_both_base[is_partial_reco].mean()      if n_partial_reco else float('nan')
+    strict_event_eff_no_mask_base   = strict_correct_hypothesis_base[is_full_reco].mean()    if n_full_reco else float('nan')
+    strict_partial_eff_no_mask_base = strict_correct_hypothesis_base[is_partial_reco].mean() if n_partial_reco else float('nan')
 
     return {
         "Event_eff"        : float(event_eff),
@@ -136,6 +216,14 @@ def joint_metrics(class_truth  : np.ndarray,        # (E, K)
         "partial_eff_no_mask"       : float(partial_eff_no_mask),
         "event_eff_base_no_mask"    : float(event_eff_base_no_mask),
         "partial_eff_base_no_mask"  : float(partial_eff_base_no_mask),
+        "strict_event_eff"        : float(strict_event_eff),
+        "strict_partial_eff"      : float(strict_partial_eff),
+        "strict_event_eff_no_mask"   : float(strict_event_eff_no_mask),
+        "strict_partial_eff_no_mask" : float(strict_partial_eff_no_mask),
+        "strict_event_eff_base"         : float(strict_event_eff_base),
+        "strict_partial_eff_base"       : float(strict_partial_eff_base),
+        "strict_event_eff_no_mask_base"    : float(strict_event_eff_no_mask_base),
+        "strict_partial_eff_no_mask_base"  : float(strict_partial_eff_no_mask_base),
         "_n_full_eligible"    : int(n_full_reco),
         "_n_partial_eligible" : int(n_partial_reco),
     }
