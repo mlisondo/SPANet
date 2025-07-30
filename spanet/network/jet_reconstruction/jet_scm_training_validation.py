@@ -10,7 +10,7 @@ from spanet.dataset.types import Batch
 tcompile = torch.compile
 
 class SimpleTransformerEncoder(nn.Module):
-    def __init__(self, embed_dim: int, nhead: int, num_layers: int, dropout: float = 0.1): # changed dropout 0.0 -> 0.1
+    def __init__(self, embed_dim: int, nhead: int, num_layers: int, dropout: float = 0.0):
         super().__init__()
         layer = nn.TransformerEncoderLayer(
             d_model=embed_dim,
@@ -124,7 +124,7 @@ class SCM_Training_Val(JetSecondaryLoader):
         self.mask_nhead      = options.mask_nhead
         self.class_layers    = options.class_layers
         self.mask_layers     = options.mask_layers
-        self.tr_dropout      = 0.0
+        self.tr_dropout      = 0.1 # changed 0.0 -> 0.1
         self.mask_reduction  = "any"  # "any" | "mean" | "max"
 
         B = self.options.branch_dim
