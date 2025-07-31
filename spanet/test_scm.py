@@ -292,6 +292,20 @@ def main(
         plt.xlabel("Classifier × Mask certainty"); plt.ylabel("Events"); plt.title("Joint certainty")
         pdf.savefig(); plt.close()
 
+        # Real-event efficiency (“strict”) histogram  <-- add here
+        plt.figure(figsize=(4, 4))
+        strict_vals = [
+            metrics_serializable["real_event_eff"],
+            metrics_serializable["real_event_eff_base"],
+        ]
+        plt.bar(["SCM", "Baseline"], strict_vals, width=0.5)
+        plt.ylabel("Strict reconstruction efficiency")
+        plt.ylim(0, 1.0)
+        plt.title("Real Event Efficiency (strict)")
+        for i, v in enumerate(strict_vals):
+            plt.text(i, v + 0.02, f"{v:.3f}",
+                     ha="center", va="bottom", fontsize=8)
+        pdf.savefig(); plt.close()
 
 if __name__ == '__main__':
     parser = ArgumentParser()
