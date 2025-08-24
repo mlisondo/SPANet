@@ -116,12 +116,8 @@ class JetSecondaryLoader(JetReconstructionNetwork):
     @torch.no_grad()
     def topk_data(self, batch):
         sources, _, targets, _, _ = batch
-        jet_data, _ = sources[0]  # (E,Njets,F)
-
-        probe(sources[0][1], "sources[0][1]")
-        print("sources[0][1][0]", sources[0][1][0])
-
-        raise RuntimeError("Debug break")
+        jet_data = sources[0][0]  # (E,Njets,F)
+        jet_mult = sources[0][1]  # (E,Njets) bool  for ttbar (Njets) = 10, true if jet is valid
     
         raw_preds, *_ = self.predict(sources)  # list[B] of (E,K,p_i)
         jet_preds_tensor = torch.stack(
@@ -202,7 +198,7 @@ class JetSecondaryLoader(JetReconstructionNetwork):
 
         # raise RuntimeError("Debug break")
 
-        return pred_truth, canon_masks, features_arr, class_truth, canon_idx, jet_preds_tensor
+        return pred_truth, canon_masks, features_arr, class_truth, canon_idx, jet_preds_tensor, jet_mult
 
 
 

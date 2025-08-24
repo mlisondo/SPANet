@@ -196,32 +196,50 @@ def main(
     feats = arrays["features_arr"]     # (events, K, branches, jets, features)
     RV = arrays["raw_valid"]           # (events,)
     TM = arrays["true_masks"]          # (events, branches)
+    JM = arrays["jet_mult"]            # (events, Njets)        (for ttbar (Njets) = 10, true if jet is valid)
 
-    # ------------------ numeric + physics metrics ------------------
-    # Classifier metrics
+    # ------------------ MULTIPLICITY METRICS ------------------
     metrics = {}
-    metrics.update(classifier_metrics(CT, CL, model.options.k, valid_mask=RV))
+    n_jets = JM.sum(axis=1).astype(np.int64)     # (E,)
 
-    # Masker metrics
-    m_mask = masker_metrics(MP, MPd, PT)
-    metrics.update({k:v for k,v in m_mask.items() if not k.startswith("_")})
+    for i in (6, 7, 8, 1):
+        if i == 8:
+            chosen = (n_jets >= 8)               # 8+
+            tag    = "njets_8p"
+        elif i == 1:
+            chosen = np.ones(n_jets.shape[0], dtype=bool)  # inclusive
+            tag    = "inclusive"
+        else:
+            chosen = (n_jets == i)
+            tag    = f"njets_{i}"
 
-    # Joint event-level metrics
-    m_joint = joint_metrics(CT, CPd, MPd, PT, TM)
-    metrics.update({k:v for k,v in m_joint.items() if not k.startswith("_")})
+        count = int(chosen.sum())
+        metrics[f"{tag}/count"] = count
+        if count == 0:
+            continue
 
-    # real joint metrics
-    m_real = strict_metric(CT, CPd, MPd, PT, TM)
-    metrics.update({k:v for k,v in m_real.items() if not k.startswith("_")})
+        _CL  = CL[chosen];  _CPd = CPd[chosen]
+        _MP  = MP[chosen];  _MPd = MPd[chosen]
+        _CT  = CT[chosen];  _PT  = PT[chosen]
+        _TM  = TM[chosen];  _RV  = RV[chosen]
 
-    # confidence
-    cls_conf = CP[np.arange(CP.shape[0]), CPd]
-    mask_conf = MP[np.arange(MP.shape[0]), CPd].mean(axis=1)
-    joint_conf = cls_conf * mask_conf
-    metrics["mean_classifier_conf"] = float(cls_conf.mean())
-    metrics["mean_masker_conf"]     = float(mask_conf.mean())
-    metrics["mean_joint_conf"]      = float(joint_conf.mean())
+        # --- Classifier ---
+        m_cls = classifier_metrics(_CT, _CL, model.options.k, valid_mask=_RV)
+        metrics.update({f"{tag}/{k}": v for k, v in m_cls.items()})
 
+        # --- Masker ---
+        m_mask = masker_metrics(_MP, _MPd, _PT)
+        metrics.update({f"{tag}/{k}": v for k, v in m_mask.items() if not k.startswith("_")})
+
+        # --- Joint ---
+        m_joint = joint_metrics(_CT, _CPd, _MPd, _PT, _TM)
+        metrics.update({f"{tag}/{k}": v for k, v in m_joint.items() if not k.startswith("_")})
+
+        # --- Strict ---
+        m_real = strict_metric(_CT, _CPd, _MPd, _PT, _TM)
+        metrics.update({f"{tag}/{k}": v for k, v in m_real.items() if not k.startswith("_")})
+
+    # ------------------ HISTOGRAMS ------------------
     # curves for PDF
     recall, precision = m_mask["_pr_curve"]
     fpr, tpr = m_mask["_roc_curve"]
@@ -277,22 +295,7 @@ def main(
         plt.legend(loc="best")
         pdf.savefig(); plt.close()
 
-        # Confidence
-        plt.figure(); plt.hist(cls_conf, bins=50, range=(0,1), alpha=0.8, color="C0")
-        plt.xlabel("Classifier P*"); plt.ylabel("Events"); plt.title("Classifier certainty")
-        pdf.savefig(); plt.close()
-
-        # masker certainty
-        plt.figure(); plt.hist(mask_conf, bins=50, range=(0,1), alpha=0.8, color="C1")
-        plt.xlabel("Average branch prob"); plt.ylabel("Events"); plt.title("Masker certainty")
-        pdf.savefig(); plt.close()
-
-        # joint certainty
-        plt.figure(); plt.hist(joint_conf, bins=50, range=(0,1), alpha=0.8, color="C2")
-        plt.xlabel("Classifier × Mask certainty"); plt.ylabel("Events"); plt.title("Joint certainty")
-        pdf.savefig(); plt.close()
-
-        # Real-event efficiency (“strict”) histogram  <-- add here
+        # Real-event efficiency ("strict") histogram
         plt.figure(figsize=(4, 4))
         strict_vals = [
             metrics_serializable["real_event_eff"],

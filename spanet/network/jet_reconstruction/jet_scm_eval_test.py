@@ -28,7 +28,7 @@ class SCM_Eval_Test(SCM_Training_Val):
         - FA -> features_arr: (events, K, branches, jets, features)
         - TM -> true_masks: (events, branches)
         """
-        pred_truth, true_masks, features_arr, class_truth, true_idx, jet_preds_tensor = self.topk_data(batch)
+        pred_truth, true_masks, features_arr, class_truth, true_idx, jet_preds_tensor, jet_mult = self.topk_data(batch)
         true_masks = true_masks.permute(1, 0)  # (events, branches)
         events, K, branches, jets, features = features_arr.shape
     
@@ -79,6 +79,7 @@ class SCM_Eval_Test(SCM_Training_Val):
             "class_truth":  class_truth,         # CT
             "pred_truth":   pred_truth,          # PT
             "features_arr": features_arr,        # FA
-            "true_masks":   true_masks,           # TM
-            "raw_valid":    raw_valid            # RV
+            "true_masks":   true_masks,          # TM
+            "raw_valid":    raw_valid,           # RV
+            "jet_mult": jet_mult                 # JM
         }
