@@ -118,10 +118,8 @@ class JetSecondaryLoader(JetReconstructionNetwork):
         sources, _, targets, _, _ = batch
         jet_data, _ = sources[0]  # (E,Njets,F)
 
-        probe(batch, "batch")
-        probe(sources, "sources")
-        probe(targets, "targets")
-        probe(jet_data, "jet_data")
+        probe(sources[0][1], "sources[0][1]")
+        print("sources[0][1][0]", sources[0][1][0])
 
         raise RuntimeError("Debug break")
     
