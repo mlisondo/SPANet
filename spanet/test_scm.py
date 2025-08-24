@@ -239,10 +239,7 @@ def main(
         m_real = strict_metric(_CT, _CPd, _MPd, _PT, _TM)
         metrics.update({f"{tag}/{k}": v for k, v in m_real.items() if not k.startswith("_")})
 
-    # ------------------ HISTOGRAMS ------------------
-    # curves for PDF
-    recall, precision = m_mask["_pr_curve"]
-    fpr, tpr = m_mask["_roc_curve"]
+    # # ------------------ HISTOGRAMS ------------------
 
     # Make numpy arrays JSON serializable
     metrics_serializable = {
@@ -250,65 +247,73 @@ def main(
         for key, value in metrics.items()
     }
 
-    # SCM vs Baseline comparison
-    scm_keys  = ["event_eff", "event_eff_no_mask", "partial_eff", "partial_eff_no_mask"]
-    base_keys = [k + "_base" for k in scm_keys]
-    scm_vals  = [metrics_serializable[k] for k in scm_keys]
-    base_vals = [metrics_serializable[k] for k in base_keys]
-
     with open(os.path.join(output_dir, "metrics.json"), "w") as f:
         json.dump(metrics_serializable, f, indent=4)
 
-    # ------------------ figures ------------------
-    with PdfPages(os.path.join(output_dir, "plots.pdf")) as pdf:
-        # PR curve
-        plt.figure()
-        plt.plot(recall, precision)
-        plt.xlabel("Recall"); plt.ylabel("Precision"); plt.title("Precision-Recall")
-        pdf.savefig(); plt.close()
 
-        # ROC
-        plt.figure()
-        plt.plot(fpr, tpr)
-        plt.xlabel("False Positive Rate"); plt.ylabel("True Positive Rate")
-        plt.title("ROC")
-        pdf.savefig(); plt.close()
+    # ALL FIGURES CAN BE MADE FROM METRICS (except for MASKER specific curves, which i do not care for right now)
 
-        # Confusion Matrix
-        plt.figure()
-        cm = m_mask["Confusion"]
-        disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=["Negative", "Positive"])
-        disp.plot(cmap="Blues", values_format='d')
-        plt.title("Confusion Matrix")
-        pdf.savefig(); plt.close()
 
-        # Comparison Histogram
-        x = np.arange(len(scm_keys))
-        w = 0.35
-        plt.figure(figsize=(8, 4))
-        plt.bar(x - w/2, scm_vals, width=w, label="SCM")
-        plt.bar(x + w/2, base_vals, width=w, label="Baseline")
-        plt.xticks(x, ["Full Reco", "Full Reco\nno mask", "Partial Reco", "Partial Reco\nno mask"])
-        plt.ylabel("Accuracy")
-        plt.ylim(0, 1.0)
-        plt.title("SCM Extension vs SPANet Baseline")
-        plt.legend(loc="best")
-        pdf.savefig(); plt.close()
+    # # curves for PDF
+    # recall, precision = m_mask["_pr_curve"]
+    # fpr, tpr = m_mask["_roc_curve"]
 
-        # Real-event efficiency ("strict") histogram
-        plt.figure(figsize=(4, 4))
-        strict_vals = [
-            metrics_serializable["real_event_eff"],
-            metrics_serializable["real_event_eff_base"],
-        ]
-        plt.bar(["SCM", "Baseline"], strict_vals, width=0.5)
-        plt.ylabel("Strict reconstruction efficiency")
-        plt.ylim(0, 1.0)
-        plt.title("Real Event Efficiency (strict)")
-        for i, v in enumerate(strict_vals):
-            plt.text(i, v + 0.02, f"{v:.3f}",
-                     ha="center", va="bottom", fontsize=8)
-        pdf.savefig(); plt.close()
+    # # SCM vs Baseline comparison
+    # scm_keys  = ["event_eff", "event_eff_no_mask", "partial_eff", "partial_eff_no_mask"]
+    # base_keys = [k + "_base" for k in scm_keys]
+    # scm_vals  = [metrics_serializable[k] for k in scm_keys]
+    # base_vals = [metrics_serializable[k] for k in base_keys]
+
+    # # ------------------ figures ------------------
+    # with PdfPages(os.path.join(output_dir, "plots.pdf")) as pdf:
+    #     # PR curve
+    #     plt.figure()
+    #     plt.plot(recall, precision)
+    #     plt.xlabel("Recall"); plt.ylabel("Precision"); plt.title("Precision-Recall")
+    #     pdf.savefig(); plt.close()
+
+    #     # ROC
+    #     plt.figure()
+    #     plt.plot(fpr, tpr)
+    #     plt.xlabel("False Positive Rate"); plt.ylabel("True Positive Rate")
+    #     plt.title("ROC")
+    #     pdf.savefig(); plt.close()
+
+    #     # Confusion Matrix
+    #     plt.figure()
+    #     cm = m_mask["Confusion"]
+    #     disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=["Negative", "Positive"])
+    #     disp.plot(cmap="Blues", values_format='d')
+    #     plt.title("Confusion Matrix")
+    #     pdf.savefig(); plt.close()
+
+    #     # Comparison Histogram
+    #     x = np.arange(len(scm_keys))
+    #     w = 0.35
+    #     plt.figure(figsize=(8, 4))
+    #     plt.bar(x - w/2, scm_vals, width=w, label="SCM")
+    #     plt.bar(x + w/2, base_vals, width=w, label="Baseline")
+    #     plt.xticks(x, ["Full Reco", "Full Reco\nno mask", "Partial Reco", "Partial Reco\nno mask"])
+    #     plt.ylabel("Accuracy")
+    #     plt.ylim(0, 1.0)
+    #     plt.title("SCM Extension vs SPANet Baseline")
+    #     plt.legend(loc="best")
+    #     pdf.savefig(); plt.close()
+
+    #     # Real-event efficiency ("strict") histogram
+    #     plt.figure(figsize=(4, 4))
+    #     strict_vals = [
+    #         metrics_serializable["real_event_eff"],
+    #         metrics_serializable["real_event_eff_base"],
+    #     ]
+    #     plt.bar(["SCM", "Baseline"], strict_vals, width=0.5)
+    #     plt.ylabel("Strict reconstruction efficiency")
+    #     plt.ylim(0, 1.0)
+    #     plt.title("Real Event Efficiency (strict)")
+    #     for i, v in enumerate(strict_vals):
+    #         plt.text(i, v + 0.02, f"{v:.3f}",
+    #                  ha="center", va="bottom", fontsize=8)
+    #     pdf.savefig(); plt.close()
 
 if __name__ == '__main__':
     parser = ArgumentParser()
