@@ -107,8 +107,7 @@ def joint_metrics(class_truth  : np.ndarray,        # (E, K)
 
     correct_hypothesis_base = np.all(pred_truth[:, base_k] == true_masks, axis=1)
     correct_both_base = correct_hypothesis_base & correct_base_mask
-
-    correct_hypothesis_base_max = np.any(np.all(pred_truth == true_masks[:, None, :], axis=2), axis=1)
+    truth_available = np.any(class_truth, axis=1)
 
     event_eff        = correct_both[is_full_reco].mean()         if n_full_reco else float('nan')
     partial_eff      = correct_both[is_partial_reco].mean()      if n_partial_reco else float('nan')
@@ -119,8 +118,8 @@ def joint_metrics(class_truth  : np.ndarray,        # (E, K)
     partial_eff_base      = correct_both_base[is_partial_reco].mean()      if n_partial_reco else float('nan')
     event_eff_no_mask_base   = correct_hypothesis_base[is_full_reco].mean()    if n_full_reco else float('nan')
     partial_eff_no_mask_base = correct_hypothesis_base[is_partial_reco].mean() if n_partial_reco else float('nan')
-    event_eff_no_mask_base_max   = correct_hypothesis_base_max[is_full_reco].mean()    if n_full_reco else float('nan')
-    partial_eff_no_mask_base_max = correct_hypothesis_base_max[is_partial_reco].mean() if n_partial_reco else float('nan')
+    event_eff_no_mask_base_max   = truth_available[is_full_reco].mean()    if n_full_reco else float('nan')
+    partial_eff_no_mask_base_max = truth_available[is_partial_reco].mean() if n_partial_reco else float('nan')
 
     return {
         "event_eff"        : float(event_eff),
