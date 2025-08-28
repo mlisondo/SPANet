@@ -83,7 +83,7 @@ class SCM_Eval_Test(SCM_Training_Val):
         class_logits, token_scores = self.classifier(features_arr)  # token_scores are not used
         class_probs  = torch.softmax(class_logits, dim=1)        # (events, K)
     
-        agg_logits, starts, rep_k, counts = fuse_duplicate_k(features_arr, class_logits, decimals=6, mode="logsumexp")
+        agg_logits, starts, rep_k, counts = fuse_duplicate_k(features_arr, class_logits, decimals=6)
         # Softmax over unique sets (padding is -inf so safe)
         group_probs = torch.softmax(agg_logits, dim=1) # [E, max_groups]
         g_pred = agg_logits.argmax(dim=1) # [E]
