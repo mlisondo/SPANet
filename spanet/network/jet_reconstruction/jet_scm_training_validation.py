@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import numpy as np
 import torch.nn.functional as F
-from typing import List, Dict
 from spanet.options import Options
 from spanet.network.jet_reconstruction.jet_scm_pipeline import JetSecondaryLoader
 from spanet.dataset.types import Batch
@@ -57,23 +56,17 @@ class ClassifierTransformerHead(nn.Module):
         self.norm = nn.LayerNorm(class_embed_dim) # added this
 
     def forward(self, features_arr):
-
         N, K, B, J, Fdim = features_arr.shape
 
-        # tokens: (N, K, B*J*F)
         tokens = features_arr.reshape(N, K, B * J * Fdim)
-        x = self.proj(tokens)           # (N, K, E)
-        x = self.norm(x) # added this
-
-        x = self.tr(x)                  # (N, K, E)
+        x = self.proj(tokens)
+        x = self.norm(x)
+        x = self.tr(x)
         per_token_branch = self.head(x) # (N, K, B)
 
-        # For logging a single best-K index: score each token by its best branch logit
-        token_scores, _ = per_token_branch.max(dim=-1)  # (N, K)
+        token_scores, _ = per_token_branch.max(dim=-1) # (N, K)
+        logits = token_scores
 
-        logits = per_token_branch.reshape(N, K * B)
-        logits = logits[:, :K]
-        
         return logits, token_scores
 
 
@@ -230,25 +223,25 @@ class SCM_Training_Val(JetSecondaryLoader):
     # Multi-positive classifier loss
     @staticmethod
     def _multi_positive_ce(class_logits: torch.Tensor, class_truth: torch.Tensor):
-        N, C = class_logits.shape
+        # class_logits: (N, K) from token_scores
+        # class_truth:  (N, K) multi-hot in {0,1}
         pos_mask = class_truth.bool()
         has_truth = pos_mask.any(dim=1)
+        num_pos = pos_mask.sum(dim=1)
 
-        log_probs = torch.log_softmax(class_logits, dim=1)
-
-        lp_masked = log_probs.masked_fill(~pos_mask, float("-inf"))
-
-        pos_lse = torch.logsumexp(lp_masked, dim=1)            # [N]
-        num_pos = pos_mask.sum(dim=1)                           # [N]
-        num_pos_clamped = num_pos.clamp_min(1).to(log_probs.dtype)
-
-        loss_vec = -(pos_lse - torch.log(num_pos_clamped))
+        bce_per_class = F.binary_cross_entropy_with_logits(
+            class_logits, class_truth.to(class_logits.dtype), reduction="none"
+        )  # (N, K)
+        loss_vec = bce_per_class.mean(dim=1)  # average over classes
         loss = loss_vec[has_truth].mean() if has_truth.any() else loss_vec.mean()
 
         with torch.no_grad():
-            ce_baseline = torch.log(torch.tensor(C, dtype=log_probs.dtype, device=log_probs.device)) \
-                        - torch.log(num_pos_clamped)
-            ce_baseline = ce_baseline[has_truth].mean() if has_truth.any() else ce_baseline.mean()
+            baseline_vec = F.binary_cross_entropy_with_logits(
+                torch.zeros_like(class_logits),
+                class_truth.to(class_logits.dtype),
+                reduction="none"
+            ).mean(dim=1)
+            ce_baseline = baseline_vec[has_truth].mean() if has_truth.any() else baseline_vec.mean()
 
         return loss, has_truth, num_pos, ce_baseline
 
