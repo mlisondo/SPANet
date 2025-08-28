@@ -6,6 +6,51 @@ from spanet.options import Options
 from spanet.network.jet_reconstruction.jet_scm_training_validation import SCM_Training_Val
 from spanet.dataset.types import Batch
 
+def fuse_duplicate_k(features_arr, class_logits, decimals=6):
+    # features_arr: [E, K, B, J, F]
+    # class_logits: [E, K]
+    E, K, *_ = features_arr.shape
+    device = features_arr.device
+    dtype = class_logits.dtype
+    neg_inf = torch.finfo(dtype).min
+
+    scale = 10.0 ** decimals
+    flat = features_arr.reshape(E, K, -1)
+    q = torch.round(flat * scale).to(torch.int64)
+
+    q2 = q.view(E * K, -1)
+    ev = torch.arange(E, device=device).repeat_interleave(K).unsqueeze(1)
+    keys = torch.cat([ev.to(torch.int64), q2], dim=1)
+    uniq, inverse = torch.unique(keys, dim=0, return_inverse=True)  # inverse: [E*K]
+    G = uniq.size(0)
+
+    logits = class_logits.reshape(-1)
+    m = torch.full((G,), neg_inf, dtype=dtype, device=device)
+    m.scatter_reduce_(0, inverse, logits, reduce="amax")
+    s = torch.zeros(G, dtype=dtype, device=device)
+    s.scatter_add_(0, inverse, torch.exp(logits - m[inverse]))
+    agg = m + torch.log(s.clamp_min(1e-20))
+
+    k_idx = torch.arange(K, device=device).repeat(E)          # [E*K]
+    rep_k = torch.full((G,), K, device=device, dtype=torch.int64)
+    rep_k.scatter_reduce_(0, inverse, k_idx, reduce="amin")
+
+    group_event = uniq[:, 0].to(torch.int64)                  # [G]
+    counts = torch.bincount(group_event, minlength=E)         # [E]
+    max_G = int(counts.max().item())
+    starts = torch.zeros(E + 1, dtype=torch.int64, device=device)
+    starts[1:] = counts.cumsum(0)
+
+    agg_padded = torch.full((E, max_G), neg_inf, dtype=dtype, device=device)
+    start = 0
+    for e in range(E):
+        g = int(counts[e])
+        if g:
+            agg_padded[e, :g] = agg[start:start+g]
+            start += g
+
+    return agg_padded, starts, rep_k, counts
+
 class SCM_Eval_Test(SCM_Training_Val):
     def __init__(self, options: Options, torch_script: bool = False):
         super().__init__(options, torch_script)
@@ -38,15 +83,12 @@ class SCM_Eval_Test(SCM_Training_Val):
         class_logits, token_scores = self.classifier(features_arr)  # token_scores are not used
         class_probs  = torch.softmax(class_logits, dim=1)        # (events, K)
     
-        # LSE-style evaluation: if any positives exist for an event, choose the
-        # highest-logit class among the positive set; otherwise fall back to global argmax.
-        pos = class_truth.bool()                                 # (events, K)
-        has_pos = pos.any(dim=1)                                 # (events,)
-        neg_inf = torch.finfo(class_logits.dtype).min
-        pos_only = torch.where(pos, class_logits, torch.full_like(class_logits, neg_inf))
-        pos_choice = pos_only.argmax(dim=1)                      # (events,)
-        global_choice = class_logits.argmax(dim=1)               # (events,)
-        class_preds = torch.where(has_pos, pos_choice, global_choice)
+        agg_logits, starts, rep_k, counts = fuse_duplicate_k(features_arr, class_logits, decimals=6, mode="logsumexp")
+        # Softmax over unique sets (padding is -inf so safe)
+        group_probs = torch.softmax(agg_logits, dim=1) # [E, max_groups]
+        g_pred = agg_logits.argmax(dim=1) # [E]
+        global_gid = starts[:-1] + g_pred # [E]
+        class_preds = rep_k[global_gid] # [E]
     
         # ----------- Masker Head -----------
         mask_logits_list, mask_probs_list, mask_preds_list = [], [], []
