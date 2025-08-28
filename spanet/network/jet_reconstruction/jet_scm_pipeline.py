@@ -12,9 +12,9 @@ class JetSecondaryLoader(JetReconstructionNetwork):
         self.evaluator = SymmetricEvaluator(self.training_dataset.event_info)
         self.options = options
 
-    @torch._dynamo.disable
     @torch.no_grad()
     def best_truth_permutation_vectorized(
+        self,
         pred_sorted: torch.Tensor,   # (E, K, B, p)
         truth_sorted: torch.Tensor,  # (E, B, p)
         true_masks: torch.Tensor,    # (E, B)
@@ -87,7 +87,7 @@ class JetSecondaryLoader(JetReconstructionNetwork):
         mask_matrix  = true_masks_tensor.permute(1, 0)                                     # (E, B)
 
         # Step 2: Canonicalize truth via best permutation to match each prediction
-        canon_idx, canon_masks, pred_truth = best_truth_permutation_vectorized(
+        canon_idx, canon_masks, pred_truth = self.best_truth_permutation_vectorized(
             pred_sorted, truth_sorted, mask_matrix, PAD
         )
 
