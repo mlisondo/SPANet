@@ -12,61 +12,52 @@ class JetSecondaryLoader(JetReconstructionNetwork):
         self.evaluator = SymmetricEvaluator(self.training_dataset.event_info)
         self.options = options
 
-    def best_truth_permutation(
-        self,
+    @torch.no_grad()
+    def best_truth_permutation_vectorized(
         pred_sorted: torch.Tensor,   # (E, K, B, p)
         truth_sorted: torch.Tensor,  # (E, B, p)
         true_masks: torch.Tensor,    # (E, B)
         pad_val: int = -1
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """
-        Finds the best permutation of branches in the truth to match the prediction.
-        
-        Returns:
-            permuted_truth: (E, B, p)
-            permuted_mask:  (E, B)
-            pred_truth:     (E, K, B) — best-matching mask-aware equality
-        """
         E, K, B, p = pred_sorted.shape
-        perms = list(itertools.permutations(range(B)))
-        num_perms = len(perms)
-
-        best_truth = torch.empty_like(truth_sorted)
-        best_mask  = torch.empty_like(true_masks)
-        best_score = torch.full((E, K), -1, dtype=torch.long, device=pred_sorted.device)
-        best_pred_truth = torch.zeros((E, K, B), dtype=torch.bool, device=pred_sorted.device)
-
-        for perm in perms:
-            # Apply permutation to truth and mask
-            perm = torch.tensor(perm, device=pred_sorted.device)
-            truth_perm = truth_sorted[:, perm, :]      # (E, B, p)
-            mask_perm  = true_masks[:, perm]           # (E, B)
-
-            # Expand for matching
-            truth_expand = truth_perm.unsqueeze(1)     # (E, 1, B, p)
-            valid = (truth_expand != pad_val)          # (E,1,B,p)
-
-            # Compare prediction with permuted truth
-            eq = (pred_sorted == truth_expand) | (~valid)
-            pred_truth = eq.all(dim=-1)                # (E,K,B)
-
-            # Score: count matches where truth_mask is True and pred_truth is True
-            score = (pred_truth & mask_perm.unsqueeze(1)).sum(dim=-1)  # (E,K)
-
-            # Update best match
-            update = score > best_score                # (E,K)
-            update_mask = update.unsqueeze(-1)         # (E,K,1)
-
-            best_score = torch.where(update, score, best_score)
-            best_pred_truth = torch.where(update_mask, pred_truth, best_pred_truth)
-
-            # Store best permutation of truth/mask per event
-            for e in range(E):
-                for k in range(K):
-                    if update[e, k]:
-                        best_truth[e] = truth_perm[e]
-                        best_mask[e]  = mask_perm[e]
-
+        device = pred_sorted.device
+    
+        # All permutations of branch indices (P,B)
+        perm_idx = torch.tensor(list(itertools.permutations(range(B))),
+                                device=device, dtype=torch.long)      # (P,B)
+        P = perm_idx.shape[0]
+    
+        # Apply permutations: (E,P,B,p), (E,P,B)
+        truth_perm = truth_sorted[:, perm_idx, :]                     # (E,P,B,p)
+        mask_perm  = true_masks[:,  perm_idx]                         # (E,P,B)
+    
+        # Mask-aware equality across p
+        pred_e  = pred_sorted.unsqueeze(1)                            # (E,1,K,B,p)
+        truth_e = truth_perm.unsqueeze(2)                             # (E,P,1,B,p)
+        valid   = (truth_e != pad_val)
+        eq      = (pred_e == truth_e) | (~valid)                      # (E,P,K,B,p)
+        pred_truth_all = eq.all(dim=-1)                               # (E,P,K,B) bool
+    
+        # Scores per perm and (E,K)
+        score = (pred_truth_all & mask_perm.unsqueeze(2)).sum(dim=-1) # (E,P,K) int64
+    
+        # For each (E,K): first permutation index achieving the max score
+        best_score_e_k, _ = score.max(dim=1)                          # (E,K)
+        first_is_max = (score == best_score_e_k.unsqueeze(1))         # (E,P,K)
+        idx_first = first_is_max.int().argmax(dim=1)                  # (E,K) earliest index with max
+    
+        # Event-level permutation used for best_truth/mask:
+        # choose the permutation whose "first-hit" index is latest across K
+        idx_event = idx_first.max(dim=-1).values                      # (E,)
+    
+        # Outputs
+        best_truth = truth_perm[torch.arange(E, device=device), idx_event]  # (E,B,p)
+        best_mask  = mask_perm[ torch.arange(E, device=device), idx_event]  # (E,B)
+    
+        # best_pred_truth per K at that K's own best permutation
+        gather_idx = idx_first.view(E, 1, K, 1).expand(-1, 1, -1, pred_truth_all.size(-1))
+        best_pred_truth = pred_truth_all.gather(dim=1, index=gather_idx).squeeze(1)  # (E,K,B)
+    
         return best_truth, best_mask, best_pred_truth
     
     @torch.compile(dynamic=True)
