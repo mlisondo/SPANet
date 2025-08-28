@@ -12,6 +12,7 @@ class JetSecondaryLoader(JetReconstructionNetwork):
         self.evaluator = SymmetricEvaluator(self.training_dataset.event_info)
         self.options = options
 
+    @dynamo.disable
     @torch.no_grad()
     def best_truth_permutation_vectorized(
         pred_sorted: torch.Tensor,   # (E, K, B, p)
