@@ -56,16 +56,32 @@ class ClassifierTransformerHead(nn.Module):
         self.norm = nn.LayerNorm(class_embed_dim) # added this
 
     def forward(self, features_arr):
+        # features_arr: (N, K, B, J, F)
         N, K, B, J, Fdim = features_arr.shape
+
+        # per-sample K shuffling during training, undone before return
+        # this enforces general permutation invariance during training and inference
+        if self.training:
+            perms = torch.argsort(torch.rand(N, K, device=features_arr.device), dim=1)  # (N,K)
+            batch_ix = torch.arange(N, device=features_arr.device).unsqueeze(1)         # (N,1)
+            features_arr = features_arr[batch_ix, perms]                                 # (N,K,B,J,F)
+        else:
+            perms = None
 
         tokens = features_arr.reshape(N, K, B * J * Fdim)
         x = self.proj(tokens)
         x = self.norm(x)
         x = self.tr(x)
-        per_token_branch = self.head(x) # (N, K, B)
+        per_token_branch = self.head(x)                     # (N, K, B)
 
-        token_scores, _ = per_token_branch.max(dim=-1) # (N, K)
+        token_scores, _ = per_token_branch.max(dim=-1)      # (N, K)
         logits = token_scores
+
+        if perms is not None:
+            inv = torch.empty_like(perms)
+            inv.scatter_(1, perms, torch.arange(K, device=features_arr.device).expand(N, K))
+            logits = logits[batch_ix, inv]
+            token_scores = token_scores[batch_ix, inv]
 
         return logits, token_scores
 
