@@ -20,6 +20,7 @@ dependencies:
 
   - pytorch=2.3
   - pytorch-lightning=2.4
+  - rich<14.1
   - pytorch-cuda=12.1
   - cuda-nvcc
   - torchvision
