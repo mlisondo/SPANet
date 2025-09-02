@@ -322,7 +322,7 @@ def main(
 
 if __name__ == '__main__':
     parser = ArgumentParser()
-    parser.add_argument("log_directory", type=str,
+    parser.add_argument("--log_directory", type=str,
                         help="Pytorch Lightning Log directory containing the checkpoint and options file.")
 
     parser.add_argument("-tf", "--test_file", type=str, default=None,
