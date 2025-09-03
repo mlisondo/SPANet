@@ -303,30 +303,49 @@ class SCM_Training_Val(JetSecondaryLoader):
         """
         if valid_mask is None:
             valid_mask = torch.ones_like(class_truth, dtype=torch.bool, device=class_truth.device)
-
+    
+        # per-batch pos_weight from counts over NxK using only valid Ks
+        with torch.no_grad():
+            pos_total = (class_truth.bool() & valid_mask).sum()
+            neg_total = valid_mask.sum() - pos_total
+            pos_w_scalar = (neg_total.to(torch.float32) / pos_total.clamp_min(1).to(torch.float32))
+            # cap to avoid extreme ratios
+            cap = torch.as_tensor(1000.0, device=class_logits.device, dtype=torch.float32)
+            pos_w_scalar = torch.minimum(pos_w_scalar, cap).to(class_logits.dtype)
+            # same weight for all K to keep permutation equivariance
+            K = class_logits.size(1)
+            pos_weight = pos_w_scalar.expand(K).contiguous()
+    
         weights = valid_mask.to(class_logits.dtype)
         pos_mask = class_truth.bool() & valid_mask
         has_truth = pos_mask.any(dim=1)
         num_pos = pos_mask.sum(dim=1)
-
+    
+        # avoid inf*0 on invalid Ks (classifier sets -inf there)
+        safe_logits = torch.where(valid_mask, class_logits, torch.zeros_like(class_logits))
+    
         bce = F.binary_cross_entropy_with_logits(
-            class_logits, class_truth.to(class_logits.dtype), reduction="none"
+            safe_logits,
+            class_truth.to(class_logits.dtype),
+            reduction="none",
+            pos_weight=pos_weight,
         )  # (N, K)
-
+    
         # masked mean over classes
         denom = weights.sum(dim=1).clamp_min(1.0)
         loss_vec = (bce * weights).sum(dim=1) / denom
         loss = loss_vec[has_truth].mean() if has_truth.any() else loss_vec.mean()
-
+    
         with torch.no_grad():
             base = F.binary_cross_entropy_with_logits(
                 torch.zeros_like(class_logits),
                 class_truth.to(class_logits.dtype),
-                reduction="none"
+                reduction="none",
+                pos_weight=pos_weight,
             )
             base_vec = (base * weights).sum(dim=1) / denom
             ce_baseline = base_vec[has_truth].mean() if has_truth.any() else base_vec.mean()
-
+    
         return loss, has_truth, num_pos, ce_baseline
 
     def _compiled_core(self, features_arr, pred_truth, class_truth_K_or_KBminus1, valid_mask):
