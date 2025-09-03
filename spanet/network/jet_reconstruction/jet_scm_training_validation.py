@@ -265,33 +265,32 @@ class SCM_Training_Val(JetSecondaryLoader):
         """
         N, K, B, J = jet_idx.shape
         dev = jet_idx.device
-
+    
+        # flatten and use int64 (works on CUDA)
         flat = jet_idx.reshape(N, K, B * J).to(torch.int64)
-        arr = flat.to(torch.uint64)
-
-        # 64-bit FNV-1a rolling hash to bucket equal rows; then verify equality
-        FNV_OFFSET = torch.tensor(1469598103934665603, dtype=torch.uint64, device=dev)
-        FNV_PRIME  = torch.tensor(1099511628211,      dtype=torch.uint64, device=dev)
-
+    
+        FNV_OFFSET = torch.tensor(1469598103934665603, dtype=torch.int64, device=dev)
+        FNV_PRIME  = torch.tensor(1099511628211,      dtype=torch.int64, device=dev)
+    
         h = FNV_OFFSET.expand(N, K).clone()
         for t in range(B * J):
-            h = (h ^ arr[..., t]) * FNV_PRIME  # wraps mod 2**64
-
+            h = (h ^ flat[..., t]) * FNV_PRIME
+        h = h ^ (h >> 32)  # light final mix
+    
         h_sorted, perm = h.sort(dim=1)
         flat_sorted = flat.gather(1, perm.unsqueeze(-1).expand_as(flat))
-
+    
         same_hash = h_sorted[:, 1:] == h_sorted[:, :-1]
         eq_full   = same_hash & flat_sorted[:, 1:, :].eq(flat_sorted[:, :-1, :]).all(dim=-1)
-
+    
         dup_sorted = torch.zeros((N, K), dtype=torch.bool, device=dev)
-        dup_sorted[:, 1:] = eq_full  # keep first occurrence
-
+        dup_sorted[:, 1:] = eq_full  # keep first in each group
+    
         inv = torch.empty_like(perm)
         inv.scatter_(1, perm, torch.arange(K, device=dev).expand(N, K))
         dup = dup_sorted.gather(1, inv)
-
-        is_valid = ~dup
-        return is_valid
+    
+        return ~dup
 
     @staticmethod
     def _multi_positive_ce(class_logits: torch.Tensor,
