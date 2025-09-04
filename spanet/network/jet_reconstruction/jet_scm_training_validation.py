@@ -185,58 +185,6 @@ class SCM_Training_Val(JetSecondaryLoader):
         self.use_focal_masker = "use_focal_masker"
         self.focal_alpha_pos = 0.7
         self.focal_gamma = 2.0
-
-    def _compiled_core(self, features_arr, pred_truth, class_truth, one_one):
-        """
-        Make masker loss use the *same (N, K, B) task* that evaluation uses.
-        """
-        N, K, B, J, Fdim = features_arr.shape
-    
-        # CLASSIFIER
-        class_logits, token_scores = self.classifier(features_arr)
-        class_loss, has_truth, num_pos, ce_random_baseline = \
-            self._multi_positive_ce(class_logits, class_truth)
-    
-        rows   = torch.arange(N, device=class_logits.device)
-        pred_k = token_scores.argmax(dim=1)
-    
-        top1_acc_truth = torch.tensor(0., device=class_logits.device)
-        num_pos_mean   = num_pos.float().mean()
-        if has_truth.any():
-            padded = torch.zeros(N, K * B, device=class_logits.device, dtype=class_truth.dtype)
-            padded[:, :self.real_K] = class_truth
-            truth_kb = padded.view(N, K, B)
-            truth_k  = truth_kb.any(dim=2)
-            top1_acc_truth = truth_k[rows[has_truth], pred_k[has_truth]].float().mean()
-            num_pos_mean   = num_pos[has_truth].float().mean()
-        has_truth_frac = has_truth.float().mean()
-    
-        # # ------- MASKER : train on all K hypotheses (set focal alpha high)
-        flat_feat  = features_arr.reshape(N * K, B, J, Fdim)
-        flat_truth = pred_truth.reshape(N * K, B)
-        pos_rate = flat_truth.float().mean()
-        logits = self.masker(flat_feat)  # (N*K, B)
-
-        mask_loss = self.focal_bce_with_logits(
-            logits, flat_truth,
-            alpha_pos=self.focal_alpha_pos,
-            gamma=self.focal_gamma,
-            reduction="mean"
-        )
-
-        # ONLY CALCUALTE LOSS ON EVENTS THAT HAVE AT LEAST ONE VALID PRED
-        # mask_loss = self.focal_bce_with_logits(
-        #     logits[has_truth], flat_truth[has_truth],
-        #     alpha_pos=self.focal_alpha_pos,
-        #     gamma=self.focal_gamma,
-        #     reduction="mean"
-        # )
-
-        return (
-            class_loss, mask_loss, top1_acc_truth,
-            has_truth_frac, num_pos_mean, ce_random_baseline,
-            pos_rate#, avg_pos_weight
-        )
     
     @staticmethod
     def focal_bce_with_logits(logits, targets, alpha_pos=0.25, gamma=2.0, reduction="mean"):
