@@ -89,7 +89,6 @@ def joint_metrics(class_truth  : np.ndarray,        # (E, K)
                   true_masks   : np.ndarray         # (E, B)
 ) -> Dict[str, float]:
     E, K, B = mask_pred.shape
-    base_k = K - 1
 
     # Reconstruction categorization
     branch_valid_count = true_masks.sum(axis=1)
@@ -99,13 +98,13 @@ def joint_metrics(class_truth  : np.ndarray,        # (E, K)
     n_partial_reco = is_partial_reco.sum()
     
     # METRICS: every branch (valid or not) must match the ground-truth mask
-    correct_hypothesis = np.all(pred_truth[np.arange(E), class_pred] == true_masks, axis=1)
+    correct_hypothesis = class_truth[np.arange(E), class_pred] == 1
     mask_chosen  = mask_pred[np.arange(E), class_pred]   # (E, B)
     correct_mask = np.all(mask_chosen == true_masks, axis=1)
-    correct_base_mask = np.all(mask_pred[:, base_k] == pred_truth[:, base_k], axis=1)
+    correct_base_mask = np.all(mask_pred[:, -1] == pred_truth[:, -1], axis=1)
     correct_both = correct_hypothesis & correct_mask
 
-    correct_hypothesis_base = np.all(pred_truth[:, base_k] == true_masks, axis=1)
+    correct_hypothesis_base = class_truth[np.arange(E), -1] == 1
     correct_both_base = correct_hypothesis_base & correct_base_mask
     truth_available = np.any(class_truth, axis=1)
 
