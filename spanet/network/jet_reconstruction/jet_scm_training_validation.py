@@ -411,7 +411,6 @@ class SCM_Training_Val(JetSecondaryLoader):
         return self._compiled_core(features_arr, pred_truth, class_truth, valid_mask)
 
     def training_step(self, batch: Batch, batch_idx: int):
-        self.on_train_epoch_start()
         (
             class_loss, mask_loss, top1_acc_truth,
             has_truth_frac, num_pos_mean, ce_random_baseline,
