@@ -53,7 +53,7 @@ class ClassifierTransformerHead(nn.Module):
         self.token_in_dim = branch_dim * jets * feats
         self.proj = nn.Linear(self.token_in_dim, class_embed_dim)
         self.tr = SimpleTransformerEncoder(class_embed_dim, nhead, num_layers, dropout)
-        self.head = nn.Linear(class_embed_dim, branch_dim)
+        self.head = nn.Linear(class_embed_dim, class_embed_dim)
         self.norm = nn.LayerNorm(class_embed_dim)
 
     def forward(self, features_arr, valid_mask: torch.Tensor | None = None,
@@ -88,8 +88,8 @@ class ClassifierTransformerHead(nn.Module):
         src_kpm = ~valid_mask  # True = ignore
         x = self.tr(x, src_key_padding_mask=src_kpm)
 
-        per_token_branch = self.head(x)           # (N, K, B)
-        token_scores = torch.logsumexp(per_token_branch, dim=-1)  # (N, K)
+        head_out = x + self.head(x) # (N, K, E)
+        token_scores = torch.max(head_out, dim=-1)  # (N, K)
         logits = token_scores
 
         # unshuffle back to original order
@@ -158,10 +158,8 @@ class SCM_Training_Val(JetSecondaryLoader):
         self.mask_reduction  = "any"  # "any" | "mean" | "max"
 
         B = self.options.branch_dim
-        K = self.options.k
         J = self.options.jet_max_dim
         Fdim = self.options.features_dim
-        self.real_K = B * K - 1
 
         # --- Transformer heads (no positional encodings) ---
         self.classifier = ClassifierTransformerHead(
@@ -296,20 +294,6 @@ class SCM_Training_Val(JetSecondaryLoader):
     
         return loss, has_truth, num_pos, ce_baseline
 
-    @staticmethod
-    def listwise_softmax_ce(logits, truth, valid_mask):
-        neg_inf = torch.tensor(-1e9, device=logits.device, dtype=logits.dtype)
-        mask_logits = torch.where(valid_mask, logits, neg_inf)
-        # normalize mass over valid K
-        logp = torch.log_softmax(mask_logits, dim=1)
-        pos = truth.bool() & valid_mask
-        # uniform over positives within each event
-        Z = pos.sum(dim=1, keepdim=True).clamp_min(1)
-        target = (pos.to(logits.dtype) / Z)
-        has_pos = pos.any(dim=1)
-        loss_vec = -(target * logp).sum(dim=1)
-        return loss_vec[has_pos].mean() if has_pos.any() else loss_vec.mean()
-
     def _compiled_core(self, features_arr, pred_truth, class_truth_K_or_KBminus1, valid_mask):
         """
         valid_mask: (N, K) True=keep, False=duplicate
@@ -327,10 +311,8 @@ class SCM_Training_Val(JetSecondaryLoader):
 
         # CLASSIFIER
         class_logits, token_scores, out_valid_mask = self.classifier(features_arr, valid_mask)
-        ce_bce, has_truth, num_pos, ce_random_baseline = \
+        class_loss, has_truth, num_pos, ce_random_baseline = \
             self._multi_positive_ce(class_logits, class_truth, valid_mask=out_valid_mask)
-        ce_rank = self.listwise_softmax_ce(class_logits, class_truth, out_valid_mask)
-        class_loss = 0.5 * ce_bce + 0.5 * ce_rank
 
         rows   = torch.arange(N, device=class_logits.device)
         pred_k = token_scores.argmax(dim=1)
