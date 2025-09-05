@@ -91,7 +91,7 @@ def joint_metrics(class_truth  : np.ndarray,        # (E, K)
     E, K, B = mask_pred.shape
 
     # Reconstruction categorization
-    branch_valid_count = true_masks.sum(axis=1)
+    branch_valid_count = pred_truth.sum(axis=2).max(axis=1)
     is_full_reco       = (branch_valid_count == B)
     is_partial_reco    = (branch_valid_count > 0) & (branch_valid_count < B)
     n_full_reco    = is_full_reco.sum()
