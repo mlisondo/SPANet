@@ -54,6 +54,11 @@ class ClassifierTransformerHead(nn.Module):
         self.proj = nn.Linear(self.token_in_dim, class_embed_dim)
         self.tr = SimpleTransformerEncoder(class_embed_dim, nhead, num_layers, dropout)
         self.head = nn.Linear(class_embed_dim, class_embed_dim)
+        self.readout = nn.Sequential(
+            nn.LayerNorm(class_embed_dim),
+            nn.GELU(),
+            nn.Linear(class_embed_dim, 1)
+        )
         self.norm = nn.LayerNorm(class_embed_dim)
 
     def forward(self, features_arr, valid_mask: torch.Tensor | None = None,
@@ -89,8 +94,8 @@ class ClassifierTransformerHead(nn.Module):
         x = self.tr(x, src_key_padding_mask=src_kpm)
 
         head_out = x + self.head(x) # (N, K, E)
-        token_scores = torch.max(head_out, dim=-1)  # (N, K)
-        logits = token_scores
+        logits = self.readout(h).squeeze(-1)  # (N, K)
+        token_scores = logits
 
         # unshuffle back to original order
         if perms is not None:
