@@ -94,7 +94,7 @@ class ClassifierTransformerHead(nn.Module):
         x = self.tr(x, src_key_padding_mask=src_kpm)
 
         head_out = x + self.head(x) # (N, K, E)
-        logits = self.readout(h).squeeze(-1)  # (N, K)
+        logits = self.readout(head_out).squeeze(-1)  # (N, K)
         token_scores = logits
 
         # unshuffle back to original order
