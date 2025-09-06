@@ -61,6 +61,9 @@ class ClassifierTransformerHead(nn.Module):
         )
         self.norm = nn.LayerNorm(class_embed_dim)
 
+        # NEW: candidate dropout probability (over K). Set to 0.0 to disable.
+        self.cand_drop_p = 0.10
+
     def forward(self, features_arr, valid_mask: torch.Tensor | None = None,
                 zero_out_invalid: bool = True):
         # features_arr: (N, K, B, J, F)
@@ -82,6 +85,17 @@ class ClassifierTransformerHead(nn.Module):
         # flatten per candidate
         tokens = features_arr.reshape(N, K, B * J * Fdim)
 
+        # random candidate dropout during training (never drop all)
+        if self.training and self.cand_drop_p > 0.0:
+            rows = torch.arange(N, device=device)
+            drop = (torch.rand(N, K, device=device) < self.cand_drop_p)
+            keep_mask = valid_mask & ~drop
+            none_keep = ~keep_mask.any(dim=1)
+            if none_keep.any():
+                first_valid = valid_mask.float().argmax(dim=1)
+                keep_mask[rows[none_keep], first_valid[none_keep]] = True
+            valid_mask = keep_mask
+
         # optional zeroing of masked candidates
         if zero_out_invalid:
             tokens = tokens * valid_mask.unsqueeze(-1).to(tokens.dtype)
@@ -89,7 +103,7 @@ class ClassifierTransformerHead(nn.Module):
         x = self.proj(tokens)
         x = self.norm(x)
 
-        # mask duplicates out of attention entirely
+        # mask duplicates (and dropped) out of attention entirely
         src_kpm = ~valid_mask  # True = ignore
         x = self.tr(x, src_key_padding_mask=src_kpm)
 
@@ -111,6 +125,7 @@ class ClassifierTransformerHead(nn.Module):
         token_scores = token_scores.masked_fill(~valid_mask, neg_inf)
 
         return logits, token_scores, valid_mask
+
 
 
 class MaskerTransformerHead(nn.Module):
@@ -302,8 +317,9 @@ class SCM_Training_Val(JetSecondaryLoader):
 
     @staticmethod
     def listwise_softmax_ce(logits, truth, valid_mask):
+        TEMP = 2.0  # >1 flattens; set 1.0 to disable
         neg_inf = torch.finfo(logits.dtype).min
-        masked = logits.masked_fill(~valid_mask, neg_inf)
+        masked = logits.masked_fill(~valid_mask, neg_inf) / TEMP
         logp = torch.log_softmax(masked, dim=1)
         pos = (truth.bool() & valid_mask).to(logits.dtype)
         Z = pos.sum(dim=1, keepdim=True).clamp_min(1)
@@ -311,32 +327,34 @@ class SCM_Training_Val(JetSecondaryLoader):
         has_pos = pos.any(dim=1)
         loss_vec = -(target * logp).sum(dim=1)
         return loss_vec[has_pos].mean() if has_pos.any() else loss_vec.mean()
+
     
-    def _compiled_core(self, features_arr, pred_truth, class_truth_K_or_KBminus1, valid_mask):
+    def _compiled_core(self, features_arr, pred_truth, class_truth, valid_mask):
         """
         valid_mask: (N, K) True=keep, False=duplicate
         """
         N, K, B, J, Fdim = features_arr.shape
-
-        # If class_truth provided as (N, K*B-1), compress to (N, K)
-        if class_truth_K_or_KBminus1.size(1) == (K * B - 1):
-            ct = class_truth_K_or_KBminus1
-            padded = torch.zeros(N, K * B, device=ct.device, dtype=ct.dtype)
-            padded[:, :K * B - 1] = ct
-            class_truth = padded.view(N, K, B).any(dim=2).to(ct.dtype)
-        else:
-            class_truth = class_truth_K_or_KBminus1
-
+    
         # CLASSIFIER
         class_logits, token_scores, out_valid_mask = self.classifier(features_arr, valid_mask)
         ce_bce, has_truth, num_pos, ce_random_baseline = \
             self._multi_positive_ce(class_logits, class_truth, valid_mask=out_valid_mask)
         ce_rank = self.listwise_softmax_ce(class_logits, class_truth, out_valid_mask)
-        class_loss = 0.5 * ce_bce + 0.5 * ce_rank
-
+    
         rows   = torch.arange(N, device=class_logits.device)
+    
+        # hard-negative penalty on highest-scoring negative per event
+        hard_neg_w = 0.05  # set to 0.0 to disable; try 0.01–0.10
+        neg_inf = torch.finfo(class_logits.dtype).min
+        neg_mask = (~class_truth.bool()) & out_valid_mask
+        neg_only = class_logits.masked_fill(~neg_mask, neg_inf)
+        hard_neg = neg_only.max(dim=1).values  # = neg_inf if no negatives exist
+        hard_neg_loss = F.softplus(hard_neg).mean()
+    
+        class_loss = 0.5 * ce_bce + 0.5 * ce_rank + hard_neg_w * hard_neg_loss
+    
         pred_k = token_scores.argmax(dim=1)
-
+    
         # Compute top-1 vs compressed truth
         top1_acc_truth = torch.tensor(0., device=class_logits.device)
         num_pos_mean   = num_pos.float().mean()
@@ -344,25 +362,26 @@ class SCM_Training_Val(JetSecondaryLoader):
             top1_acc_truth = class_truth[rows[has_truth], pred_k[has_truth]].float().mean()
             num_pos_mean   = num_pos[has_truth].float().mean()
         has_truth_frac = has_truth.float().mean()
-
+    
         # MASKER
         flat_feat  = features_arr.reshape(N * K, B, J, Fdim)
         flat_truth = pred_truth.reshape(N * K, B)
         pos_rate = flat_truth.float().mean()
         logits = self.masker(flat_feat)  # (N*K, B)
-
+    
         mask_loss = self.focal_bce_with_logits(
             logits, flat_truth,
             alpha_pos=self.focal_alpha_pos,
             gamma=self.focal_gamma,
             reduction="mean"
         )
-
+    
         return (
             class_loss, mask_loss, top1_acc_truth,
             has_truth_frac, num_pos_mean, ce_random_baseline,
             pos_rate
         )
+
 
     # recompile after signature change
     _compiled_core = tcompile(_compiled_core, dynamic=True)
