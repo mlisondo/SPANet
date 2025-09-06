@@ -328,6 +328,7 @@ class SCM_Training_Val(JetSecondaryLoader):
             class_truth = class_truth_K_or_KBminus1
 
         # CLASSIFIER
+        class_logits, token_scores, out_valid_mask = self.classifier(features_arr, valid_mask)
         ce_bce, has_truth, num_pos, ce_base = self._multi_positive_ce(class_logits, class_truth, valid_mask=out_valid_mask)
         ce_rank = self.listwise_softmax_ce(class_logits, class_truth, out_valid_mask)
         class_loss = 0.5 * ce_bce + 0.5 * ce_rank
