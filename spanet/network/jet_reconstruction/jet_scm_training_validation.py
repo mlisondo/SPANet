@@ -61,8 +61,8 @@ class ClassifierTransformerHead(nn.Module):
         )
         self.norm = nn.LayerNorm(class_embed_dim)
 
-        # NEW: candidate dropout probability (over K). Set to 0.0 to disable.
-        self.cand_drop_p = 0.10
+        # candidate dropout probability (over K). Set to 0.0 to disable.
+        self.cand_drop_p = 0.15
 
     def forward(self, features_arr, valid_mask: torch.Tensor | None = None,
                 zero_out_invalid: bool = True):
