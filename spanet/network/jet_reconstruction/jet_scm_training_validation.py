@@ -62,7 +62,7 @@ class ClassifierTransformerHead(nn.Module):
         self.norm = nn.LayerNorm(class_embed_dim)
 
     def forward(self, features_arr, valid_mask: torch.Tensor | None = None,
-                zero_out_invalid: bool = True, neg_inf: float = -1e9):
+                zero_out_invalid: bool = True):
         # features_arr: (N, K, B, J, F)
         N, K, B, J, Fdim = features_arr.shape
         device = features_arr.device
@@ -105,6 +105,7 @@ class ClassifierTransformerHead(nn.Module):
             token_scores = token_scores[batch_ix, inv]
             valid_mask   = valid_mask[batch_ix, inv]
 
+        neg_inf = torch.finfo(logits.dtype).min
         # hard-suppress invalid candidates for loss and argmax
         logits       = logits.masked_fill(~valid_mask, neg_inf)
         token_scores = token_scores.masked_fill(~valid_mask, neg_inf)
@@ -228,7 +229,7 @@ class SCM_Training_Val(JetSecondaryLoader):
             h = (h ^ flat[..., t]) * FNV_PRIME
         h = h ^ (h >> 32)  # light final mix
     
-        h_sorted, perm = h.sort(dim=1)
+        h_sorted, perm = torch.sort(h, dim=1, stable=True)
         flat_sorted = flat.gather(1, perm.unsqueeze(-1).expand_as(flat))
     
         same_hash = h_sorted[:, 1:] == h_sorted[:, :-1]
@@ -299,6 +300,18 @@ class SCM_Training_Val(JetSecondaryLoader):
     
         return loss, has_truth, num_pos, ce_baseline
 
+    @staticmethod
+    def listwise_softmax_ce(logits, truth, valid_mask):
+        neg_inf = torch.finfo(logits.dtype).min
+        masked = logits.masked_fill(~valid_mask, neg_inf)
+        logp = torch.log_softmax(masked, dim=1)
+        pos = (truth.bool() & valid_mask).to(logits.dtype)
+        Z = pos.sum(dim=1, keepdim=True).clamp_min(1)
+        target = pos / Z
+        has_pos = pos.any(dim=1)
+        loss_vec = -(target * logp).sum(dim=1)
+        return loss_vec[has_pos].mean() if has_pos.any() else loss_vec.mean()
+    
     def _compiled_core(self, features_arr, pred_truth, class_truth_K_or_KBminus1, valid_mask):
         """
         valid_mask: (N, K) True=keep, False=duplicate
@@ -315,9 +328,9 @@ class SCM_Training_Val(JetSecondaryLoader):
             class_truth = class_truth_K_or_KBminus1
 
         # CLASSIFIER
-        class_logits, token_scores, out_valid_mask = self.classifier(features_arr, valid_mask)
-        class_loss, has_truth, num_pos, ce_random_baseline = \
-            self._multi_positive_ce(class_logits, class_truth, valid_mask=out_valid_mask)
+        ce_bce, has_truth, num_pos, ce_base = self._multi_positive_ce(class_logits, class_truth, valid_mask=out_valid_mask)
+        ce_rank = self.listwise_softmax_ce(class_logits, class_truth, out_valid_mask)
+        class_loss = 0.5 * ce_bce + 0.5 * ce_rank
 
         rows   = torch.arange(N, device=class_logits.device)
         pred_k = token_scores.argmax(dim=1)
