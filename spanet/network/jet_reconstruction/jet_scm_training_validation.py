@@ -62,17 +62,27 @@ class ClassifierTransformerHead(nn.Module):
         self.norm = nn.LayerNorm(class_embed_dim)
 
         # candidate dropout probability (over K). Set to 0.0 to disable.
-        self.cand_drop_p = 0.15
+        self.cand_drop_p = 0.40
 
     def forward(self, features_arr, valid_mask: torch.Tensor | None = None,
                 zero_out_invalid: bool = True):
         # features_arr: (N, K, B, J, F)
         N, K, B, J, Fdim = features_arr.shape
         device = features_arr.device
-
+    
         if valid_mask is None:
             valid_mask = torch.ones((N, K), dtype=torch.bool, device=device)
-
+    
+        # candidate dropout to possibly drop the last K
+        if self.training and self.cand_drop_p > 0.0:
+            valid_counts = valid_mask.sum(dim=1)                 # (N,)
+            can_drop = (valid_counts >= 2) & valid_mask[:, -1]   # keep at least one
+            will_drop = (torch.rand(N, device=device) < self.cand_drop_p) & can_drop
+            if will_drop.any():
+                vm = valid_mask.clone()
+                vm[will_drop, -1] = False
+                valid_mask = vm
+    
         # shuffle K during training; shuffle mask identically
         if self.training:
             perms = torch.argsort(torch.rand(N, K, device=device), dim=1)
@@ -81,36 +91,25 @@ class ClassifierTransformerHead(nn.Module):
             valid_mask   = valid_mask[batch_ix, perms]
         else:
             perms = None
-
+    
         # flatten per candidate
         tokens = features_arr.reshape(N, K, B * J * Fdim)
-
-        # random candidate dropout during training (never drop all)
-        if self.training and self.cand_drop_p > 0.0:
-            rows = torch.arange(N, device=device)
-            drop = (torch.rand(N, K, device=device) < self.cand_drop_p)
-            keep_mask = valid_mask & ~drop
-            none_keep = ~keep_mask.any(dim=1)
-            if none_keep.any():
-                first_valid = valid_mask.float().argmax(dim=1)
-                keep_mask[rows[none_keep], first_valid[none_keep]] = True
-            valid_mask = keep_mask
-
+    
         # optional zeroing of masked candidates
         if zero_out_invalid:
             tokens = tokens * valid_mask.unsqueeze(-1).to(tokens.dtype)
-
+    
         x = self.proj(tokens)
         x = self.norm(x)
-
-        # mask duplicates (and dropped) out of attention entirely
+    
+        # mask dropped/invalid out of attention entirely
         src_kpm = ~valid_mask  # True = ignore
         x = self.tr(x, src_key_padding_mask=src_kpm)
-
+    
         head_out = x + self.head(x) # (N, K, E)
         logits = self.readout(head_out).squeeze(-1)  # (N, K)
         token_scores = logits
-
+    
         # unshuffle back to original order
         if perms is not None:
             inv = torch.empty_like(perms)
@@ -118,14 +117,12 @@ class ClassifierTransformerHead(nn.Module):
             logits       = logits[batch_ix, inv]
             token_scores = token_scores[batch_ix, inv]
             valid_mask   = valid_mask[batch_ix, inv]
-
+    
         neg_inf = torch.finfo(logits.dtype).min
-        # hard-suppress invalid candidates for loss and argmax
         logits       = logits.masked_fill(~valid_mask, neg_inf)
         token_scores = token_scores.masked_fill(~valid_mask, neg_inf)
-
+    
         return logits, token_scores, valid_mask
-
 
 
 class MaskerTransformerHead(nn.Module):
