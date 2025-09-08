@@ -224,13 +224,13 @@ class SCM_Training_Val(JetSecondaryLoader):
     @staticmethod
     def _dedup_valid_mask(jet_idx: torch.Tensor) -> torch.Tensor:
         """
-        jet_idx: (N, K, B, J) integer indices identifying each K candidate.
+        jet_idx: (N, K, B, J) indices for each candidate.
         Returns is_valid: (N, K) with exactly one True per equivalence class.
+        Keeps the last occurrence in each duplicate group (deterministic).
         """
         N, K, B, J = jet_idx.shape
         dev = jet_idx.device
     
-        # flatten and use int64 (works on CUDA)
         flat = jet_idx.reshape(N, K, B * J).to(torch.int64)
     
         FNV_OFFSET = torch.tensor(1469598103934665603, dtype=torch.int64, device=dev)
@@ -239,7 +239,7 @@ class SCM_Training_Val(JetSecondaryLoader):
         h = FNV_OFFSET.expand(N, K).clone()
         for t in range(B * J):
             h = (h ^ flat[..., t]) * FNV_PRIME
-        h = h ^ (h >> 32)  # light final mix
+        h = h ^ (h >> 32)
     
         h_sorted, perm = torch.sort(h, dim=1, stable=True)
         flat_sorted = flat.gather(1, perm.unsqueeze(-1).expand_as(flat))
@@ -248,7 +248,8 @@ class SCM_Training_Val(JetSecondaryLoader):
         eq_full   = same_hash & flat_sorted[:, 1:, :].eq(flat_sorted[:, :-1, :]).all(dim=-1)
     
         dup_sorted = torch.zeros((N, K), dtype=torch.bool, device=dev)
-        dup_sorted[:, 1:] = eq_full  # keep first in each group
+        # mark the previous element of each equal pair → keep the LAST item in each group
+        dup_sorted[:, :-1] = eq_full          # <-- changed from [:, 1:] = eq_full
     
         inv = torch.empty_like(perm)
         inv.scatter_(1, perm, torch.arange(K, device=dev).expand(N, K))
