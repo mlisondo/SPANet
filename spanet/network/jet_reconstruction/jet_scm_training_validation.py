@@ -50,7 +50,7 @@ class ClassifierTransformerHead(nn.Module):
                  class_embed_dim: int, nhead: int, num_layers: int, dropout: float):
         super().__init__()
         self.branch_dim = branch_dim
-        self.token_in_dim = branch_dim * jets * (feats - 2)
+        self.token_in_dim = branch_dim * jets * feats
         self.proj = nn.Linear(self.token_in_dim, class_embed_dim)
         self.tr = SimpleTransformerEncoder(class_embed_dim, nhead, num_layers, dropout)
         self.head = nn.Linear(class_embed_dim, class_embed_dim)
@@ -61,13 +61,24 @@ class ClassifierTransformerHead(nn.Module):
         )
         self.norm = nn.LayerNorm(class_embed_dim)
 
+        self.tertiary_token_in_dim = branch_dim * jets * (feats - 3)
+        self.tertiary_proj = nn.Linear(self.token_in_dim, class_embed_dim)
+        self.tertiary_tr = SimpleTransformerEncoder(class_embed_dim, nhead, num_layers, dropout)
+        self.tertiary_head = nn.Linear(class_embed_dim, class_embed_dim)
+        self.tertiary_readout = nn.Sequential(
+            nn.LayerNorm(class_embed_dim),
+            nn.GELU(),
+            nn.Linear(class_embed_dim, 1)
+        )
+        self.tertiary_norm = nn.LayerNorm(class_embed
+
         # candidate dropout probability (over K). Set to 0.0 to disable.
         self.cand_drop_p = 0.40
 
     def forward(self, features_arr, valid_mask: torch.Tensor | None = None,
                 zero_out_invalid: bool = True):
         # features_arr: (N, K, B, J, F)
-        features_arr = features_arr[...,:-2]
+        tertiary_features_arr = features_arr[...,:-3]
         N, K, B, J, Fdim = features_arr.shape
         device = features_arr.device
     
@@ -89,41 +100,56 @@ class ClassifierTransformerHead(nn.Module):
             perms = torch.argsort(torch.rand(N, K, device=device), dim=1)
             batch_ix = torch.arange(N, device=device).unsqueeze(1)
             features_arr = features_arr[batch_ix, perms]
+            tertiary_features_arr = tertiary_features_arr[features_arr, perms]
             valid_mask   = valid_mask[batch_ix, perms]
         else:
             perms = None
     
         # flatten per candidate
         tokens = features_arr.reshape(N, K, B * J * Fdim)
+        tertiary_tokens = tertiary_features_arr.reshape(N, K, B * J * (Fdim - 3))
     
         # optional zeroing of masked candidates
         if zero_out_invalid:
             tokens = tokens * valid_mask.unsqueeze(-1).to(tokens.dtype)
+            tertiary_tokens = tertiary_tokens * valid_mask.unsqueeze(-1).to(tertiary_tokens.dtype)
     
         x = self.proj(tokens)
         x = self.norm(x)
+
+        x2 = self.tertiary_proj(tertiary_tokens)
+        x2 = self.tertiary_norm(x2)
     
         # mask dropped/invalid out of attention entirely
         src_kpm = ~valid_mask  # True = ignore
         x = self.tr(x, src_key_padding_mask=src_kpm)
+        x2 = self.tertiary_tr(x2, src_key_padding_mask=src_kpm)
     
         head_out = x + self.head(x) # (N, K, E)
         logits = self.readout(head_out).squeeze(-1)  # (N, K)
-        token_scores = logits
+
+        tertiary_head_out = x2 + self.tertiary_head(x2)
+        tertiary_logits = self.readout(tertiary_head_out).squeeze(-1)  # (N, K)
     
         # unshuffle back to original order
         if perms is not None:
             inv = torch.empty_like(perms)
             inv.scatter_(1, perms, torch.arange(K, device=device).expand(N, K))
             logits       = logits[batch_ix, inv]
-            token_scores = token_scores[batch_ix, inv]
             valid_mask   = valid_mask[batch_ix, inv]
+            tertiary_logits       = tertiary_logits[batch_ix, inv]
     
         neg_inf = torch.finfo(logits.dtype).min
-        logits       = logits.masked_fill(~valid_mask, neg_inf)
+        logits = logits.masked_fill(~valid_mask, neg_inf)
         token_scores = token_scores.masked_fill(~valid_mask, neg_inf)
+        tertiary_logits = tertiary_logits.masked_fill(~valid_mask, neg_inf)
+        tertiary_token_scores = tertiary_token_scores.masked_fill(~valid_mask, neg_inf)
+
+        logits = F.log_softmax(logits, dim=-1)
+        tertiary_logits = F.log_softmax(tertiary_logits, dim=-1)
+        logits = torch.logaddexp(logits, tertiary_logits) - math.log(2)
     
-        return logits, token_scores, valid_mask
+        return logits, logits, valid_mask
 
 
 class MaskerTransformerHead(nn.Module):
