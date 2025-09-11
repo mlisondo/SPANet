@@ -50,7 +50,7 @@ class ClassifierTransformerHead(nn.Module):
                  class_embed_dim: int, nhead: int, num_layers: int, dropout: float):
         super().__init__()
         self.branch_dim = branch_dim
-        self.token_in_dim = branch_dim * jets * feats
+        self.token_in_dim = branch_dim * jets * (feats - 2)
         self.proj = nn.Linear(self.token_in_dim, class_embed_dim)
         self.tr = SimpleTransformerEncoder(class_embed_dim, nhead, num_layers, dropout)
         self.head = nn.Linear(class_embed_dim, class_embed_dim)
@@ -67,6 +67,7 @@ class ClassifierTransformerHead(nn.Module):
     def forward(self, features_arr, valid_mask: torch.Tensor | None = None,
                 zero_out_invalid: bool = True):
         # features_arr: (N, K, B, J, F)
+        features_arr = features_arr[...,:-2]
         N, K, B, J, Fdim = features_arr.shape
         device = features_arr.device
     
