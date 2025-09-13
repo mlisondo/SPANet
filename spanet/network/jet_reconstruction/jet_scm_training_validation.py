@@ -75,6 +75,8 @@ class ClassifierTransformerHead(nn.Module):
         # candidate dropout probability (over K). Set to 0.0 to disable.
         self.cand_drop_p = 0.40
 
+        self.ln_of_two = 0.69314718056
+
     def forward(self, features_arr, valid_mask: torch.Tensor | None = None,
                 zero_out_invalid: bool = True):
         # features_arr: (N, K, B, J, F)
@@ -146,7 +148,7 @@ class ClassifierTransformerHead(nn.Module):
 
         logits = F.log_softmax(logits, dim=-1)
         tertiary_logits = F.log_softmax(tertiary_logits, dim=-1)
-        logits = torch.logaddexp(logits, tertiary_logits) - math.log(2)
+        logits = torch.logaddexp(logits, tertiary_logits) - self.ln_of_two
     
         return logits, logits, valid_mask
 
