@@ -70,7 +70,7 @@ class ClassifierTransformerHead(nn.Module):
             nn.GELU(),
             nn.Linear(class_embed_dim, 1)
         )
-        self.tertiary_norm = nn.LayerNorm(class_embed
+        self.tertiary_norm = nn.LayerNorm(class_embed_dim)
 
         # candidate dropout probability (over K). Set to 0.0 to disable.
         self.cand_drop_p = 0.40
