@@ -103,7 +103,7 @@ class ClassifierTransformerHead(nn.Module):
             perms = torch.argsort(torch.rand(N, K, device=device), dim=1)
             batch_ix = torch.arange(N, device=device).unsqueeze(1)
             features_arr = features_arr[batch_ix, perms]
-            tertiary_features_arr = tertiary_features_arr[features_arr, perms]
+            tertiary_features_arr = tertiary_features_arr[batch_ix, perms]
             valid_mask   = valid_mask[batch_ix, perms]
         else:
             perms = None
