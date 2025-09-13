@@ -142,9 +142,7 @@ class ClassifierTransformerHead(nn.Module):
     
         neg_inf = torch.finfo(logits.dtype).min
         logits = logits.masked_fill(~valid_mask, neg_inf)
-        token_scores = token_scores.masked_fill(~valid_mask, neg_inf)
         tertiary_logits = tertiary_logits.masked_fill(~valid_mask, neg_inf)
-        tertiary_token_scores = tertiary_token_scores.masked_fill(~valid_mask, neg_inf)
 
         logits = F.log_softmax(logits, dim=-1)
         tertiary_logits = F.log_softmax(tertiary_logits, dim=-1)
