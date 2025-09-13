@@ -78,7 +78,7 @@ class ClassifierTransformerHead(nn.Module):
     def forward(self, features_arr, valid_mask: torch.Tensor | None = None,
                 zero_out_invalid: bool = True):
         # features_arr: (N, K, B, J, F)
-        momentum_indices = 1,3,4
+        momentum_indices = [1,3,4]
         tertiary_features_arr = features_arr[...,momentum_indices]
         N, K, B, J, Fdim = features_arr.shape
         device = features_arr.device
