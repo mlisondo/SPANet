@@ -108,7 +108,7 @@ class ClassifierTransformerHead(nn.Module):
     
         # flatten per candidate
         tokens = features_arr.reshape(N, K, B * J * Fdim)
-        tertiary_tokens = tertiary_features_arr.reshape(N, K, B * J * (Fdim - 3))
+        tertiary_tokens = tertiary_features_arr.reshape(N, K, B * J * (Fdim - 2))
     
         # optional zeroing of masked candidates
         if zero_out_invalid:
