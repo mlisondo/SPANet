@@ -62,7 +62,7 @@ class ClassifierTransformerHead(nn.Module):
         self.norm = nn.LayerNorm(class_embed_dim)
 
         self.tertiary_token_in_dim = branch_dim * jets * (feats - 2)
-        self.tertiary_proj = nn.Linear(self.token_in_dim, class_embed_dim)
+        self.tertiary_proj = nn.Linear(self.tertiary_token_in_dim, class_embed_dim)
         self.tertiary_tr = SimpleTransformerEncoder(class_embed_dim, nhead, num_layers, dropout)
         self.tertiary_head = nn.Linear(class_embed_dim, class_embed_dim)
         self.tertiary_readout = nn.Sequential(
