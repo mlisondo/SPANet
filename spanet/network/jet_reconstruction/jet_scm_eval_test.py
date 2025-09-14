@@ -12,6 +12,7 @@ class SCM_Eval_Test(SCM_Training_Val):
 
     @torch.no_grad()
     def evaluate_scm_batch(self, batch: Batch) -> Dict[str, np.ndarray]:
+        self.eval()
         pred_truth, true_masks, features_arr, class_truth, true_idx, jet_preds_tensor, jet_mult = self.topk_data(batch)
         true_masks = true_masks.permute(1, 0)  # (E, B)
         E, K, B, J, F = features_arr.shape
@@ -20,16 +21,9 @@ class SCM_Eval_Test(SCM_Training_Val):
         valid_mask = self._dedup_valid_mask(jet_preds_tensor)  # (E, K), True = keep
 
         # classifier with masking
-        class_logits, token_scores, out_valid_mask = self.classifier(features_arr, valid_mask)  # logits already -inf on dups
-
-        # masked softmax so probs sum to 1 over valid K only
-        neg_inf = torch.tensor(float("-inf"), device=class_logits.device, dtype=class_logits.dtype)
-        valid_logits = class_logits.masked_fill(~out_valid_mask, neg_inf)
-        maxv = torch.amax(valid_logits, dim=1, keepdim=True)
-        exps = torch.exp((valid_logits - maxv).masked_fill(~out_valid_mask, neg_inf))
-        exps = exps * out_valid_mask.to(exps.dtype)
-        denom = exps.sum(dim=1, keepdim=True).clamp_min(1e-12)
-        class_probs = exps / denom  # zeros on duplicates
+        class_logits, token_scores, out_valid_mask = self.classifier(features_arr, valid_mask)
+        class_probs = class_logits.exp()            # sums to 1 over valid K
+        class_preds = class_probs.argmax(dim=1)
 
         # masked argmax for the final pick
         class_preds = torch.argmax(valid_logits, dim=1)
