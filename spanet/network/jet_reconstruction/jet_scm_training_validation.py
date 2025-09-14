@@ -131,8 +131,8 @@ class ClassifierTransformerHead(nn.Module):
         head_out = x + self.head(x) # (N, K, E)
         logits = self.readout(head_out).squeeze(-1)  # (N, K)
 
-        tertiary_head_out = x2 + self.tertiary_head(x2)
-        tertiary_logits = self.readout(tertiary_head_out).squeeze(-1)  # (N, K)
+        tertiary_head_out = x2 + self.tertiary_head(x2) # (N, K, E)
+        tertiary_logits = self.tertiary_readout(tertiary_head_out).squeeze(-1)  # (N, K)
     
         # unshuffle back to original order
         if perms is not None:
