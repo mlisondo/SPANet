@@ -82,15 +82,7 @@ class ClassifierTransformerHead(nn.Module):
         if valid_mask is None:
             valid_mask = torch.ones((N, K), dtype=torch.bool, device=device)
     
-        # shuffle K during training; shuffle mask identically
-        if self.training:
-            perms = torch.argsort(torch.rand(N, K, device=device), dim=1)
-            batch_ix = torch.arange(N, device=device).unsqueeze(1)
-            features_arr = features_arr[batch_ix, perms]
-            tertiary_features_arr = tertiary_features_arr[batch_ix, perms]
-            valid_mask   = valid_mask[batch_ix, perms]
-        else:
-            perms = None
+        perms = None
     
         # flatten per candidate
         tokens = features_arr.reshape(N, K, B * J * Fdim)
@@ -117,14 +109,6 @@ class ClassifierTransformerHead(nn.Module):
 
         tertiary_head_out = x2 + self.tertiary_head(x2) # (N, K, E)
         tertiary_logits = self.tertiary_readout(tertiary_head_out).squeeze(-1)  # (N, K)
-    
-        # unshuffle back to original order
-        if perms is not None:
-            inv = torch.empty_like(perms)
-            inv.scatter_(1, perms, torch.arange(K, device=device).expand(N, K))
-            logits       = logits[batch_ix, inv]
-            valid_mask   = valid_mask[batch_ix, inv]
-            tertiary_logits       = tertiary_logits[batch_ix, inv]
     
         neg_inf = torch.finfo(logits.dtype).min
         logits = logits.masked_fill(~valid_mask, neg_inf)
@@ -261,8 +245,8 @@ class SCM_Training_Val(JetSecondaryLoader):
         eq_full   = same_hash & flat_sorted[:, 1:, :].eq(flat_sorted[:, :-1, :]).all(dim=-1)
     
         dup_sorted = torch.zeros((N, K), dtype=torch.bool, device=dev)
-        # mark the previous element of each equal pair → keep the LAST item in each group
-        dup_sorted[:, :-1] = eq_full          # <-- changed from [:, 1:] = eq_full
+        # mark the previous element of each equal pair -> keep the LAST item in each group
+        dup_sorted[:, :-1] = eq_full
     
         inv = torch.empty_like(perm)
         inv.scatter_(1, perm, torch.arange(K, device=dev).expand(N, K))
@@ -312,7 +296,7 @@ class SCM_Training_Val(JetSecondaryLoader):
         # masked mean over classes
         denom = weights.sum(dim=1).clamp_min(1.0)
         loss_vec = (bce * weights).sum(dim=1) / denom
-        loss = loss_vec[has_truth].mean() if has_truth.any() else loss_vec.mean()
+        loss = loss_vec[has_truth].mean() if has_truth.any() else torch.zeros((), device=class_logits.device, dtype=loss_vec.dtype)
     
         with torch.no_grad():
             base = F.binary_cross_entropy_with_logits(
@@ -337,8 +321,7 @@ class SCM_Training_Val(JetSecondaryLoader):
         target = pos / Z
         has_pos = pos.any(dim=1)
         loss_vec = -(target * logp).sum(dim=1)
-        return loss_vec[has_pos].mean() if has_pos.any() else loss_vec.mean()
-
+        return loss_vec[has_pos].mean() if has_pos.any() else torch.zeros((), device=logits.device, dtype=loss_vec.dtype)
     
     def _compiled_core(self, features_arr, pred_truth, class_truth, valid_mask):
         """
@@ -352,17 +335,8 @@ class SCM_Training_Val(JetSecondaryLoader):
             self._multi_positive_ce(class_logits, class_truth, valid_mask=out_valid_mask)
         ce_rank = self.listwise_softmax_ce(class_logits, class_truth, out_valid_mask)
     
-        rows   = torch.arange(N, device=class_logits.device)
-    
-        # hard-negative penalty on highest-scoring negative per event
-        hard_neg_w = 0.05  # set to 0.0 to disable; try 0.01–0.10
-        neg_inf = torch.finfo(class_logits.dtype).min
-        neg_mask = (~class_truth.bool()) & out_valid_mask
-        neg_only = class_logits.masked_fill(~neg_mask, neg_inf)
-        hard_neg = neg_only.max(dim=1).values  # = neg_inf if no negatives exist
-        hard_neg_loss = F.softplus(hard_neg).mean()
-    
-        class_loss = 0.5 * ce_bce + 0.5 * ce_rank + hard_neg_w * hard_neg_loss
+        rows = torch.arange(N, device=class_logits.device)
+        class_loss = ce_bce + ce_rank
     
         pred_k = token_scores.argmax(dim=1)
     
