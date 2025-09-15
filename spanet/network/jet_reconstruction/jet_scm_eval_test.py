@@ -27,6 +27,7 @@ class SCM_Eval_Test(SCM_Training_Val):
 
         # masker head (optional: suppress duplicates for clarity)
         mask_logits_list, mask_probs_list, mask_preds_list = [], [], []
+        neg_inf = torch.tensor(float("-inf"), device=class_logits.device, dtype=class_logits.dtype)
         for k in range(K):
             logits_k = self.masker(features_arr[:, k])                 # (E, B)
             if out_valid_mask is not None:
