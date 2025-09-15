@@ -25,9 +25,6 @@ class SCM_Eval_Test(SCM_Training_Val):
         class_probs = class_logits.exp()            # sums to 1 over valid K
         class_preds = class_probs.argmax(dim=1)
 
-        # masked argmax for the final pick
-        class_preds = torch.argmax(valid_logits, dim=1)
-
         # masker head (optional: suppress duplicates for clarity)
         mask_logits_list, mask_probs_list, mask_preds_list = [], [], []
         for k in range(K):
