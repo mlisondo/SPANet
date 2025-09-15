@@ -145,12 +145,9 @@ class ClassifierTransformerHead(nn.Module):
         neg_inf = torch.finfo(logits.dtype).min
         logits = logits.masked_fill(~valid_mask, neg_inf)
         tertiary_logits = tertiary_logits.masked_fill(~valid_mask, neg_inf)
-
-        logits = F.log_softmax(logits, dim=-1)
-        tertiary_logits = F.log_softmax(tertiary_logits, dim=-1)
-        logits = torch.logaddexp(logits, tertiary_logits) - self.ln_of_two
-    
-        return logits, logits, valid_mask
+        # simple average of raw scores; keeps BCE scale sane
+        combined = 0.5 * (logits + tertiary_logits)
+        return combined, combined, valid_mask
 
 
 class MaskerTransformerHead(nn.Module):
@@ -219,6 +216,10 @@ class SCM_Training_Val(JetSecondaryLoader):
             nhead=self.mask_nhead, num_layers=self.mask_layers,
             dropout=self.tr_dropout,
         )
+
+        for n, p in self.named_parameters():
+        if not (n.startswith("classifier.") or n.startswith("masker.")):
+            p.requires_grad_(False)
 
         # Compile
         self.classifier = tcompile(self.classifier, dynamic=True)
@@ -473,46 +474,13 @@ class SCM_Training_Val(JetSecondaryLoader):
         self.classifier.train()
         self.masker.train()
 
+    def configure_optimizers(self):
+        # heads only
+        head_params = list(self.classifier.parameters()) + list(self.masker.parameters())
+        for p in self.parameters():
+            if p not in head_params:
+                p.requires_grad_(False)
+        Optim = dict(AdamW=torch.optim.AdamW, Adam=torch.optim.Adam)[self.options.optimizer]
+        opt = Optim(head_params, lr=self.options.learning_rate, weight_decay=self.options.l2_penalty)
+        return opt
 
-
-def probe(o, name=None):
-    obj = type(o)
-    header = f"Object '{name}'"
-    print(f"\n{header}: {obj.__module__}.{obj.__name__}")
-
-    # NumPy-style introspection
-    if hasattr(o, 'shape'):
-        print(f"shape: {o.shape}")
-    if hasattr(o, 'ndim'):
-        print(f"ndim: {o.ndim}")
-    if hasattr(o, 'dtype'):
-        print(f"dtype: {o.dtype}")
-
-    # size attribute
-    if hasattr(o, 'size') and not callable(o.size):
-        print(f"size: {o.size}")
-
-    # Pythonic length
-    try:
-        print(f"len: {len(o)}")
-    except Exception:
-        pass
-
-    # Recursive descent into lists
-    try:
-        if isinstance(o, (list, tuple)):
-            for idx, item in enumerate(o):
-                probe(item, f"{name}[{idx}]")
-    except Exception:
-        pass
-
-    # PyTorch tensors
-    if isinstance(o, torch.Tensor):
-        print(f"shape: {tuple(o.size())}")
-        print(f"dtype: {o.dtype}")
-        print(f"numel: {o.numel()}")
-
-        print(f"shape: {tuple(o.size())}")
-        print(f"dtype: {o.dtype}")
-        print(f"numel: {o.numel()}")
-        print(f"device: {o.device}")
