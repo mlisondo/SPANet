@@ -72,11 +72,6 @@ class ClassifierTransformerHead(nn.Module):
         )
         self.tertiary_norm = nn.LayerNorm(class_embed_dim)
 
-        # candidate dropout probability (over K). Set to 0.0 to disable.
-        self.cand_drop_p = 0.40
-
-        self.ln_of_two = 0.69314718056
-
     def forward(self, features_arr, valid_mask: torch.Tensor | None = None,
                 zero_out_invalid: bool = True):
         # features_arr: (N, K, B, J, F)
@@ -86,16 +81,6 @@ class ClassifierTransformerHead(nn.Module):
     
         if valid_mask is None:
             valid_mask = torch.ones((N, K), dtype=torch.bool, device=device)
-    
-        # candidate dropout to possibly drop the last K
-        if self.training and self.cand_drop_p > 0.0:
-            valid_counts = valid_mask.sum(dim=1)                 # (N,)
-            can_drop = (valid_counts >= 2) & valid_mask[:, -1]   # keep at least one
-            will_drop = (torch.rand(N, device=device) < self.cand_drop_p) & can_drop
-            if will_drop.any():
-                vm = valid_mask.clone()
-                vm[will_drop, -1] = False
-                valid_mask = vm
     
         # shuffle K during training; shuffle mask identically
         if self.training:
