@@ -377,7 +377,10 @@ class SCM_Training_Val(JetSecondaryLoader):
         # build per-event dedup valid mask from indices
         # jet_preds_tensor is assumed (N, K, B, J); transpose if your pipeline differs
         valid_mask = self._dedup_valid_mask(jet_preds_tensor)
-
+        # Always mask the last K index
+        valid_mask = valid_mask.clone()
+        if valid_mask.size(1) > 0:
+            valid_mask[:, -1] = False
         return self._compiled_core(features_arr, pred_truth, class_truth, valid_mask)
 
     def training_step(self, batch: Batch, batch_idx: int):
