@@ -22,7 +22,9 @@ class SCM_Eval_Test(SCM_Training_Val):
 
         # classifier with masking
         class_logits, token_scores, out_valid_mask = self.classifier(features_arr, valid_mask)
-        class_probs = class_logits.exp()            # sums to 1 over valid K
+        neg_inf = torch.tensor(float('-inf'), device=class_logits.device, dtype=class_logits.dtype)
+        masked_logits = class_logits.masked_fill(~out_valid_mask, neg_inf)
+        class_probs = torch.softmax(masked_logits, dim=1)  # sums to 1 over valid K
         class_preds = class_probs.argmax(dim=1)
 
         # masker head (optional: suppress duplicates for clarity)
