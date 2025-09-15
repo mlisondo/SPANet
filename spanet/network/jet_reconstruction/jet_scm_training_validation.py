@@ -476,10 +476,11 @@ class SCM_Training_Val(JetSecondaryLoader):
 
     def configure_optimizers(self):
         # heads only
-        head_params = list(self.classifier.parameters()) + list(self.masker.parameters())
-        for p in self.parameters():
-            if p not in head_params:
-                p.requires_grad_(False)
+        for name, module in self.named_children():
+            if name not in ['classifier', 'masker']:
+                module.eval()
+                for p in module.parameters():
+                    p.requires_grad_(False)
         Optim = dict(AdamW=torch.optim.AdamW, Adam=torch.optim.Adam)[self.options.optimizer]
         opt = Optim(head_params, lr=self.options.learning_rate, weight_decay=self.options.l2_penalty)
         return opt
