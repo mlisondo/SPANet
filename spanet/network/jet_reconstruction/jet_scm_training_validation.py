@@ -218,8 +218,8 @@ class SCM_Training_Val(JetSecondaryLoader):
         )
 
         for n, p in self.named_parameters():
-        if not (n.startswith("classifier.") or n.startswith("masker.")):
-            p.requires_grad_(False)
+            if not (n.startswith("classifier.") or n.startswith("masker.")):
+                p.requires_grad_(False)
 
         # Compile
         self.classifier = tcompile(self.classifier, dynamic=True)
