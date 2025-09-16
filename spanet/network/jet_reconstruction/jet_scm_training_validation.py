@@ -158,21 +158,20 @@ class SCM_Training_Val(JetSecondaryLoader):
         super(SCM_Training_Val, self).__init__(options, torch_script)
         self.options = options
 
-        # New transformer config with sensible defaults if missing
+        # Transformer config with sensible defaults if missing
         self.class_embed_dim = options.class_embed_dim
         self.mask_embed_dim  = options.mask_embed_dim
         self.class_nhead     = options.class_nhead
         self.mask_nhead      = options.mask_nhead
         self.class_layers    = options.class_layers
         self.mask_layers     = options.mask_layers
-        self.tr_dropout      = 0.1 # changed 0.0 -> 0.1
+        self.tr_dropout      = 0.1
         self.mask_reduction  = "any"  # "any" | "mean" | "max"
 
         B = self.options.branch_dim
         J = self.options.jet_max_dim
         Fdim = self.options.features_dim
 
-        # --- Transformer heads (no positional encodings) ---
         self.classifier = ClassifierTransformerHead(
             branch_dim=B, jets=J, feats=Fdim,
             class_embed_dim=self.class_embed_dim,
@@ -377,10 +376,10 @@ class SCM_Training_Val(JetSecondaryLoader):
         # build per-event dedup valid mask from indices
         # jet_preds_tensor is assumed (N, K, B, J); transpose if your pipeline differs
         valid_mask = self._dedup_valid_mask(jet_preds_tensor)
-        # Always mask the last K index
-        valid_mask = valid_mask.clone()
-        if valid_mask.size(1) > 0:
-            valid_mask[:, -1] = False
+        # # Always mask the last K index
+        # valid_mask = valid_mask.clone()
+        # if valid_mask.size(1) > 0:
+        #     valid_mask[:, -1] = False
         return self._compiled_core(features_arr, pred_truth, class_truth, valid_mask)
 
     def training_step(self, batch: Batch, batch_idx: int):
