@@ -181,18 +181,6 @@ class Options(Namespace):
         # Number of processes to spawn for data collection.
         self.num_dataloader_workers: int = 4
 
-        # k value for Top-k prediction selectionAdd commentMore actions
-        self.k: int = 1
-
-        self.branch_dim: int = 2
-        self.jet_max_dim: int = 3
-        self.features_dim: int = 5
-        self.class_embed_dim: int = 128
-        self.mask_embed_dim: int  = 128
-        self.class_nhead: int     = 4
-        self.mask_nhead: int      = 4
-        self.class_layers: int    = 2
-        self.mask_layers: int     = 2
         # =========================================================================================
         # Training Options
         # =========================================================================================
@@ -274,6 +262,81 @@ class Options(Namespace):
         self.trial_time: str = ''
 
         self.trial_output_dir: str = './test_output'
+
+
+        # =========================================================================================
+        # SCM Options
+        # =========================================================================================
+
+
+        # OLD SETTINGS
+        # k value for Top-k prediction selectionAdd commentMore actions
+        self.k: int = 1
+
+        self.branch_dim: int = 2
+        self.jet_max_dim: int = 3
+        self.features_dim: int = 5
+        self.class_embed_dim: int = 128
+        self.mask_embed_dim: int  = 128
+        self.class_nhead: int     = 4
+        self.mask_nhead: int      = 4
+        self.class_layers: int    = 2
+        self.mask_layers: int     = 2
+
+
+        # ====================== NEW: MASKER (inclusive/prior) ======================
+        # embedding sizes (divisible by heads)
+        self.i_dim_masker:    int   = 256
+        self.p_dim_masker:    int   = 128
+        # heads (must divide the corresponding embed dim)
+        self.inc_heads_masker: int  = 8    # 256 % 8 == 0
+        self.p_heads_masker:   int  = 4    # 128 % 4 == 0
+        # ISAB inducing points (landmarks)
+        self.i_inds_masker:    int   = 16
+        self.p_inds_masker:    int   = 8
+        # depth: ISAB/SAB blocks in the masker path
+        self.i_isab_masker:    int   = 2
+        self.p_isab_masker:    int   = 1
+        self.i_sab_masker:     int   = 0
+        self.p_sab_masker:     int   = 0
+        # regularization
+        self.i_attn_masker:    float = 0.10   # attention dropout
+        self.p_attn_masker:    float = 0.10
+        self.i_ff_masker:      float = 0.10   # feed-forward dropout
+        self.p_ff_masker:      float = 0.10
+        # normalization
+        self.i_ln_masker:      bool  = True
+        self.p_ln_masker:      bool  = True
+
+        # ==================== NEW: CLASSIFIER (inclusive/prior) ====================
+        # embedding sizes (divisible by heads)
+        self.i_dim_classifer:    int   = 256
+        self.p_dim_classifer:    int   = 128
+        # heads
+        self.inc_heads_classifer: int  = 8
+        self.p_heads_classifer:   int  = 4
+        # ISAB inducing points for candidate tokens
+        self.i_inds_classifer:    int   = 16
+        self.p_inds_classifer:    int   = 8
+        # depth on candidate tokens
+        self.i_isab_classifer:    int   = 2
+        self.p_isab_classifer:    int   = 1
+        self.i_sab_classifer:     int   = 1
+        self.p_sab_classifer:     int   = 0
+        # PMA seeds for global event context
+        self.i_seeds_classifer:   int   = 1
+        self.p_seeds_classifer:   int   = 1
+        # regularization
+        self.i_attn_classifer:    float = 0.10
+        self.p_attn_classifer:    float = 0.10
+        self.i_ff_classifer:      float = 0.10
+        self.p_ff_classifer:      float = 0.10
+        # normalization
+        self.i_ln_classifer:      bool  = True
+        self.p_ln_classifer:      bool  = True
+        # use global PMA context over K candidates
+        self.i_global_classifer:  bool  = True
+        self.p_global_classifer:  bool  = True
 
     def display(self):
         try:
