@@ -286,40 +286,40 @@ class Options(Namespace):
 
         # ====================== NEW: MASKER (inclusive/prior) ======================
         # embedding sizes (divisible by heads)
-        self.i_dim_masker:    int   = 256
-        self.p_dim_masker:    int   = 128
+        self.i_dim_masker:    int   = 16
+        self.p_dim_masker:    int   = 8
         # heads (must divide the corresponding embed dim)
-        self.inc_heads_masker: int  = 8    # 256 % 8 == 0
-        self.p_heads_masker:   int  = 4    # 128 % 4 == 0
+        self.inc_heads_masker: int  = 1
+        self.p_heads_masker:   int  = 1
         # ISAB inducing points (landmarks)
-        self.i_inds_masker:    int   = 16
-        self.p_inds_masker:    int   = 8
+        self.i_inds_masker:    int   = 1
+        self.p_inds_masker:    int   = 1
         # depth: ISAB/SAB blocks in the masker path
-        self.i_isab_masker:    int   = 2
+        self.i_isab_masker:    int   = 1
         self.p_isab_masker:    int   = 1
         self.i_sab_masker:     int   = 0
         self.p_sab_masker:     int   = 0
         # regularization
-        self.i_attn_masker:    float = 0.10   # attention dropout
-        self.p_attn_masker:    float = 0.10
-        self.i_ff_masker:      float = 0.10   # feed-forward dropout
-        self.p_ff_masker:      float = 0.10
+        self.i_attn_masker:    float = 0.00   # attention dropout
+        self.p_attn_masker:    float = 0.00
+        self.i_ff_masker:      float = 0.00   # feed-forward dropout
+        self.p_ff_masker:      float = 0.00
         # normalization
         self.i_ln_masker:      bool  = True
         self.p_ln_masker:      bool  = True
 
         # ==================== NEW: CLASSIFIER (inclusive/prior) ====================
         # embedding sizes (divisible by heads)
-        self.i_dim_classifer:    int   = 256
-        self.p_dim_classifer:    int   = 128
+        self.i_dim_classifer:    int   = 16
+        self.p_dim_classifer:    int   = 8
         # heads
-        self.inc_heads_classifer: int  = 8
-        self.p_heads_classifer:   int  = 4
+        self.inc_heads_classifer: int  = 1
+        self.p_heads_classifer:   int  = 1
         # ISAB inducing points for candidate tokens
-        self.i_inds_classifer:    int   = 16
-        self.p_inds_classifer:    int   = 8
+        self.i_inds_classifer:    int   = 1
+        self.p_inds_classifer:    int   = 1
         # depth on candidate tokens
-        self.i_isab_classifer:    int   = 2
+        self.i_isab_classifer:    int   = 1
         self.p_isab_classifer:    int   = 1
         self.i_sab_classifer:     int   = 1
         self.p_sab_classifer:     int   = 0
@@ -327,10 +327,10 @@ class Options(Namespace):
         self.i_seeds_classifer:   int   = 1
         self.p_seeds_classifer:   int   = 1
         # regularization
-        self.i_attn_classifer:    float = 0.10
-        self.p_attn_classifer:    float = 0.10
-        self.i_ff_classifer:      float = 0.10
-        self.p_ff_classifer:      float = 0.10
+        self.i_attn_classifer:    float = 0.00
+        self.p_attn_classifer:    float = 0.00
+        self.i_ff_classifer:      float = 0.00
+        self.p_ff_classifer:      float = 0.00
         # normalization
         self.i_ln_classifer:      bool  = True
         self.p_ln_classifer:      bool  = True
