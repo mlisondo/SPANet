@@ -839,7 +839,7 @@ class SCM_Training_Val(JetSecondaryLoader):
 
         attn_mask = self.candidate_mute_mask(jet_preds_tensor)
     
-    return self._compiled_core(features_arr, pred_truth, class_truth, valid_mask)
+        return self._compiled_core(features_arr, pred_truth, class_truth, valid_mask)
 
     def training_step(self, batch : Batch, batch_idx : int):
         (
