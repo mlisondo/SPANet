@@ -765,7 +765,6 @@ class SCM_Training_Val(JetSecondaryLoader):
         inclusive_ft = features_arr.clone()
         prior_ft = features_arr[..., :3].contiguous()
 
-
         (inclusive_bt, inclusive_ct, inclusive_mask_logits, 
         prior_bt, prior_ct, prior_mask_logits) = self.masker(
             inclusive_X = inclusive_ft, prior_X = prior_ft,
@@ -838,6 +837,46 @@ class SCM_Training_Val(JetSecondaryLoader):
         ) = self.topk_data(batch)
 
         valid_mask = self.candidate_mute_mask(jet_preds_tensor) # attn_mask
+
+        probe(pred_truth, "pred_truth")
+        probe(canon_masks, "canon_masks")
+        probe(features_arr, "features_arr")
+        probe(class_truth, "class_truth")
+        probe(canon_idx, "canon_idx")
+        probe(jet_preds_tensor, "jet_preds_tensor")
+        probe(jet_mult, "jet_mult")
+        probe(valid_mask, "valid_mask")
+
+
+        super_true_event_idx = torch.nonzero(canon_masks.all(dim=0)).squeeze(1)[:2]
+        true_event_idx = torch.nonzero(class_truth[:, 0]).squeeze(1)[:2]
+        false_event_idx = torch.nonzero(~class_truth[:, 0]).squeeze(1)[:2]
+        one_one = torch.cat([super_true_event_idx, true_event_idx, false_event_idx])  
+
+        for e in one_one:
+            print(f"\n===== EVENT {int(e)} =====")
+
+            print("jet_preds_tensor:")
+            print(jet_preds_tensor[e])
+
+            print("canon_idx:")
+            print(canon_idx[:, e])
+
+            print("canon_masks")
+            print(canon_masks[:, e])
+
+            print("pred_truth matrix (K x B):")
+            print(pred_truth[e])
+
+            print("class_truth row:")
+            print(class_truth[e])
+
+            print("feature for selected events:")
+            print(features_arr[e])
+
+            print("=" * 30)
+
+        raise RuntimeError("Debug break")
     
         return self._compiled_core(features_arr, pred_truth, class_truth, valid_mask)
 
@@ -883,3 +922,47 @@ class SCM_Training_Val(JetSecondaryLoader):
         self.log('ce_baseline_prior', ce_baseline_prior, on_epoch = True, prog_bar = True)
 
         return {'abs_total_loss': abs_total_loss}
+
+
+
+def probe(o, name=None):
+    obj = type(o)
+    header = f"Object '{name}'"
+    print(f"\n{header}: {obj.__module__}.{obj.__name__}")
+
+    # NumPy-style introspection
+    if hasattr(o, 'shape'):
+        print(f"shape: {o.shape}")
+    if hasattr(o, 'ndim'):
+        print(f"ndim: {o.ndim}")
+    if hasattr(o, 'dtype'):
+        print(f"dtype: {o.dtype}")
+
+    # size attribute
+    if hasattr(o, 'size') and not callable(o.size):
+        print(f"size: {o.size}")
+
+    # Pythonic length
+    try:
+        print(f"len: {len(o)}")
+    except Exception:
+        pass
+
+    # Recursive descent into lists
+    try:
+        if isinstance(o, (list, tuple)):
+            for idx, item in enumerate(o):
+                probe(item, f"{name}[{idx}]")
+    except Exception:
+        pass
+
+    # PyTorch tensors
+    if isinstance(o, torch.Tensor):
+        print(f"shape: {tuple(o.size())}")
+        print(f"dtype: {o.dtype}")
+        print(f"numel: {o.numel()}")
+
+        print(f"shape: {tuple(o.size())}")
+        print(f"dtype: {o.dtype}")
+        print(f"numel: {o.numel()}")
+        print(f"device: {o.device}")
