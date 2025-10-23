@@ -809,7 +809,7 @@ class SCM_Training_Val(JetSecondaryLoader):
         # the branch set encoder is currently trying to learn two things at once, how to properly summarize the data and then how to
         # tell if the branch is reconstructable or not. i might have to ignore reconstructability for now.
         branch_loss_inclusive = self.focal_bce_with_logits(
-            inclusive_mask_logits.reshape(N*K, B), flat_truth
+            inclusive_mask_logits.reshape(N*K, B), flat_truth,
             alpha_pos = self.focal_alpha_pos,
             gamma = self.focal_gamma,
             reduction = "mean"
