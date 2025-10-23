@@ -837,7 +837,7 @@ class SCM_Training_Val(JetSecondaryLoader):
             jet_mult
         ) = self.topk_data(batch)
 
-        attn_mask = self.candidate_mute_mask(jet_preds_tensor)
+        valid_mask = self.candidate_mute_mask(jet_preds_tensor) # attn_mask
     
         return self._compiled_core(features_arr, pred_truth, class_truth, valid_mask)
 
