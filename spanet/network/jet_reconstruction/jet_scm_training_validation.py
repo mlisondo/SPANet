@@ -844,7 +844,7 @@ class SCM_Training_Val(JetSecondaryLoader):
     def training_step(self, batch : Batch, batch_idx : int):
         (
             inclusive_class_loss, prior_class_loss,
-            top1_acc_truth, num_pos_mean, pos_rate
+            top1_acc_truth, num_pos_mean, pos_rate,
             ce_baseline_inclusive, ce_baseline_prior, 
             branch_loss_inclusive, branch_loss_prior
         ) = self.forward_scm(batch)
@@ -858,7 +858,7 @@ class SCM_Training_Val(JetSecondaryLoader):
     def validation_step(self, batch : Batch, batch_idx : int):
         (
             inclusive_class_loss, prior_class_loss,
-            top1_acc_truth, num_pos_mean, pos_rate
+            top1_acc_truth, num_pos_mean, pos_rate,
             ce_baseline_inclusive, ce_baseline_prior, 
             branch_loss_inclusive, branch_loss_prior
         ) = self.forward_scm(batch)
