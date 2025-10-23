@@ -815,7 +815,7 @@ class SCM_Training_Val(JetSecondaryLoader):
             reduction = "mean"
         )
         branch_loss_prior = self.focal_bce_with_logits(
-            prior_mask_logits.reshape(N*K, B), flat_truth
+            prior_mask_logits.reshape(N*K, B), flat_truth,
             alpha_pos = self.focal_alpha_pos,
             gamma = self.focal_gamma,
             reduction = "mean"
