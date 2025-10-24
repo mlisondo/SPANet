@@ -429,6 +429,11 @@ class CandidateSetEncoder(nn.Module):
             x_talk_inclusive = self.inclusive_xattn(inclusive_ct, inclusive_bt, key_padding_mask = branch_kpm_inclusive).squeeze(1) # (E*K, 1, inclusive_embed_dim) -> (E*K, inclusive_embed_dim)
             # MAKE SURE THAT THE DIM MACTH
             x_talk_inclusive = x_talk_inclusive.reshape(E, K, inclusive_embed_dim) # (E, K, inclusive_embed_dim)
+
+            probe(inclusive_bt ,"inclusive_bt")
+            probe(inclusive_ct ,"inclusive_ct")
+            probe(x_talk_inclusive ,"x_talk_inclusive")
+
             inclusive_ct += self.inclusive_gate * x_talk_inclusive
         
         if self.inclusive_use_global_context: # give every candidate the same event-level summary built from all candidates, then add it to each candidate
