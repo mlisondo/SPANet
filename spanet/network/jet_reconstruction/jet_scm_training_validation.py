@@ -424,12 +424,21 @@ class CandidateSetEncoder(nn.Module):
             E, K, B, inclusive_embed_dim = inclusive_bt.shape
             if self.detach_bt:
                 inclusive_bt = inclusive_bt.detach()
+                print("first")
+                probe(inclusive_bt ,"inclusive_bt")
             inclusive_bt = inclusive_bt.reshape(E * K, B, inclusive_embed_dim) # (EK, B, inclusive_embed_dim)
+            print("second")
+            probe(inclusive_bt ,"inclusive_bt")
             inclusive_ct = inclusive_ct.reshape(E * K, inclusive_embed_dim).unsqueeze(1) # (EK, 1, inclusive_embed_dim)
+            print("first")
+            probe(inclusive_ct ,"inclusive_ct")
             x_talk_inclusive = self.inclusive_xattn(inclusive_ct, inclusive_bt, key_padding_mask = branch_kpm_inclusive).squeeze(1) # (E*K, 1, inclusive_embed_dim) -> (E*K, inclusive_embed_dim)
             # MAKE SURE THAT THE DIM MACTH
+            print("first")
+            probe(x_talk_inclusive ,"x_talk_inclusive")
             x_talk_inclusive = x_talk_inclusive.reshape(E, K, inclusive_embed_dim) # (E, K, inclusive_embed_dim)
 
+            print("last")
             probe(inclusive_bt ,"inclusive_bt")
             probe(inclusive_ct ,"inclusive_ct")
             probe(x_talk_inclusive ,"x_talk_inclusive")
