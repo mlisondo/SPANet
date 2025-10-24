@@ -89,7 +89,7 @@ class ISAB(nn.Module):
         self.mab0 = MAB(dim_out, dim_in,  dim_out, num_heads, attn_drop, ff_drop, ln, use_gate)  # P <- X
         self.mab1 = MAB(dim_in,  dim_out, dim_out, num_heads, attn_drop, ff_drop, ln, use_gate)  # X <- P
 
-    def forward(self, X, pad_X: Optional[Tensor]=None):
+    def forward(self, X, pad_X: Optional[Tensor] = None):
         P = self.I.expand(X.size(0), -1, -1)
         H = self.mab0(P, X, key_padding_mask = pad_X)  # seeds read from jets
         Y = self.mab1(X, H)                          # jets read from seeds
@@ -103,7 +103,7 @@ class PMA(nn.Module):
         nn.init.xavier_uniform_(self.S)
         self.mab = MAB(dim, dim, dim, num_heads, attn_drop, ff_drop, ln, use_gate)
 
-    def forward(self, X, pad_X : Optional[Tensor]=None):
+    def forward(self, X, pad_X : Optional[Tensor] = None):
         S = self.S.expand(X.size(0), -1, -1)
         return self.mab(S, X, key_padding_mask = pad_X) # build per-batch seed queries -> feeds them and the set X into attention -> outputs an attention-pooled summary of X
 
@@ -240,7 +240,7 @@ class BranchSetEncoder(nn.Module):
         # Reshape tokens to (EK, B, E) and pool to candidate token with PMA
         inclusive_bt = inclusive_bt.reshape(E, K, B, -1) # (E, K, B, inclusive_embed_dim)
         inclusive_bt2 = inclusive_bt.reshape(E * K, B, -1) # (E*K, B, inclusive_embed_dim)
-        inclusive_ct = self.inclusive_branch_pma(inclusive_bt2, key_padding_mask = inclusive_branch_kpm).squeeze(1)
+        inclusive_ct = self.inclusive_branch_pma(inclusive_bt2, pad_X = inclusive_branch_kpm).squeeze(1)
         # (E*K, num_seeds (1), inclusive_embed_dim); squeeze(1) -> (E*K, inclusive_embed_dim)
         inclusive_ct = inclusive_ct.reshape(E, K, -1) # (E, K, inclusive_embed_dim)
 
@@ -258,7 +258,7 @@ class BranchSetEncoder(nn.Module):
         # Reshape tokens to (EK, B, E) and pool to candidate token with PMA        
         prior_bt = prior_bt.reshape(E, K, B, -1)
         prior_bt2 = prior_bt.reshape(E * K, B, -1)
-        prior_ct = self.prior_branch_pma(prior_bt2, key_padding_mask = prior_branch_kpm).squeeze(1)
+        prior_ct = self.prior_branch_pma(prior_bt2, pad_X = prior_branch_kpm).squeeze(1)
         prior_ct = prior_ct.reshape(E, K, -1)
 
         return (inclusive_bt, inclusive_ct, inclusive_mask_logits, 
@@ -786,11 +786,11 @@ class SCM_Training_Val(JetSecondaryLoader):
         ce_loss_prior, _, _, ce_baseline_prior = self.multi_positive_ce(prior_logits, class_truth, valid_mask = cand_kpm)
         ce_rank_prior = self.listwise_softmax_ce(prior_logits, class_truth, valid_mask = cand_kpm)
 
-        rows = torch.arange(N, device = class_logits.device)
+        rows = torch.arange(N, device = inclusive_logits.device)
         inclusive_class_loss = ce_loss_inclusive + ce_rank_inclusice
         prior_class_loss = ce_loss_prior + ce_rank_prior
 
-        pred_k = inclusive_ct.argmax(dim=1) # should i do a seperate one for prior_ct ?
+        pred_k = inclusive_logits.argmax(dim=1) # should i do a seperate one for prior ?
 
         top1_acc_truth = torch.tensor(0., device = inclusive_logits.device)
         num_pos_mean = num_pos.float().mean()
