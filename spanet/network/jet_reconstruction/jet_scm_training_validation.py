@@ -422,7 +422,7 @@ class CandidateSetEncoder(nn.Module):
         if self.use_cross_from_branches: # each candidate refine itself using only its own branches
             # let candidate token be enriched by looking at its own branch tokens
             E, K, B, inclusive_embed_dim = inclusive_bt.shape
-            if detach_bt:
+            if self.detach_bt:
                 inclusive_bt = inclusive_bt.detach()
             inclusive_bt = inclusive_bt.reshape(E * K, B, inclusive_embed_dim) # (EK, B, inclusive_embed_dim)
             inclusive_ct = inclusive_ct.reshape(E * K, inclusive_embed_dim).unsqueeze(1) # (EK, 1, inclusive_embed_dim)
@@ -452,11 +452,11 @@ class CandidateSetEncoder(nn.Module):
         if self.use_cross_from_branches:
             # let candidate token be enriched by looking at its own branch tokens
             E, K, B, prior_embed_dim = prior_bt.shape
-            if detach_bt:
+            if self.detach_bt:
                 prior_bt = prior_bt.detach()
             prior_bt = prior_bt.reshape(E * K, B, prior_embed_dim) # (EK, B, prior_embed_dim)
             prior_ct = prior_ct.reshape(E * K, prior_embed_dim).unsqueeze(1) # (EK, 1, prior_embed_dim)
-            x_talk_prior = self.prior_xattn(prior_ct, prior_bt, key_padding_mask=branch_kpm_inclusive).squeeze(1) # (E*K, 1, prior_embed_dim) -> (E*K, prior_embed_dim)
+            x_talk_prior = self.prior_xattn(prior_ct, prior_bt, key_padding_mask=branch_kpm_prior).squeeze(1) # (E*K, 1, prior_embed_dim) -> (E*K, prior_embed_dim)
             # MAKE SURE THAT THE DIM MACTH
             x_talk_prior = x_talk_prior.reshape(E, K, prior_embed_dim) # (E, K, prior_embed_dim)
             prior_ct += self.prior_gate * x_talk_prior
@@ -732,7 +732,7 @@ class SCM_Training_Val(JetSecondaryLoader):
 
         denom = weights.sum(dim = 1).clamp_min(1.0)
         loss_vec = (bce * weights).sum(dim = 1) / denom
-        loss = loss_vec[has_truth].mean if has_truth.any() else torch.zeros((), device = class_logits.device, dtype = loss_vec.dtype)
+        loss = loss_vec[has_truth].mean() if has_truth.any() else torch.zeros((), device = class_logits.device, dtype = loss_vec.dtype)
 
         with torch.no_grad():
             base = F.binary_cross_entropy_with_logits(
@@ -759,7 +759,7 @@ class SCM_Training_Val(JetSecondaryLoader):
         loss_vec = -(target * logp).sum(dim = 1)
         return loss_vec[has_pos].mean() if has_pos.any() else torch.zeros((), device = logits.device, dtype = loss_vec.dtype)
 
-    def _compiled_core(self, features_arr, pred_truth, class_truth, valid_mask):
+    def _compiled_core(self, features_arr, pred_truth, class_truth, cand_kpm, branch_kpm : Optional[Tensor] = None, jet_kpm : Optional[Tensor] = None):
         N, K, B, J, Fdim = features_arr.shape
 
         inclusive_ft = features_arr.clone()
@@ -767,32 +767,30 @@ class SCM_Training_Val(JetSecondaryLoader):
 
         (inclusive_bt, inclusive_ct, inclusive_mask_logits, 
         prior_bt, prior_ct, prior_mask_logits) = self.masker(
-            inclusive_X = inclusive_ft, prior_X = prior_ft,
-            inclusive_jet_kpm = valid_mask, inclusive_branch_kpm = valid_mask
-        ) # forward takes : 
+            inclusive_X = inclusive_ft, prior_X = prior_ft
+        ) # forward takes
         #       necessary : inclusive_X, prior_X
         #       optional  : inclusive_jet_kpm, inclusive_branch_kpm, prior_jet_kpm, prior_branch_kpm
 
         (inclusive_logits, inclusive_ct, global_inclusive,
         prior_logits, prior_ct, global_prior) = self.classifier(
             inclusive_bt = inclusive_bt, prior_bt = prior_bt,
-            inclusive_ct = inclusive_ct, prior_ct = prior_ct,
-            branch_kpm_inclusive = valid_mask, branch_kpm_prior = valid_mask
-        ) # forward takes :
+            inclusive_ct = inclusive_ct, prior_ct = prior_ct
+        ) # forward takes
         #       necessary : inclusive_bt, prior_bt, inclusive_ct, prior_ct
         #       optional  : branch_kpm_inclusive, branch_kpm_prior
 
-        ce_loss_inclusive, has_truth, num_pos, ce_baseline_inclusive = self.multi_positive_ce(inclusive_logits, class_truth, valid_mask = valid_mask)
-        ce_rank_inclusice = self.listwise_softmax_ce(inclusive_logits, class_truth, valid_mask = valid_mask)
+        ce_loss_inclusive, has_truth, num_pos, ce_baseline_inclusive = self.multi_positive_ce(inclusive_logits, class_truth, valid_mask = cand_kpm)
+        ce_rank_inclusice = self.listwise_softmax_ce(inclusive_logits, class_truth, valid_mask = cand_kpm)
 
-        ce_loss_prior, _, _, ce_baseline_prior = self.multi_positive_ce(prior_logits, class_truth, valid_mask = valid_mask)
-        ce_rank_prior = self.listwise_softmax_ce(prior_logits, class_truth, valid_mask = valid_mask)
+        ce_loss_prior, _, _, ce_baseline_prior = self.multi_positive_ce(prior_logits, class_truth, valid_mask = cand_kpm)
+        ce_rank_prior = self.listwise_softmax_ce(prior_logits, class_truth, valid_mask = cand_kpm)
 
-        rows = torch.arange(N, devce = class_logits.device)
+        rows = torch.arange(N, device = class_logits.device)
         inclusive_class_loss = ce_loss_inclusive + ce_rank_inclusice
         prior_class_loss = ce_loss_prior + ce_rank_prior
 
-        pred_k = inclusive_ct.argmax(dim=1) # should i do a seperate one for prior_ct
+        pred_k = inclusive_ct.argmax(dim=1) # should i do a seperate one for prior_ct ?
 
         top1_acc_truth = torch.tensor(0., device = inclusive_logits.device)
         num_pos_mean = num_pos.float().mean()
@@ -836,49 +834,55 @@ class SCM_Training_Val(JetSecondaryLoader):
             jet_mult
         ) = self.topk_data(batch)
 
-        valid_mask = self.candidate_mute_mask(jet_preds_tensor) # attn_mask
+        # candidate level kpm (attn_mask)
+        cand_kpm = self.candidate_mute_mask(jet_preds_tensor) # (E, K) bool
 
-        probe(pred_truth, "pred_truth")
-        probe(canon_masks, "canon_masks")
-        probe(features_arr, "features_arr")
-        probe(class_truth, "class_truth")
-        probe(canon_idx, "canon_idx")
-        probe(jet_preds_tensor, "jet_preds_tensor")
-        probe(jet_mult, "jet_mult")
-        probe(valid_mask, "valid_mask")
+        # currently dont have a use branch_kpm, oops (same for jet_kpm)
+
+        # probe(pred_truth, "pred_truth")
+        # probe(canon_masks, "canon_masks")
+        # probe(features_arr, "features_arr")
+        # probe(class_truth, "class_truth")
+        # probe(canon_idx, "canon_idx")
+        # probe(jet_preds_tensor, "jet_preds_tensor")
+        # probe(jet_mult, "jet_mult")
+        # probe(cand_kpm, "cand_kpm")
 
 
-        super_true_event_idx = torch.nonzero(canon_masks.all(dim=0)).squeeze(1)[:2]
-        true_event_idx = torch.nonzero(class_truth[:, 0]).squeeze(1)[:2]
-        false_event_idx = torch.nonzero(~class_truth[:, 0]).squeeze(1)[:2]
-        one_one = torch.cat([super_true_event_idx, true_event_idx, false_event_idx])  
+        # super_true_event_idx = torch.nonzero(canon_masks.all(dim=0)).squeeze(1)[:2]
+        # true_event_idx = torch.nonzero(class_truth[:, 0]).squeeze(1)[:2]
+        # false_event_idx = torch.nonzero(~class_truth[:, 0]).squeeze(1)[:2]
+        # one_one = torch.cat([super_true_event_idx, true_event_idx, false_event_idx])  
 
-        for e in one_one:
-            print(f"\n===== EVENT {int(e)} =====")
+        # for e in one_one:
+        #     print(f"\n===== EVENT {int(e)} =====")
 
-            print("jet_preds_tensor:")
-            print(jet_preds_tensor[e])
+        #     print("jet_preds_tensor:")
+        #     print(jet_preds_tensor[e])
 
-            print("canon_idx:")
-            print(canon_idx[:, e])
+        #     print("canon_idx:")
+        #     print(canon_idx[:, e])
 
-            print("canon_masks")
-            print(canon_masks[:, e])
+        #     print("canon_masks")
+        #     print(canon_masks[:, e])
 
-            print("pred_truth matrix (K x B):")
-            print(pred_truth[e])
+        #     print("pred_truth matrix (K x B):")
+        #     print(pred_truth[e])
 
-            print("class_truth row:")
-            print(class_truth[e])
+        #     print("class_truth row:")
+        #     print(class_truth[e])
 
-            print("feature for selected events:")
-            print(features_arr[e])
+        #     print("feature for selected events:")
+        #     print(features_arr[e])
 
-            print("=" * 30)
+        #     print("candidate level masking")
+        #     print(cand_kpm[e])
 
-        raise RuntimeError("Debug break")
+        #     print("=" * 30)
+
+        # raise RuntimeError("Debug break")
     
-        return self._compiled_core(features_arr, pred_truth, class_truth, valid_mask)
+        return self._compiled_core(features_arr, pred_truth, class_truth, cand_kpm)
 
     def training_step(self, batch : Batch, batch_idx : int):
         (
