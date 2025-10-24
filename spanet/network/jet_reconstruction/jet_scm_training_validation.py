@@ -464,7 +464,8 @@ class CandidateSetEncoder(nn.Module):
             x_talk_prior = self.prior_xattn(prior_ct, prior_bt, key_padding_mask=branch_kpm_prior).squeeze(1) # (E*K, 1, prior_embed_dim) -> (E*K, prior_embed_dim)
             # MAKE SURE THAT THE DIM MACTH
             x_talk_prior = x_talk_prior.reshape(E, K, prior_embed_dim) # (E, K, prior_embed_dim)
-            prior_ct += self.prior_gate * x_talk_prior
+            prior_ct = prior_ct.reshape(E, K, prior_embed_dim)
+            prior_ct = prior_ct + self.prior_gate * x_talk_prior
         
         if self.prior_use_global_context:
             global_prior = self.prior_global_pma(prior_ct).squeeze(1)
