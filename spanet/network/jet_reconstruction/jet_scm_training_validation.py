@@ -434,6 +434,8 @@ class CandidateSetEncoder(nn.Module):
             probe(inclusive_ct ,"inclusive_ct")
             probe(x_talk_inclusive ,"x_talk_inclusive")
 
+            raise RuntimeError("Debug break")
+
             inclusive_ct += self.inclusive_gate * x_talk_inclusive
         
         if self.inclusive_use_global_context: # give every candidate the same event-level summary built from all candidates, then add it to each candidate
