@@ -708,7 +708,7 @@ class SCM_Training_Val(JetSecondaryLoader):
         inv.scatter_(1, perm, torch.arange(K, device = dev).expand(E, K))
         dup = dup_sorted.gather(1, inv)
 
-        return ~dup
+        return ~dup     # this returns a keep/valid mask, True -> candidate is valid and should be used. must be "NOT"ed if used as attn_mask
 
     @staticmethod
     def multi_positive_ce(class_logits : torch.Tensor, class_truth : torch.Tensor, valid_mask : torch.Tensor | None = None):
@@ -771,9 +771,14 @@ class SCM_Training_Val(JetSecondaryLoader):
         inclusive_ft = features_arr.clone()
         prior_ft = features_arr[..., :3].contiguous()
 
+        if branch_kpm is None:
+                branch_kpm = (~cand_kpm).unsqueeze(-1).expand(-1, -1, B)  # (E, K, B)
+                branch_kpm = branch_kpm.reshape(-1, B).contiguous()       # (E*K, B)
+
         (inclusive_bt, inclusive_ct, inclusive_mask_logits, 
         prior_bt, prior_ct, prior_mask_logits) = self.masker(
-            inclusive_X = inclusive_ft, prior_X = prior_ft
+            inclusive_X = inclusive_ft, prior_X = prior_ft,
+            inclusive_branch_kpm = branch_kpm, prior_branch_kpm = branch_kpm
         ) # forward takes
         #       necessary : inclusive_X, prior_X
         #       optional  : inclusive_jet_kpm, inclusive_branch_kpm, prior_jet_kpm, prior_branch_kpm
@@ -782,6 +787,7 @@ class SCM_Training_Val(JetSecondaryLoader):
         prior_logits, prior_ct, global_prior) = self.classifier(
             inclusive_bt = inclusive_bt, prior_bt = prior_bt,
             inclusive_ct = inclusive_ct, prior_ct = prior_ct
+            branch_kpm_inclusive = branch_kpm, branch_kpm_prior = branch_kpm
         ) # forward takes
         #       necessary : inclusive_bt, prior_bt, inclusive_ct, prior_ct
         #       optional  : branch_kpm_inclusive, branch_kpm_prior
@@ -940,7 +946,6 @@ def probe(o, name=None):
     header = f"Object '{name}'"
     print(f"\n{header}: {obj.__module__}.{obj.__name__}")
 
-    # NumPy-style introspection
     if hasattr(o, 'shape'):
         print(f"shape: {o.shape}")
     if hasattr(o, 'ndim'):
@@ -948,17 +953,14 @@ def probe(o, name=None):
     if hasattr(o, 'dtype'):
         print(f"dtype: {o.dtype}")
 
-    # size attribute
     if hasattr(o, 'size') and not callable(o.size):
         print(f"size: {o.size}")
 
-    # Pythonic length
     try:
         print(f"len: {len(o)}")
     except Exception:
         pass
 
-    # Recursive descent into lists
     try:
         if isinstance(o, (list, tuple)):
             for idx, item in enumerate(o):
@@ -966,7 +968,6 @@ def probe(o, name=None):
     except Exception:
         pass
 
-    # PyTorch tensors
     if isinstance(o, torch.Tensor):
         print(f"shape: {tuple(o.size())}")
         print(f"dtype: {o.dtype}")

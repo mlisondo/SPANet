@@ -283,60 +283,53 @@ class Options(Namespace):
         self.class_layers: int    = 2
         self.mask_layers: int     = 2
 
+        # ====================== MASKER (inclusive / prior) ======================
+        # Inclusive
+        self.i_dim_masker:       int   = 64         # embedding sizes (divisible by heads)
+        self.inc_heads_masker:   int   = 4          # heads (must divide the corresponding embed dim)
+        self.i_inds_masker:      int   = 8          # ISAB inducing points (landmarks)
+        self.i_isab_masker:      int   = 2          # depth: ISAB blocks in the masker path
+        self.i_sab_masker:       int   = 1          # depth: SAB blocks in the masker path
+        self.i_attn_masker:      float = 0.10       # attention dropout
+        self.i_ff_masker:        float = 0.10       # feed-forward dropout
+        self.i_ln_masker:        bool  = True       # normalization
 
-        # ====================== NEW: MASKER (inclusive/prior) ======================
-        # embedding sizes (divisible by heads)
-        self.i_dim_masker:    int   = 16
-        self.p_dim_masker:    int   = 8
-        # heads (must divide the corresponding embed dim)
-        self.inc_heads_masker: int  = 1
-        self.p_heads_masker:   int  = 1
-        # ISAB inducing points (landmarks)
-        self.i_inds_masker:    int   = 1
-        self.p_inds_masker:    int   = 1
-        # depth: ISAB/SAB blocks in the masker path
-        self.i_isab_masker:    int   = 1
-        self.p_isab_masker:    int   = 1
-        self.i_sab_masker:     int   = 0
-        self.p_sab_masker:     int   = 0
-        # regularization
-        self.i_attn_masker:    float = 0.00   # attention dropout
-        self.p_attn_masker:    float = 0.00
-        self.i_ff_masker:      float = 0.00   # feed-forward dropout
-        self.p_ff_masker:      float = 0.00
-        # normalization
-        self.i_ln_masker:      bool  = True
-        self.p_ln_masker:      bool  = True
+        # Prior
+        self.p_dim_masker:       int   = 48
+        self.p_heads_masker:     int   = 3
+        self.p_inds_masker:      int   = 6
+        self.p_isab_masker:      int   = 2
+        self.p_sab_masker:       int   = 1
+        self.p_attn_masker:      float = 0.15
+        self.p_ff_masker:        float = 0.15
+        self.p_ln_masker:        bool  = True
 
-        # ==================== NEW: CLASSIFIER (inclusive/prior) ====================
-        # embedding sizes (divisible by heads)
-        self.i_dim_classifer:    int   = 16
-        self.p_dim_classifer:    int   = 8
-        # heads
-        self.inc_heads_classifer: int  = 1
-        self.p_heads_classifer:   int  = 1
-        # ISAB inducing points for candidate tokens
-        self.i_inds_classifer:    int   = 1
-        self.p_inds_classifer:    int   = 1
-        # depth on candidate tokens
-        self.i_isab_classifer:    int   = 1
-        self.p_isab_classifer:    int   = 1
-        self.i_sab_classifer:     int   = 1
-        self.p_sab_classifer:     int   = 0
-        # PMA seeds for global event context
-        self.i_seeds_classifer:   int   = 1
-        self.p_seeds_classifer:   int   = 1
-        # regularization
-        self.i_attn_classifer:    float = 0.00
-        self.p_attn_classifer:    float = 0.00
-        self.i_ff_classifer:      float = 0.00
-        self.p_ff_classifer:      float = 0.00
-        # normalization
-        self.i_ln_classifer:      bool  = True
-        self.p_ln_classifer:      bool  = True
-        # use global PMA context over K candidates
-        self.i_global_classifer:  bool  = True
-        self.p_global_classifer:  bool  = True
+
+        # ==================== CLASSIFIER (inclusive / prior) ====================
+        # Inclusive
+        self.i_dim_classifer:        int   = 64         # embedding sizes (divisible by heads)
+        self.inc_heads_classifer:    int   = 4          # heads
+        self.i_inds_classifer:       int   = 8          # ISAB inducing points for candidate tokens
+        self.i_isab_classifer:       int   = 2          # depth on candidate tokens
+        self.i_sab_classifer:        int   = 1
+        self.i_seeds_classifer:      int   = 2          # PMA seeds for global event context
+        self.i_attn_classifer:       float = 0.10       # attention dropout
+        self.i_ff_classifer:         float = 0.10       # feed-forward dropout
+        self.i_ln_classifer:         bool  = True       # normalization
+        self.i_global_classifer:     bool  = True       # use global PMA context over K candidates
+
+        # Prior
+        self.p_dim_classifer:        int   = 48
+        self.p_heads_classifer:      int   = 3
+        self.p_inds_classifer:       int   = 6
+        self.p_isab_classifer:       int   = 2
+        self.p_sab_classifer:        int   = 1
+        self.p_seeds_classifer:      int   = 3
+        self.p_attn_classifer:       float = 0.15
+        self.p_ff_classifer:         float = 0.15
+        self.p_ln_classifer:         bool  = True
+        self.p_global_classifer:     bool  = False
+
 
     def display(self):
         try:
