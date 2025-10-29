@@ -786,7 +786,7 @@ class SCM_Training_Val(JetSecondaryLoader):
         (inclusive_logits, inclusive_ct, global_inclusive,
         prior_logits, prior_ct, global_prior) = self.classifier(
             inclusive_bt = inclusive_bt, prior_bt = prior_bt,
-            inclusive_ct = inclusive_ct, prior_ct = prior_ct
+            inclusive_ct = inclusive_ct, prior_ct = prior_ct,
             branch_kpm_inclusive = branch_kpm, branch_kpm_prior = branch_kpm
         ) # forward takes
         #       necessary : inclusive_bt, prior_bt, inclusive_ct, prior_ct
