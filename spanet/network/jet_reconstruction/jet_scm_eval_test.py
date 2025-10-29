@@ -12,59 +12,30 @@ class SCM_Eval_Test(SCM_Training_Val):
 
     @torch.no_grad()
     def evaluate_scm_batch(self, batch: Batch) -> Dict[str, np.ndarray]:
-        pred_truth, true_masks, features_arr, class_truth, true_idx, jet_preds_tensor, jet_mult = self.topk_data(batch)
-        true_masks = true_masks.permute(1, 0)  # (E, B)
+        pred_truth, canon_masks, features_arr, class_truth, canon_idx, jet_preds_tensor, jet_mult = self.topk_data(batch)
         E, K, B, J, F = features_arr.shape
 
-        # deduplicate K-candidates via jet index patterns
-        valid_mask = self._dedup_valid_mask(jet_preds_tensor)  # (E, K), True = keep
+        valid_mask = self._dedup_valid_mask(jet_preds_tensor)
+        branch_kpm = (~cand_kpm).unsqueeze(-1).expand(-1, -1, B)  # (E, K, B)
+        branch_kpm = branch_kpm.reshape(-1, B).contiguous()       # (E*K, B)
 
-        # classifier with masking
-        class_logits, token_scores, out_valid_mask = self.classifier(features_arr, valid_mask)  # logits already -inf on dups
+        inclusive_ft = features_arr.clone()
+        prior_ft = features_arr[..., :3].contiguous()
 
-        # masked softmax so probs sum to 1 over valid K only
-        neg_inf = torch.tensor(float("-inf"), device=class_logits.device, dtype=class_logits.dtype)
-        valid_logits = class_logits.masked_fill(~out_valid_mask, neg_inf)
-        maxv = torch.amax(valid_logits, dim=1, keepdim=True)
-        exps = torch.exp((valid_logits - maxv).masked_fill(~out_valid_mask, neg_inf))
-        exps = exps * out_valid_mask.to(exps.dtype)
-        denom = exps.sum(dim=1, keepdim=True).clamp_min(1e-12)
-        class_probs = exps / denom  # zeros on duplicates
+        # ================== masker ==================
+        # masker will be avoided for now
+        (inclusive_bt, inclusive_ct, inclusive_mask_logits, 
+        prior_bt, prior_ct, prior_mask_logits) = self.masker(
+            inclusive_X = inclusive_ft, prior_X = prior_ft,
+            inclusive_branch_kpm = branch_kpm, prior_branch_kpm = branch_kpm
+        )
 
-        # masked argmax for the final pick
-        class_preds = torch.argmax(valid_logits, dim=1)
+        # ================== classifier ==================
+        (inclusive_logits, inclusive_ct, global_inclusive,
+        prior_logits, prior_ct, global_prior) = self.classifier(
+            inclusive_bt = inclusive_bt, prior_bt = prior_bt,
+            inclusive_ct = inclusive_ct, prior_ct = prior_ct,
+            branch_kpm_inclusive = branch_kpm, branch_kpm_prior = branch_kpm
+        )
 
-        # masker head (optional: suppress duplicates for clarity)
-        mask_logits_list, mask_probs_list, mask_preds_list = [], [], []
-        for k in range(K):
-            logits_k = self.masker(features_arr[:, k])                 # (E, B)
-            if out_valid_mask is not None:
-                vmk = out_valid_mask[:, k].unsqueeze(1)               # (E,1)
-                logits_k = logits_k.masked_fill(~vmk, neg_inf)
-            probs_k  = torch.sigmoid(logits_k)
-            preds_k  = (probs_k > 0.5).long()
-            mask_logits_list.append(logits_k.unsqueeze(1))
-            mask_probs_list.append(probs_k.unsqueeze(1))
-            mask_preds_list.append(preds_k.unsqueeze(1))
-
-        mask_logits = torch.cat(mask_logits_list, dim=1)              # (E, K, B)
-        mask_probs  = torch.cat(mask_probs_list,  dim=1)
-        mask_preds  = torch.cat(mask_preds_list,  dim=1)
-
-        raw_valid = true_masks.any(dim=-1)  # (E,)
-
-        return {
-            "class_logits": class_logits,   # CL
-            "class_probs":  class_probs,    # CP (zeros on duplicates)
-            "class_preds":  class_preds,    # CPd
-            "mask_logits":  mask_logits,    # ML
-            "mask_probs":   mask_probs,     # MP
-            "mask_preds":   mask_preds,     # MPd
-            "class_truth":  class_truth,    # CT
-            "pred_truth":   pred_truth,     # PT
-            "features_arr": features_arr,   # FA
-            "true_masks":   true_masks,     # TM
-            "raw_valid":    raw_valid,      # RV
-            "jet_mult":     jet_mult,       # JM
-            "valid_mask":   out_valid_mask  # for monitoring
-        }
+        neg_inf = torch.tensor(float("-inf"), device = inclusive_logits, dtype = inclusive_logits)

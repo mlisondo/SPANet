@@ -438,6 +438,8 @@ class CandidateSetEncoder(nn.Module):
         
         if self.inclusive_use_global_context: # give every candidate the same event-level summary built from all candidates, then add it to each candidate
             global_inclusive = self.inclusive_global_pma(inclusive_ct).squeeze(1) # (EK, 1, inclusive_embed_dim).squeeze -> (EK, inclusive_embed_dim)
+            probe(global_inclusive, "global_inclusive")
+            probe(inclusive_ct, "inclusive_ct")
             inclusive_ct = inclusive_ct + global_inclusive.unsqueeze(1) # unsqueeze (EK, 1, D); broadcasts across K when added; (E, K, D)
         else:
             global_inclusive = None
