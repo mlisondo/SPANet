@@ -312,7 +312,7 @@ class Options(Namespace):
         self.i_inds_classifer:       int   = 8          # ISAB inducing points for candidate tokens
         self.i_isab_classifer:       int   = 2          # depth on candidate tokens
         self.i_sab_classifer:        int   = 1
-        self.i_seeds_classifer:      int   = 2          # PMA seeds for global event context
+        self.i_seeds_classifer:      int   = 1          # PMA seeds for global event context
         self.i_attn_classifer:       float = 0.10       # attention dropout
         self.i_ff_classifer:         float = 0.10       # feed-forward dropout
         self.i_ln_classifer:         bool  = True       # normalization
@@ -324,7 +324,7 @@ class Options(Namespace):
         self.p_inds_classifer:       int   = 6
         self.p_isab_classifer:       int   = 2
         self.p_sab_classifer:        int   = 1
-        self.p_seeds_classifer:      int   = 3
+        self.p_seeds_classifer:      int   = 1
         self.p_attn_classifer:       float = 0.15
         self.p_ff_classifer:         float = 0.15
         self.p_ln_classifer:         bool  = True
