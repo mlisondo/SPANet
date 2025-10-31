@@ -15,8 +15,8 @@ class SCM_Eval_Test(SCM_Training_Val):
         pred_truth, canon_masks, features_arr, class_truth, canon_idx, jet_preds_tensor, jet_mult = self.topk_data(batch)
         E, K, B, J, F = features_arr.shape
 
-        valid_mask = self._dedup_valid_mask(jet_preds_tensor)
-        branch_kpm = (~cand_kpm).unsqueeze(-1).expand(-1, -1, B)  # (E, K, B)
+        valid_mask = self.candidate_mute_mask(jet_preds_tensor) # this returns a keep/valid mask, True -> candidate is valid and should be used. must be "NOT"ed if used as attn_mask
+        branch_kpm = (~valid_mask).unsqueeze(-1).expand(-1, -1, B)  # (E, K, B)
         branch_kpm = branch_kpm.reshape(-1, B).contiguous()       # (E*K, B)
 
         inclusive_ft = features_arr.clone()
@@ -31,7 +31,7 @@ class SCM_Eval_Test(SCM_Training_Val):
 
         mask_logits = prior_mask_logits * 2 + inclusive_mask_logits     # NOTE: THIS IS A WEIGHTED GUESS, LOSS FUNCTION IS NOT AS BIASED.
         mask_probs = torch.sigmoid(mask_logits)
-        mask_preds = (mask_prob > 0.5).long()
+        mask_preds = (mask_probs > 0.5).long()
 
         # ================== classifier ==================
         (inclusive_logits, inclusive_ct, global_inclusive,
@@ -42,8 +42,8 @@ class SCM_Eval_Test(SCM_Training_Val):
         )
 
         class_logits = prior_logits * 2 + inclusive_logits     # NOTE: THIS IS A WEIGHTED GUESS, LOSS FUNCTION IS NOT BIASED.
-        neg_inf = torch.tensor(float("-inf"), device = inclusive_logits, dtype = inclusive_logits)
-        masked_logits = class_logits.masked_fill(valid_mask, neg_inf)
+        neg_inf = torch.tensor(float("-inf"), device=inclusive_logits.device, dtype=inclusive_logits.dtype)
+        masked_logits = class_logits.masked_fill(~valid_mask, neg_inf) # has to be "NOT"edm, should be applied to invalid entries, not valid ones
         class_probs = torch.softmax(masked_logits, dim=1)  # sums to 1 over valid K
         class_preds = class_probs.argmax(dim=1)
 
@@ -59,7 +59,8 @@ class SCM_Eval_Test(SCM_Training_Val):
             "class_truth":  class_truth,    # CT
             "pred_truth":   pred_truth,     # PT
             "features_arr": features_arr,   # FA
-            "true_masks":   valid_mask,     # TM
+            "true_masks":   canon_masks,    # TM
             "raw_valid":    raw_valid,      # RV
             "jet_mult":     jet_mult,       # JM
+            "valid_mask":   valid_mask
         }
