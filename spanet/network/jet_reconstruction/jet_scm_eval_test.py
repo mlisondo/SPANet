@@ -15,7 +15,7 @@ class SCM_Eval_Test(SCM_Training_Val):
         pred_truth, canon_masks, features_arr, class_truth, canon_idx, jet_preds_tensor, jet_mult = self.topk_data(batch)
         E, K, B, J, F = features_arr.shape
 
-        valid_mask = self.candidate_mute_mask(jet_preds_tensor) # this returns a keep/valid mask, True -> candidate is valid and should be used. must be "NOT"ed if used as attn_mask
+        valid_mask = self.candidate_mute_mask(jet_preds_tensor) # (E, K) this returns a keep/valid mask, True -> candidate is valid and should be used. must be "NOT"ed if used as attn_mask
         branch_kpm = (~valid_mask).unsqueeze(-1).expand(-1, -1, B)  # (E, K, B)
         branch_kpm = branch_kpm.reshape(-1, B).contiguous()       # (E*K, B)
 
@@ -48,6 +48,7 @@ class SCM_Eval_Test(SCM_Training_Val):
         class_preds = class_probs.argmax(dim=1)
 
         raw_valid = valid_mask.any(dim=-1)  # (E,)
+        true_masks = canon_masks.T.contiguous()
 
         return {
             "class_logits": class_logits,   # CL
@@ -59,7 +60,7 @@ class SCM_Eval_Test(SCM_Training_Val):
             "class_truth":  class_truth,    # CT
             "pred_truth":   pred_truth,     # PT
             "features_arr": features_arr,   # FA
-            "true_masks":   canon_masks,    # TM
+            "true_masks":   true_masks,     # TM
             "raw_valid":    raw_valid,      # RV
             "jet_mult":     jet_mult,       # JM
             "valid_mask":   valid_mask
