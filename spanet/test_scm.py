@@ -20,7 +20,7 @@ def classifier_metrics(
     class_logits: np.ndarray,           # (E, K)
     k           : int,
     valid_mask  : Optional[np.ndarray] = None      # (E,)
-) -> Dict[str, float]:
+    ) -> Dict[str, float]:
     E, K = class_logits.shape
     if valid_mask is None:
         valid_mask = np.ones(E, dtype=bool)
@@ -87,7 +87,7 @@ def joint_metrics(class_truth  : np.ndarray,        # (E, K)
                   mask_pred    : np.ndarray,        # (E, K, B)
                   pred_truth   : np.ndarray,        # (E, K, B)
                   true_masks   : np.ndarray         # (E, B)
-) -> Dict[str, float]:
+    ) -> Dict[str, float]:
     E, K, B = mask_pred.shape
 
     # Reconstruction categorization
@@ -141,7 +141,7 @@ def strict_metric(class_truth  : np.ndarray,        # (E, K)
                   mask_pred    : np.ndarray,        # (E, K, B)
                   pred_truth   : np.ndarray,        # (E, K, B)  branch‑level truth match flags
                   true_masks   : np.ndarray         # (E, B)     “reconstructable” mask
-) -> Dict[str, float]:
+    ) -> Dict[str, float]:
     """
     real_event_eff         - SCM:  all branches AND mask exactly match ground truth
     real_event_eff_base    - SPANet baseline (index K-1) under the same strict rule
@@ -202,6 +202,22 @@ def main(
     TM = arrays["true_masks"]          # (events, branches)
     JM = arrays["jet_mult"]            # (events, Njets)        (for ttbar (Njets) = 10, true if jet is valid)
 
+    # inclusive
+    ICL  = arrays["inclusive_class_logits"]       # (events, K)
+    ICP  = arrays["inclusive_class_probs"]        # (events, K)
+    ICPd = arrays["inclusive_class_preds"]        # (events,)
+    IML  = arrays["inclusive_mask_logits"]        # (events, K, branches)
+    IMP  = arrays["inclusive_mask_probs"]         # (events, K, branches)
+    IMPd = arrays["inclusive_mask_preds"]         # (events, K, branches)
+    # prior
+    PCL  = arrays["prior_class_logits"]       # (events, K)
+    PCP  = arrays["prior_class_probs"]        # (events, K)
+    PCPd = arrays["prior_class_preds"]        # (events,)
+    PML  = arrays["prior_mask_logits"]        # (events, K, branches)
+    PMP  = arrays["prior_mask_probs"]         # (events, K, branches)
+    PMPd = arrays["prior_mask_preds"]         # (events, K, branches)
+
+
     # ------------------ MULTIPLICITY METRICS ------------------
     metrics = {}
     n_jets = JM.sum(axis=1).astype(np.int64)     # (E,)
@@ -227,6 +243,13 @@ def main(
         _CT  = CT[chosen];  _PT  = PT[chosen]
         _TM  = TM[chosen];  _RV  = RV[chosen]
 
+        # inclusive
+        _ICL  = ICL[chosen];  _ICPd = ICPd[chosen]
+        _IMP  = IMP[chosen];  _IMPd = IMPd[chosen]
+        # prior 
+        _PCL  = PCL[chosen];  _PCPd = PCPd[chosen]
+        _PMP  = PMP[chosen];  _PMPd = PMPd[chosen]
+
         # --- Classifier ---
         m_cls = classifier_metrics(_CT, _CL, model.options.k, valid_mask=_RV)
         metrics.update({f"{tag}/{k}": v for k, v in m_cls.items()})
@@ -234,14 +257,26 @@ def main(
         # --- Masker ---
         m_mask = masker_metrics(_MP, _MPd, _PT)
         metrics.update({f"{tag}/{k}": v for k, v in m_mask.items() if not k.startswith("_")})
+        m_mask = masker_metrics(_IMP, _IMPd, _PT)
+        metrics.update({f"INCLUSIVE/{tag}/{k}": v for k, v in m_mask.items() if not k.startswith("_")})
+        m_mask = masker_metrics(_PMP, _PMPd, _PT)
+        metrics.update({f"PRIOR/{tag}/{k}": v for k, v in m_mask.items() if not k.startswith("_")})
 
         # --- Joint ---
         m_joint = joint_metrics(_CT, _CPd, _MPd, _PT, _TM)
         metrics.update({f"{tag}/{k}": v for k, v in m_joint.items() if not k.startswith("_")})
+        m_joint = joint_metrics(_ICT, _ICPd, _IMPd, _PT, _TM)
+        metrics.update({f"INCLUSIVE/{tag}/{k}": v for k, v in m_joint.items() if not k.startswith("_")})
+        m_joint = joint_metrics(_PCT, _PCPd, _PMPd, _PT, _TM)
+        metrics.update({f"PRIOR/{tag}/{k}": v for k, v in m_joint.items() if not k.startswith("_")})
 
         # --- Strict ---
         m_real = strict_metric(_CT, _CPd, _MPd, _PT, _TM)
         metrics.update({f"{tag}/{k}": v for k, v in m_real.items() if not k.startswith("_")})
+        m_real = strict_metric(_ICT, _ICPd, _IMPd, _PT, _TM)
+        metrics.update({f"INCLUSIVE/{tag}/{k}": v for k, v in m_real.items() if not k.startswith("_")})
+        m_real = strict_metric(_PCT, _PCPd, _PMPd, _PT, _TM)
+        metrics.update({f"PRIOR/{tag}/{k}": v for k, v in m_real.items() if not k.startswith("_")})
 
     # # ------------------ HISTOGRAMS ------------------
 
