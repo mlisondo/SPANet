@@ -9,6 +9,43 @@ from torch import Tensor
 
 tcompile = torch.compile
 
+def probe(o, name=None):
+    obj = type(o)
+    header = f"Object '{name}'"
+    print(f"\n{header}: {obj.__module__}.{obj.__name__}")
+
+    if hasattr(o, 'shape'):
+        print(f"shape: {o.shape}")
+    if hasattr(o, 'ndim'):
+        print(f"ndim: {o.ndim}")
+    if hasattr(o, 'dtype'):
+        print(f"dtype: {o.dtype}")
+
+    if hasattr(o, 'size') and not callable(o.size):
+        print(f"size: {o.size}")
+
+    try:
+        print(f"len: {len(o)}")
+    except Exception:
+        pass
+
+    try:
+        if isinstance(o, (list, tuple)):
+            for idx, item in enumerate(o):
+                probe(item, f"{name}[{idx}]")
+    except Exception:
+        pass
+
+    if isinstance(o, torch.Tensor):
+        print(f"shape: {tuple(o.size())}")
+        print(f"dtype: {o.dtype}")
+        print(f"numel: {o.numel()}")
+
+        print(f"shape: {tuple(o.size())}")
+        print(f"dtype: {o.dtype}")
+        print(f"numel: {o.numel()}")
+        print(f"device: {o.device}")
+
 # --------------------------------------------------------------------------------------------------- MODULES FOR SET TRANSFORMER
 
 # MULTIHEAD ATTENTION BLOCK
@@ -940,42 +977,3 @@ class SCM_Training_Val(JetSecondaryLoader):
         self.log('ce_baseline_prior', ce_baseline_prior, on_epoch = True, prog_bar = True)
 
         return {'abs_total_loss': abs_total_loss}
-
-
-
-def probe(o, name=None):
-    obj = type(o)
-    header = f"Object '{name}'"
-    print(f"\n{header}: {obj.__module__}.{obj.__name__}")
-
-    if hasattr(o, 'shape'):
-        print(f"shape: {o.shape}")
-    if hasattr(o, 'ndim'):
-        print(f"ndim: {o.ndim}")
-    if hasattr(o, 'dtype'):
-        print(f"dtype: {o.dtype}")
-
-    if hasattr(o, 'size') and not callable(o.size):
-        print(f"size: {o.size}")
-
-    try:
-        print(f"len: {len(o)}")
-    except Exception:
-        pass
-
-    try:
-        if isinstance(o, (list, tuple)):
-            for idx, item in enumerate(o):
-                probe(item, f"{name}[{idx}]")
-    except Exception:
-        pass
-
-    if isinstance(o, torch.Tensor):
-        print(f"shape: {tuple(o.size())}")
-        print(f"dtype: {o.dtype}")
-        print(f"numel: {o.numel()}")
-
-        print(f"shape: {tuple(o.size())}")
-        print(f"dtype: {o.dtype}")
-        print(f"numel: {o.numel()}")
-        print(f"device: {o.device}")

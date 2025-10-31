@@ -253,6 +253,10 @@ def main(
         # --- Classifier ---
         m_cls = classifier_metrics(_CT, _CL, model.options.k, valid_mask=_RV)
         metrics.update({f"{tag}/{k}": v for k, v in m_cls.items()})
+        m_cls = classifier_metrics(_CT, _ICL, model.options.k, valid_mask=_RV)
+        metrics.update({f"INCLUSIVE/{tag}/{k}": v for k, v in m_cls.items()})
+        m_cls = classifier_metrics(_CT, _PCL, model.options.k, valid_mask=_RV)
+        metrics.update({f"PRIOR/{tag}/{k}": v for k, v in m_cls.items()})
 
         # --- Masker ---
         m_mask = masker_metrics(_MP, _MPd, _PT)
@@ -265,17 +269,17 @@ def main(
         # --- Joint ---
         m_joint = joint_metrics(_CT, _CPd, _MPd, _PT, _TM)
         metrics.update({f"{tag}/{k}": v for k, v in m_joint.items() if not k.startswith("_")})
-        m_joint = joint_metrics(_ICT, _ICPd, _IMPd, _PT, _TM)
+        m_joint = joint_metrics(_CT, _ICPd, _IMPd, _PT, _TM)
         metrics.update({f"INCLUSIVE/{tag}/{k}": v for k, v in m_joint.items() if not k.startswith("_")})
-        m_joint = joint_metrics(_PCT, _PCPd, _PMPd, _PT, _TM)
+        m_joint = joint_metrics(_CT, _PCPd, _PMPd, _PT, _TM)
         metrics.update({f"PRIOR/{tag}/{k}": v for k, v in m_joint.items() if not k.startswith("_")})
 
         # --- Strict ---
         m_real = strict_metric(_CT, _CPd, _MPd, _PT, _TM)
         metrics.update({f"{tag}/{k}": v for k, v in m_real.items() if not k.startswith("_")})
-        m_real = strict_metric(_ICT, _ICPd, _IMPd, _PT, _TM)
+        m_real = strict_metric(_CT, _ICPd, _IMPd, _PT, _TM)
         metrics.update({f"INCLUSIVE/{tag}/{k}": v for k, v in m_real.items() if not k.startswith("_")})
-        m_real = strict_metric(_PCT, _PCPd, _PMPd, _PT, _TM)
+        m_real = strict_metric(_CT, _PCPd, _PMPd, _PT, _TM)
         metrics.update({f"PRIOR/{tag}/{k}": v for k, v in m_real.items() if not k.startswith("_")})
 
     # # ------------------ HISTOGRAMS ------------------
