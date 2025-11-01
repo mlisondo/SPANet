@@ -76,7 +76,7 @@ class MAB(nn.Module):
             nn.Linear(4*dim_V, dim_V), nn.Dropout(ff_drop),
         )
 
-        self.attn_gate = nn.Parameter(torch.tensor(0.0))
+        self.attn_gate = nn.Parameter(torch.tensor(0.1))
 
     def forward(self, Q, K, key_padding_mask : Optional[Tensor] = None) -> Tensor:
 
@@ -114,7 +114,7 @@ class SAB(nn.Module):
         super().__init__()
         self.mab = MAB(dim_in, dim_in, dim_out, num_heads, attn_drop, ff_drop, ln, use_gate)
 
-    def forward(self, X, key_padding_mask: Optional[Tensor]=None):
+    def forward(self, X, key_padding_mask : Optional[Tensor] = None):
         return self.mab(X, X, key_padding_mask)
 
 # INDUCED SELF ATTENTION BLOCK
@@ -126,9 +126,9 @@ class ISAB(nn.Module):
         self.mab0 = MAB(dim_out, dim_in,  dim_out, num_heads, attn_drop, ff_drop, ln, use_gate)  # P <- X
         self.mab1 = MAB(dim_in,  dim_out, dim_out, num_heads, attn_drop, ff_drop, ln, use_gate)  # X <- P
 
-    def forward(self, X, pad_X: Optional[Tensor] = None):
+    def forward(self, X, key_padding_mask : Optional[Tensor] = None):
         P = self.I.expand(X.size(0), -1, -1)
-        H = self.mab0(P, X, key_padding_mask = pad_X)  # seeds read from jets
+        H = self.mab0(P, X, key_padding_mask = key_padding_mask)  # seeds read from jets
         Y = self.mab1(X, H)                          # jets read from seeds
         return Y
 
@@ -140,9 +140,9 @@ class PMA(nn.Module):
         nn.init.xavier_uniform_(self.S)
         self.mab = MAB(dim, dim, dim, num_heads, attn_drop, ff_drop, ln, use_gate)
 
-    def forward(self, X, pad_X : Optional[Tensor] = None):
+    def forward(self, X, key_padding_mask : Optional[Tensor] = None):
         S = self.S.expand(X.size(0), -1, -1)
-        return self.mab(S, X, key_padding_mask = pad_X) # build per-batch seed queries -> feeds them and the set X into attention -> outputs an attention-pooled summary of X
+        return self.mab(S, X, key_padding_mask = key_padding_mask) # build per-batch seed queries -> feeds them and the set X into attention -> outputs an attention-pooled summary of X
 
 # --------------------------------------------------------------------------------------------------- SET TRANSFORMER
 
@@ -182,9 +182,9 @@ class SetTransformer(nn.Module):
 
         # Encoders
         for layer in self.isab:
-            X = layer(X, pad_X=key_padding_mask) # pad on K/V
+            X = layer(X, key_padding_mask=key_padding_mask) # pad on K/V
 
-        X = self.pma(X, pad_X=key_padding_mask) # pool queries seeds over set X with pad
+        X = self.pma(X, key_padding_mask=key_padding_mask) # pool queries seeds over set X with pad
         # Decoder
         for layer in self.sab: # self-attn over seed
             X = layer(X)
@@ -277,7 +277,7 @@ class BranchSetEncoder(nn.Module):
         # Reshape tokens to (EK, B, E) and pool to candidate token with PMA
         inclusive_bt = inclusive_bt.reshape(E, K, B, -1) # (E, K, B, inclusive_embed_dim)
         inclusive_bt2 = inclusive_bt.reshape(E * K, B, -1) # (E*K, B, inclusive_embed_dim)
-        inclusive_ct = self.inclusive_branch_pma(inclusive_bt2, pad_X = inclusive_branch_kpm).squeeze(1)
+        inclusive_ct = self.inclusive_branch_pma(inclusive_bt2, key_padding_mask = inclusive_branch_kpm).squeeze(1)
         # (E*K, num_seeds (1), inclusive_embed_dim); squeeze(1) -> (E*K, inclusive_embed_dim)
         inclusive_ct = inclusive_ct.reshape(E, K, -1) # (E, K, inclusive_embed_dim)
 
@@ -295,7 +295,7 @@ class BranchSetEncoder(nn.Module):
         # Reshape tokens to (EK, B, E) and pool to candidate token with PMA        
         prior_bt = prior_bt.reshape(E, K, B, -1)
         prior_bt2 = prior_bt.reshape(E * K, B, -1)
-        prior_ct = self.prior_branch_pma(prior_bt2, pad_X = prior_branch_kpm).squeeze(1)
+        prior_ct = self.prior_branch_pma(prior_bt2, key_padding_mask = prior_branch_kpm).squeeze(1)
         prior_ct = prior_ct.reshape(E, K, -1)
 
         return (inclusive_bt, inclusive_ct, inclusive_mask_logits, 
@@ -444,17 +444,19 @@ class CandidateSetEncoder(nn.Module):
     inclusive_bt, prior_bt, # (E, K, B, *_embed_dim)
     inclusive_ct, prior_ct,  # (E, K, *_embed_dim)
     branch_kpm_inclusive: Optional[Tensor] = None,  # (E*K,B)
-    branch_kpm_prior: Optional[Tensor] = None
+    branch_kpm_prior: Optional[Tensor] = None,
+    candidate_kpm_inclusive: Optional[Tensor] = None,  # (E,K)
+    candidate_kpm_prior: Optional[Tensor] = None,
     ):
         # ====================== INCLUSIVE ======================
         # E, K, B, J, inclusive_F = inclusive_X.shape
         # inclusive_X_flat = inclusive_X.reshape(E, K, B * J * inclusive_F)
 
         for inclusive_isab in self.inclusive_isabs:
-            inclusive_ct = inclusive_isab(inclusive_ct) # (E, K, inclusive_embed_dim)
+            inclusive_ct = inclusive_isab(inclusive_ct, key_padding_mask = candidate_kpm_inclusive) # (E, K, inclusive_embed_dim)
 
         for inclusive_sab in self.inclusive_sabs:
-            inclusive_ct = inclusive_sab(inclusive_ct) # (E, K, inclusive_embed_dim)
+            inclusive_ct = inclusive_sab(inclusive_ct, key_padding_mask = candidate_kpm_inclusive) # (E, K, inclusive_embed_dim)
 
         if self.use_cross_from_branches: # each candidate refine itself using only its own branches
             # let candidate token be enriched by looking at its own branch tokens
@@ -474,7 +476,7 @@ class CandidateSetEncoder(nn.Module):
             inclusive_ct = inclusive_ct + self.inclusive_gate * x_talk_inclusive
         
         if self.inclusive_use_global_context: # give every candidate the same event-level summary built from all candidates, then add it to each candidate
-            global_inclusive = self.inclusive_global_pma(inclusive_ct).squeeze(1) # (EK, 1, inclusive_embed_dim).squeeze -> (EK, inclusive_embed_dim)
+            global_inclusive = self.inclusive_global_pma(inclusive_ct, key_padding_mask = candidate_kpm_inclusive).squeeze(1) # (EK, 1, inclusive_embed_dim).squeeze -> (EK, inclusive_embed_dim)
 
             # Note: IF THIS LINE ERRORES OUT, ITS BECAUSE PMA_seed IS SET TO SOMETHING GREATER THAN 1, CHECK options.py *_seeds_classifer
             inclusive_ct = inclusive_ct + global_inclusive.unsqueeze(1) # unsqueeze (EK, 1, D); broadcasts across K when added; (E, K, D) 
@@ -483,15 +485,19 @@ class CandidateSetEncoder(nn.Module):
 
         inclusive_logits = self.inclusive_readout(inclusive_ct).squeeze(-1)
 
+        if candidate_kpm_inclusive is not None:
+            neg_inf = torch.finfo(inclusive_logits.dtype).min
+            inclusive_logits = inclusive_logits.masked_fill(candidate_kpm_inclusive, neg_inf) # EXTRA PROTECTION against all masked
+
         # ====================== PRIOR ======================
         # _, _, _, _, prior_F = prior_X.shape
         # prior_X_flat = prior_X.reshape(E, K, B * J * prior_F)
 
         for prior_isab in self.prior_isabs:
-            prior_ct = prior_isab(prior_ct)
+            prior_ct = prior_isab(prior_ct, key_padding_mask = candidate_kpm_prior)
 
         for prior_sab in self.prior_sabs:
-            prior_ct = prior_sab(prior_ct)
+            prior_ct = prior_sab(prior_ct, key_padding_mask = candidate_kpm_prior)
 
         if self.use_cross_from_branches:
             # let candidate token be enriched by looking at its own branch tokens
@@ -507,12 +513,16 @@ class CandidateSetEncoder(nn.Module):
             prior_ct = prior_ct + self.prior_gate * x_talk_prior
         
         if self.prior_use_global_context:
-            global_prior = self.prior_global_pma(prior_ct).squeeze(1)
+            global_prior = self.prior_global_pma(prior_ct, key_padding_mask = candidate_kpm_prior).squeeze(1)
             prior_ct = prior_ct + global_prior.unsqueeze(1)
         else:
             global_prior = None
 
         prior_logits = self.prior_readout(prior_ct).squeeze(-1)
+
+        if candidate_kpm_prior is not None:
+            neg_inf = torch.finfo(prior_logits.dtype).min
+            prior_logits = prior_logits.masked_fill(candidate_kpm_prior, neg_inf) # EXTRA MEASURE !!
 
         return (inclusive_logits, inclusive_ct, global_inclusive,
         prior_logits, prior_ct, global_prior)
@@ -607,9 +617,19 @@ class SCM_Training_Val(JetSecondaryLoader):
         self.use_x_branches = options.use_x_branches
         self.detach_branch = options.detach_branch
 
+        # ================================ general ================================
+
         B    = self.options.branch_dim
         J    = self.options.jet_max_dim
         Fdim = self.options.features_dim   # jets: {pt, eta, phi, mass, btag} => usually 5
+
+        self.prior_weight_start = options.prior_weight_start
+        self.prior_weight_end = options.prior_weight_end
+        self.prior_weight_epochs = options.prior_weight_epochs
+
+        self.masker_weight_start = options.masker_weight_start
+        self.masker_weight_end = options.masker_weight_end
+        self.masker_weight_epochs = options.masker_weight_epochs
 
         # ================================ MASKER ================================
         self.masker = BranchSetEncoder(
@@ -807,20 +827,15 @@ class SCM_Training_Val(JetSecondaryLoader):
         loss_vec = -(target * logp).sum(dim = 1)
         return loss_vec[has_pos].mean() if has_pos.any() else torch.zeros((), device = logits.device, dtype = loss_vec.dtype)
 
-    def _compiled_core(self, features_arr, pred_truth, class_truth, cand_kpm, branch_kpm : Optional[Tensor] = None, jet_kpm : Optional[Tensor] = None):
+    def _compiled_core(self, features_arr, pred_truth, class_truth, cand_keep, cand_kpm : Optional[Tensor] = None, branch_kpm : Optional[Tensor] = None, jet_kpm : Optional[Tensor] = None):
         N, K, B, J, Fdim = features_arr.shape
 
         inclusive_ft = features_arr.clone()
         prior_ft = features_arr[..., :3].contiguous()
 
-        if branch_kpm is None:
-                branch_kpm = (~cand_kpm).unsqueeze(-1).expand(-1, -1, B)  # (E, K, B)
-                branch_kpm = branch_kpm.reshape(-1, B).contiguous()       # (E*K, B)
-
         (inclusive_bt, inclusive_ct, inclusive_mask_logits, 
         prior_bt, prior_ct, prior_mask_logits) = self.masker(
-            inclusive_X = inclusive_ft, prior_X = prior_ft,
-            inclusive_branch_kpm = branch_kpm, prior_branch_kpm = branch_kpm
+            inclusive_X = inclusive_ft, prior_X = prior_ft
         ) # forward takes
         #       necessary : inclusive_X, prior_X
         #       optional  : inclusive_jet_kpm, inclusive_branch_kpm, prior_jet_kpm, prior_branch_kpm
@@ -829,16 +844,16 @@ class SCM_Training_Val(JetSecondaryLoader):
         prior_logits, prior_ct, global_prior) = self.classifier(
             inclusive_bt = inclusive_bt, prior_bt = prior_bt,
             inclusive_ct = inclusive_ct, prior_ct = prior_ct,
-            branch_kpm_inclusive = branch_kpm, branch_kpm_prior = branch_kpm
+            candidate_kpm_inclusive = cand_kpm, candidate_kpm_prior = cand_kpm
         ) # forward takes
         #       necessary : inclusive_bt, prior_bt, inclusive_ct, prior_ct
-        #       optional  : branch_kpm_inclusive, branch_kpm_prior
+        #       optional  : branch_kpm_inclusive, branch_kpm_prior, candidate_kpm_inclusive, candidate_kpm_prior
 
-        ce_loss_inclusive, has_truth, num_pos, ce_baseline_inclusive = self.multi_positive_ce(inclusive_logits, class_truth, valid_mask = cand_kpm)
-        ce_rank_inclusice = self.listwise_softmax_ce(inclusive_logits, class_truth, valid_mask = cand_kpm)
+        ce_loss_inclusive, has_truth, num_pos, ce_baseline_inclusive = self.multi_positive_ce(inclusive_logits, class_truth, valid_mask = cand_keep)
+        ce_rank_inclusice = self.listwise_softmax_ce(inclusive_logits, class_truth, valid_mask = cand_keep)
 
-        ce_loss_prior, _, _, ce_baseline_prior = self.multi_positive_ce(prior_logits, class_truth, valid_mask = cand_kpm)
-        ce_rank_prior = self.listwise_softmax_ce(prior_logits, class_truth, valid_mask = cand_kpm)
+        ce_loss_prior, _, _, ce_baseline_prior = self.multi_positive_ce(prior_logits, class_truth, valid_mask = cand_keep)
+        ce_rank_prior = self.listwise_softmax_ce(prior_logits, class_truth, valid_mask = cand_keep)
 
         rows = torch.arange(N, device = inclusive_logits.device)
         inclusive_class_loss = ce_loss_inclusive + ce_rank_inclusice
@@ -889,45 +904,25 @@ class SCM_Training_Val(JetSecondaryLoader):
         ) = self.topk_data(batch)
 
         # candidate level kpm (attn_mask)
-        cand_kpm = self.candidate_mute_mask(jet_preds_tensor) # (E, K) bool
+        cand_keep = self.candidate_mute_mask(jet_preds_tensor)  # (E, K)  True = keep
+        cand_kpm = ~cand_keep   # key_padding_mask wants True = ignore
 
         # currently dont have a use branch_kpm, oops (same for jet_kpm)
 
-        super_true_event_idx = torch.nonzero(true_masks.all(dim=0)).squeeze(1)[:2]
+        return self._compiled_core(features_arr, pred_truth, class_truth, cand_keep, cand_kpm = cand_kpm)
 
-        true_event_idx = torch.nonzero(class_truth[:, 0]).squeeze(1)[:2]
-
-        false_event_idx = torch.nonzero(~class_truth[:, 0]).squeeze(1)[:2]
-
-        one_one = torch.cat([super_true_event_idx, true_event_idx, false_event_idx])  
-
-        probe(jet_preds_tensor, "jet_preds_tensor")
-        probe(jet_mult, "jet_mult")
-        probe(cand_kpm, "cand_kpm")
-        probe(features_arr, "features_arr")
-
-        for e in one_one:
-            print(f"\n===== EVENT {int(e)} =====")
-
-            print("Jet options for events:")
-            print(jet_mult[e])
-
-            print("jet_preds_tensor:")
-            print(jet_preds_tensor[e])
-
-            print("candidate level masking:")
-            print(cand_kpm[e])
-
-            print("feature for selected events:")
-            print(features_arr[e])
-
-            print("=" * 30)
-
-        raise RuntimeError("Debug break")
-
-        return self._compiled_core(features_arr, pred_truth, class_truth, cand_kpm)
+    def affine_map(self, start: float, end: float, total_epochs: int) -> float:
+        if total_epochs <= 0:
+            return float(end)
+        t = min(1.0, max(0.0, self.current_epoch / float(total_epochs)))
+        return float(start + (end - start) * t)
 
     def training_step(self, batch : Batch, batch_idx : int):
+        prior_weight = self.affine_map(self.prior_weight_start, self.prior_weight_end, self.prior_weight_epochs)
+        inclusive_weight = (1 - prior_weight)
+
+        masker_weight = self.affine_map(self.masker_weight_start, self.masker_weight_end, self.masker_weight_epochs)
+
         (
             inclusive_class_loss, prior_class_loss,
             top1_acc_truth, num_pos_mean, pos_rate,
@@ -935,13 +930,18 @@ class SCM_Training_Val(JetSecondaryLoader):
             branch_loss_inclusive, branch_loss_prior
         ) = self.forward_scm(batch)
 
-        total_loss_inclusive = inclusive_class_loss + branch_loss_inclusive
-        total_loss_prior = prior_class_loss + branch_loss_prior
-        abs_total_loss = total_loss_inclusive + total_loss_prior
+        total_loss_inclusive = inclusive_class_loss + (masker_weight * branch_loss_inclusive)
+        total_loss_prior = prior_class_loss + (masker_weight * branch_loss_prior)
+        abs_total_loss = (inclusive_weight * total_loss_inclusive) + (prior_weight * total_loss_prior)
 
         return abs_total_loss
 
     def validation_step(self, batch : Batch, batch_idx : int):
+        prior_weight = self.affine_map(self.prior_weight_start, self.prior_weight_end, self.prior_weight_epochs)
+        inclusive_weight = (1 - prior_weight)
+
+        masker_weight = self.affine_map(self.masker_weight_start, self.masker_weight_end, self.masker_weight_epochs)
+
         (
             inclusive_class_loss, prior_class_loss,
             top1_acc_truth, num_pos_mean, pos_rate,
@@ -949,9 +949,9 @@ class SCM_Training_Val(JetSecondaryLoader):
             branch_loss_inclusive, branch_loss_prior
         ) = self.forward_scm(batch)
 
-        total_loss_inclusive = inclusive_class_loss + branch_loss_inclusive
-        total_loss_prior = prior_class_loss + branch_loss_prior
-        abs_total_loss = total_loss_inclusive + total_loss_prior
+        total_loss_inclusive = inclusive_class_loss + (masker_weight * branch_loss_inclusive)
+        total_loss_prior = prior_class_loss + (masker_weight * branch_loss_prior)
+        abs_total_loss = (inclusive_weight * total_loss_inclusive) + (prior_weight * total_loss_prior)
 
         self.log('inclusive_class_loss', inclusive_class_loss, on_epoch = True, prog_bar = True)
         self.log('prior_class_loss', prior_class_loss, on_epoch = True, prog_bar = True)
@@ -967,5 +967,9 @@ class SCM_Training_Val(JetSecondaryLoader):
         self.log('pos_rate', pos_rate, on_epoch = True, prog_bar = True)
         self.log('ce_baseline_inclusive', ce_baseline_inclusive, on_epoch = True, prog_bar = True)
         self.log('ce_baseline_prior', ce_baseline_prior, on_epoch = True, prog_bar = True)
+
+        self.log('prior_weight', prior_weight, on_epoch = True, prog_bar = True)
+        self.log('inclusive_weight', inclusive_weight, on_epoch = True, prog_bar = True)
+        self.log('masker_weight', masker_weight, on_epoch = True, prog_bar = True)
 
         return {'abs_total_loss': abs_total_loss}

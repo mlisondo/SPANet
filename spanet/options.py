@@ -277,6 +277,14 @@ class Options(Namespace):
         self.jet_max_dim: int = 3
         self.features_dim: int = 5
 
+        self.prior_weight_start : float = 0.85 # higher -> early training emphasizes the prior; lower -> emphasizes inclusive early
+        self.prior_weight_end : float = 0.50 # where to settle
+        self.prior_weight_epochs : int = 10 # epoch to interpolate linearly from start -> end; half of training
+
+        self.masker_weight_start : float = 0.00 # higher -> model emphasize on per-branch reco early; zero -> branch no gradient in branch head, learns nothing
+        self.masker_weight_end : float = 0.15
+        self.masker_weight_epochs : int = 7 # set to 1/3 of training
+
         # ====================== MASKER (inclusive / prior) ======================
         # Inclusive
         self.i_dim_masker:       int   = 2# 64         # embedding sizes (divisible by heads)
