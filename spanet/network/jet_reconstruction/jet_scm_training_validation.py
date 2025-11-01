@@ -893,49 +893,68 @@ class SCM_Training_Val(JetSecondaryLoader):
 
         # currently dont have a use branch_kpm, oops (same for jet_kpm)
 
+        super_true_event_idx = torch.nonzero(true_masks.all(dim=0)).squeeze(1)[:2]
+
+        true_event_idx = torch.nonzero(class_truth[:, 0]).squeeze(1)[:2]
+
+        false_event_idx = torch.nonzero(~class_truth[:, 0]).squeeze(1)[:2]
+
+        one_one = torch.cat([super_true_event_idx, true_event_idx, false_event_idx])  
+
+        probe(sources[0], "sources[0]")
+        probe(jet_data, "jet_data")
+        probe(jet_preds_tensor, "jet_preds_tensor")
+        probe(jet_mult, "jet_mult")
+        probe(cand_kpm, "cand_kpm")
+        # probe(true_idx, "true_idx")
+        # probe(true_masks, "true_masks")
         # probe(pred_truth, "pred_truth")
-        # probe(canon_masks, "canon_masks")
-        # probe(features_arr, "features_arr")
         # probe(class_truth, "class_truth")
+        probe(features_arr, "features_arr")
+        probe(jet_data, "jet_data")
         # probe(canon_idx, "canon_idx")
-        # probe(jet_preds_tensor, "jet_preds_tensor")
-        # probe(jet_mult, "jet_mult")
-        # probe(cand_kpm, "cand_kpm")
+        # probe(canon_masks, "canon_masks")
 
+        for e in one_one:
+            print(f"\n===== EVENT {int(e)} =====")
 
-        # super_true_event_idx = torch.nonzero(canon_masks.all(dim=0)).squeeze(1)[:2]
-        # true_event_idx = torch.nonzero(class_truth[:, 0]).squeeze(1)[:2]
-        # false_event_idx = torch.nonzero(~class_truth[:, 0]).squeeze(1)[:2]
-        # one_one = torch.cat([super_true_event_idx, true_event_idx, false_event_idx])  
+            print("Jet data for events:")
+            print(jet_data[e])
 
-        # for e in one_one:
-        #     print(f"\n===== EVENT {int(e)} =====")
+            print("Jet options for events:")
+            print(jet_mult[e])
 
-        #     print("jet_preds_tensor:")
-        #     print(jet_preds_tensor[e])
+            print("jet_preds_tensor:")
+            print(jet_preds_tensor[e])
 
-        #     print("canon_idx:")
-        #     print(canon_idx[:, e])
+            print("candidate level masking:")
+            print(cand_kpm[e])
 
-        #     print("canon_masks")
-        #     print(canon_masks[:, e])
+            # print("true_idx:")
+            # print(true_idx[:, e])
 
-        #     print("pred_truth matrix (K x B):")
-        #     print(pred_truth[e])
+            # print("canon_idx:")
+            # print(canon_idx[:, e])
 
-        #     print("class_truth row:")
-        #     print(class_truth[e])
+            # print("true_masks:")
+            # print(true_masks[:, e])
 
-        #     print("feature for selected events:")
-        #     print(features_arr[e])
+            # print("canon_masks")
+            # print(canon_masks[:, e])
 
-        #     print("candidate level masking")
-        #     print(cand_kpm[e])
+            # print("pred_truth matrix (K x B):")
+            # print(pred_truth[e])
 
-        #     print("=" * 30)
+            # print("class_truth row:")
+            # print(class_truth[e])
 
-        # raise RuntimeError("Debug break")
-    
+            print("feature for selected events:")
+            print(features_arr[e])
+
+            print("=" * 30)
+
+        raise RuntimeError("Debug break")
+
         return self._compiled_core(features_arr, pred_truth, class_truth, cand_kpm)
 
     def training_step(self, batch : Batch, batch_idx : int):
