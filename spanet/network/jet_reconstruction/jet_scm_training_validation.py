@@ -602,7 +602,10 @@ class SCM_Training_Val(JetSecondaryLoader):
         self.p_ln_classifer = options.p_ln_classifer
 
         self.i_global_classifer = options.i_global_classifer
-        self.p_global_classifer = options.p_global_classifer        
+        self.p_global_classifer = options.p_global_classifer   
+
+        self.use_x_branches = options.use_x_branches
+        self.detach_branch = options.detach_branch
 
         B    = self.options.branch_dim
         J    = self.options.jet_max_dim
@@ -678,8 +681,8 @@ class SCM_Training_Val(JetSecondaryLoader):
             prior_num_seeds           = self.p_seeds_classifer,
 
             # classifier-specific knobs
-            use_cross_from_branches   = True,   # candidate attends its own B branches
-            detach_bt                 = True    # classifier loss doesnt train branch tokens
+            use_cross_from_branches   = self.use_x_branches,
+            detach_bt                 = self.detach_branch
         )
 
         for n, p in self.named_parameters():

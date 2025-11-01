@@ -306,6 +306,9 @@ class Options(Namespace):
 
 
         # ==================== CLASSIFIER (inclusive / prior) ====================
+        self.use_x_branches:    bool = True     # candidate attends its own B branches
+        self.detach_branch:     bool = True     # classifier loss doesnt propogate to masker
+
         # Inclusive
         self.i_dim_classifer:        int   = 64         # embedding sizes (divisible by heads)
         self.inc_heads_classifer:    int   = 4          # heads
