@@ -901,25 +901,13 @@ class SCM_Training_Val(JetSecondaryLoader):
 
         one_one = torch.cat([super_true_event_idx, true_event_idx, false_event_idx])  
 
-        probe(sources[0], "sources[0]")
-        probe(jet_data, "jet_data")
         probe(jet_preds_tensor, "jet_preds_tensor")
         probe(jet_mult, "jet_mult")
         probe(cand_kpm, "cand_kpm")
-        # probe(true_idx, "true_idx")
-        # probe(true_masks, "true_masks")
-        # probe(pred_truth, "pred_truth")
-        # probe(class_truth, "class_truth")
         probe(features_arr, "features_arr")
-        probe(jet_data, "jet_data")
-        # probe(canon_idx, "canon_idx")
-        # probe(canon_masks, "canon_masks")
 
         for e in one_one:
             print(f"\n===== EVENT {int(e)} =====")
-
-            print("Jet data for events:")
-            print(jet_data[e])
 
             print("Jet options for events:")
             print(jet_mult[e])
@@ -929,24 +917,6 @@ class SCM_Training_Val(JetSecondaryLoader):
 
             print("candidate level masking:")
             print(cand_kpm[e])
-
-            # print("true_idx:")
-            # print(true_idx[:, e])
-
-            # print("canon_idx:")
-            # print(canon_idx[:, e])
-
-            # print("true_masks:")
-            # print(true_masks[:, e])
-
-            # print("canon_masks")
-            # print(canon_masks[:, e])
-
-            # print("pred_truth matrix (K x B):")
-            # print(pred_truth[e])
-
-            # print("class_truth row:")
-            # print(class_truth[e])
 
             print("feature for selected events:")
             print(features_arr[e])
