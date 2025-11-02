@@ -158,29 +158,11 @@ class JetSecondaryLoader(JetReconstructionNetwork):
             outputs = self.forward(sources)
         probe(outputs, "outputs")
 
-        score_vols = [S.to(jet_data.device) for S in outputs.assignments]   # len B
-        probe(score_vols, "score_vols")
+        scores = [S.to(jet_data.device) for S in outputs.assignments] # [B, E, J, J, J]
+        probe(scores, "scores")
 
-        marginals_per_branch = [self.slot_jet_marginals(S) for S in score_vols]
-        probe(marginals_per_branch, "marginals_per_branch")
-
-        E, K, B, p_max = jet_preds_tensor.shape
-        jet_scores_per_b = []
-        for b in range(B):
-            M = marginals_per_branch[b]               # (E, p_b, J)
-            p_b, J = M.size(1), M.size(2)
-            slot_scores = []
-            for s in range(p_b):
-                sel = jet_preds_tensor[:, :, b, s].long().clamp_(0, J-1)  # (E, K)
-                slot_scores.append(torch.gather(M[:, s, :], 1, sel))      # (E, K)
-            S_b = torch.stack(slot_scores, dim=-1)                         # (E, K, p_b)
-            # pad only if some branch had p_b < p_max (often unnecessary for t t̄ all-jets)
-            if p_b < p_max:
-                S_b = torch.nn.functional.pad(S_b, (0, p_max - p_b))
-            jet_scores_per_b.append(S_b)
-
-        jet_scores = torch.stack(jet_scores_per_b, dim=2)                  # (E, K, B, p_max)
-        probe(jet_scores, "jet_scores")
+        scores = scores.permute(1, 0)
+        probe(scores, "scores")
 
         # features_arr = torch.cat([features_arr, jet_scores.unsqueeze(-1)], dim=-1)
 
