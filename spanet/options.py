@@ -277,9 +277,24 @@ class Options(Namespace):
         self.jet_max_dim: int = 3
         self.features_dim: int = 5
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         self.prior_weight_start : float = 0.85 # higher -> early training emphasizes the prior; lower -> emphasizes inclusive early
         self.prior_weight_end : float = 0.50 # where to settle
-        self.prior_weight_epochs : int = 10 # epoch to interpolate linearly from start -> end; half of training
+        self.prior_weight_epochs : int = 15 # epoch to interpolate linearly from start -> end; half of training
 
         self.masker_weight_start : float = 0.00 # higher -> model emphasize on per-branch reco early; zero -> branch no gradient in branch head, learns nothing
         self.masker_weight_end : float = 0.15
@@ -287,53 +302,133 @@ class Options(Namespace):
 
         # ====================== MASKER (inclusive / prior) ======================
         # Inclusive
-        self.i_dim_masker:       int   = 2# 64         # embedding sizes (divisible by heads)
-        self.inc_heads_masker:   int   = 1# 4          # heads (must divide the corresponding embed dim)
-        self.i_inds_masker:      int   = 1# 8          # ISAB inducing points (landmarks)
-        self.i_isab_masker:      int   = 1# 2          # depth: ISAB blocks in the masker path
-        self.i_sab_masker:       int   = 0# 1          # depth: SAB blocks in the masker path
-        self.i_attn_masker:      float = 0.0# 0.10       # attention dropout
-        self.i_ff_masker:        float = 0.0# 0.10       # feed-forward dropout
+        self.i_dim_masker:       int   = 64         # embedding sizes (divisible by heads)
+        self.inc_heads_masker:   int   = 4          # heads (must divide the corresponding embed dim)
+        self.i_inds_masker:      int   = 8          # ISAB inducing points (landmarks)
+        self.i_isab_masker:      int   = 2          # depth: ISAB blocks in the masker path
+        self.i_sab_masker:       int   = 1          # depth: SAB blocks in the masker path
+        self.i_attn_masker:      float = 0.10       # attention dropout
+        self.i_ff_masker:        float = 0.10       # feed-forward dropout
         self.i_ln_masker:        bool  = True       # normalization
 
         # Prior
-        self.p_dim_masker:       int   = 2# 48
-        self.p_heads_masker:     int   = 1# 3
-        self.p_inds_masker:      int   = 1# 6
-        self.p_isab_masker:      int   = 1# 2
-        self.p_sab_masker:       int   = 0# 1
-        self.p_attn_masker:      float = 0.0# 0.15
-        self.p_ff_masker:        float = 0.0# 0.15
+        self.p_dim_masker:       int   = 48
+        self.p_heads_masker:     int   = 3
+        self.p_inds_masker:      int   = 6
+        self.p_isab_masker:      int   = 2
+        self.p_sab_masker:       int   = 1
+        self.p_attn_masker:      float = 0.15
+        self.p_ff_masker:        float = 0.15
         self.p_ln_masker:        bool  = True
 
 
         # ==================== CLASSIFIER (inclusive / prior) ====================
-        self.use_x_branches:    bool = False# True     # candidate attends its own B branches
-        self.detach_branch:     bool = True# True     # classifier loss doesnt propogate to masker
+        self.use_x_branches:    bool = True     # candidate attends its own B branches
+        self.detach_branch:     bool = True     # classifier loss doesnt propogate to masker
 
         # Inclusive
-        self.i_dim_classifer:        int   = 2# 64         # embedding sizes (divisible by heads)
-        self.inc_heads_classifer:    int   = 1# 4          # heads
-        self.i_inds_classifer:       int   = 1# 8          # ISAB inducing points for candidate tokens
-        self.i_isab_classifer:       int   = 1# 2          # depth on candidate tokens
-        self.i_sab_classifer:        int   = 0# 1
-        self.i_seeds_classifer:      int   = 1# 1          # PMA seeds for global event context
-        self.i_attn_classifer:       float = 0.0# 0.10       # attention dropout
-        self.i_ff_classifer:         float = 0.0# 0.10       # feed-forward dropout
+        self.i_dim_classifer:        int   = 64         # embedding sizes (divisible by heads)
+        self.inc_heads_classifer:    int   = 4          # heads
+        self.i_inds_classifer:       int   = 8          # ISAB inducing points for candidate tokens
+        self.i_isab_classifer:       int   = 2          # depth on candidate tokens
+        self.i_sab_classifer:        int   = 1
+        self.i_seeds_classifer:      int   = 1          # PMA seeds for global event context
+        self.i_attn_classifer:       float = 0.10       # attention dropout
+        self.i_ff_classifer:         float = 0.10       # feed-forward dropout
         self.i_ln_classifer:         bool  = True       # normalization
-        self.i_global_classifer:     bool  = False# True       # use global PMA context over K candidates
+        self.i_global_classifer:     bool  = True       # use global PMA context over K candidates
 
         # Prior
-        self.p_dim_classifer:        int   = 2# 48
-        self.p_heads_classifer:      int   = 1# 3
-        self.p_inds_classifer:       int   = 1# 6
-        self.p_isab_classifer:       int   = 1# 2
-        self.p_sab_classifer:        int   = 0# 1
-        self.p_seeds_classifer:      int   = 1# 1
-        self.p_attn_classifer:       float = 0.0# 0.15
-        self.p_ff_classifer:         float = 0.0# 0.15
+        self.p_dim_classifer:        int   = 48
+        self.p_heads_classifer:      int   = 3
+        self.p_inds_classifer:       int   = 6
+        self.p_isab_classifer:       int   = 2
+        self.p_sab_classifer:        int   = 1
+        self.p_seeds_classifer:      int   = 1
+        self.p_attn_classifer:       float = 0.15
+        self.p_ff_classifer:         float = 0.15
         self.p_ln_classifer:         bool  = True
-        self.p_global_classifer:     bool  = False# True
+        self.p_global_classifer:     bool  = True
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        # self.prior_weight_start : float = 0.85 # higher -> early training emphasizes the prior; lower -> emphasizes inclusive early
+        # self.prior_weight_end : float = 0.50 # where to settle
+        # self.prior_weight_epochs : int = 10 # epoch to interpolate linearly from start -> end; half of training
+
+        # self.masker_weight_start : float = 0.00 # higher -> model emphasize on per-branch reco early; zero -> branch no gradient in branch head, learns nothing
+        # self.masker_weight_end : float = 0.15
+        # self.masker_weight_epochs : int = 7 # set to 1/3 of training
+
+        # # ====================== MASKER (inclusive / prior) ======================
+        # # Inclusive
+        # self.i_dim_masker:       int   = 2# 64         # embedding sizes (divisible by heads)
+        # self.inc_heads_masker:   int   = 1# 4          # heads (must divide the corresponding embed dim)
+        # self.i_inds_masker:      int   = 1# 8          # ISAB inducing points (landmarks)
+        # self.i_isab_masker:      int   = 1# 2          # depth: ISAB blocks in the masker path
+        # self.i_sab_masker:       int   = 0# 1          # depth: SAB blocks in the masker path
+        # self.i_attn_masker:      float = 0.0# 0.10       # attention dropout
+        # self.i_ff_masker:        float = 0.0# 0.10       # feed-forward dropout
+        # self.i_ln_masker:        bool  = True       # normalization
+
+        # # Prior
+        # self.p_dim_masker:       int   = 2# 48
+        # self.p_heads_masker:     int   = 1# 3
+        # self.p_inds_masker:      int   = 1# 6
+        # self.p_isab_masker:      int   = 1# 2
+        # self.p_sab_masker:       int   = 0# 1
+        # self.p_attn_masker:      float = 0.0# 0.15
+        # self.p_ff_masker:        float = 0.0# 0.15
+        # self.p_ln_masker:        bool  = True
+
+
+        # # ==================== CLASSIFIER (inclusive / prior) ====================
+        # self.use_x_branches:    bool = False# True     # candidate attends its own B branches
+        # self.detach_branch:     bool = True# True     # classifier loss doesnt propogate to masker
+
+        # # Inclusive
+        # self.i_dim_classifer:        int   = 2# 64         # embedding sizes (divisible by heads)
+        # self.inc_heads_classifer:    int   = 1# 4          # heads
+        # self.i_inds_classifer:       int   = 1# 8          # ISAB inducing points for candidate tokens
+        # self.i_isab_classifer:       int   = 1# 2          # depth on candidate tokens
+        # self.i_sab_classifer:        int   = 0# 1
+        # self.i_seeds_classifer:      int   = 1# 1          # PMA seeds for global event context
+        # self.i_attn_classifer:       float = 0.0# 0.10       # attention dropout
+        # self.i_ff_classifer:         float = 0.0# 0.10       # feed-forward dropout
+        # self.i_ln_classifer:         bool  = True       # normalization
+        # self.i_global_classifer:     bool  = False# True       # use global PMA context over K candidates
+
+        # # Prior
+        # self.p_dim_classifer:        int   = 2# 48
+        # self.p_heads_classifer:      int   = 1# 3
+        # self.p_inds_classifer:       int   = 1# 6
+        # self.p_isab_classifer:       int   = 1# 2
+        # self.p_sab_classifer:        int   = 0# 1
+        # self.p_seeds_classifer:      int   = 1# 1
+        # self.p_attn_classifer:       float = 0.0# 0.15
+        # self.p_ff_classifer:         float = 0.0# 0.15
+        # self.p_ln_classifer:         bool  = True
+        # self.p_global_classifer:     bool  = False# True
 
 
     def display(self):
