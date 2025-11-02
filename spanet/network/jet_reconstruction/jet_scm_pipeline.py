@@ -160,6 +160,21 @@ class JetSecondaryLoader(JetReconstructionNetwork):
             outputs = self.forward(sources)
         scores = torch.stack([S.to(jet_data.device) for S in outputs.assignments], dim=1) # [E, B, J, J, J]
 
+        # scores: (E,B,J,J,J) are log-scores (masked with -inf)
+        m0 = torch.logsumexp(scores, dim=(3,4))  # (E,B,J)  slot-0 per-jet
+        m1 = torch.logsumexp(scores, dim=(2,4))  # (E,B,J)  slot-1 per-jet
+        m2 = torch.logsumexp(scores, dim=(2,3))  # (E,B,J)  slot-2 per-jet
+
+        sel0 = jet_preds_tensor[..., 0].long()   # (E,K,B)
+        sel1 = jet_preds_tensor[..., 1].long()
+        sel2 = jet_preds_tensor[..., 2].long()
+
+        g0 = torch.gather(m0, 2, sel0)           # (E,K,B)
+        g1 = torch.gather(m1, 2, sel1)           # (E,K,B)
+        g2 = torch.gather(m2, 2, sel2)           # (E,K,B)
+
+        jet_slot_scores = torch.stack([g0, g1, g2], dim=-1)  # (E,K,B,3) aligns with features_arr[..., :3]
+
         super_true_event_idx = torch.nonzero(true_masks.all(dim=0)).squeeze(1)[:2]
 
         true_event_idx = torch.nonzero(class_truth[:, 0]).squeeze(1)[:2]
@@ -181,7 +196,7 @@ class JetSecondaryLoader(JetReconstructionNetwork):
         # probe(canon_idx, "canon_idx")
         # probe(canon_masks, "canon_masks")
         probe(particle_scores, "particle_scores")
-        probe(scores, "scores")
+        probe(jet_slot_scores, "jet_slot_scores")
 
         for e in one_one:
             print(f"\n===== EVENT {int(e)} =====")
@@ -199,25 +214,25 @@ class JetSecondaryLoader(JetReconstructionNetwork):
             print(particle_scores[e])
 
             print("jet scores:")
-            print(scores[e])
+            print(jet_slot_scores[e])
 
-            # print("true_idx:")
-            # print(true_idx[:, e])
+            print("true_idx:")
+            print(true_idx[:, e])
 
-            # print("canon_idx:")
-            # print(canon_idx[:, e])
+            print("canon_idx:")
+            print(canon_idx[:, e])
 
-            # print("true_masks:")
-            # print(true_masks[:, e])
+            print("true_masks:")
+            print(true_masks[:, e])
 
-            # print("canon_masks")
-            # print(canon_masks[:, e])
+            print("canon_masks")
+            print(canon_masks[:, e])
 
-            # print("pred_truth matrix (K x B):")
-            # print(pred_truth[e])
+            print("pred_truth matrix (K x B):")
+            print(pred_truth[e])
 
-            # print("class_truth row:")
-            # print(class_truth[e])
+            print("class_truth row:")
+            print(class_truth[e])
 
             print("feature for selected events:")
             print(features_arr[e])
