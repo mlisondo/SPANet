@@ -161,7 +161,7 @@ class JetSecondaryLoader(JetReconstructionNetwork):
         score_vols = [S.to(jet_data.device) for S in outputs.assignments]   # len B
         probe(score_vols, "score_vols")
 
-        marginals_per_branch = [slot_jet_marginals(S) for S in score_vols]
+        marginals_per_branch = [self.slot_jet_marginals(S) for S in score_vols]
         probe(marginals_per_branch, "marginals_per_branch")
 
         E, K, B, p_max = jet_preds_tensor.shape
