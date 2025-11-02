@@ -156,8 +156,13 @@ class JetSecondaryLoader(JetReconstructionNetwork):
         # JET SCORES
         with torch.no_grad():
             outputs = self.forward(sources)
+        probe(outputs, "outputs")
+
         score_vols = [S.to(jet_data.device) for S in outputs.assignments]   # len B
+        probe(score_vols, "score_vols")
+
         marginals_per_branch = [slot_jet_marginals(S) for S in score_vols]
+        probe(marginals_per_branch, "marginals_per_branch")
 
         E, K, B, p_max = jet_preds_tensor.shape
         jet_scores_per_b = []
@@ -175,10 +180,6 @@ class JetSecondaryLoader(JetReconstructionNetwork):
             jet_scores_per_b.append(S_b)
 
         jet_scores = torch.stack(jet_scores_per_b, dim=2)                  # (E, K, B, p_max)
-
-        probe(outputs, "outputs")
-        probe(score_vols, "score_vols")
-        probe(marginals_per_branch, "marginals_per_branch")
         probe(jet_scores, "jet_scores")
 
         # features_arr = torch.cat([features_arr, jet_scores.unsqueeze(-1)], dim=-1)
