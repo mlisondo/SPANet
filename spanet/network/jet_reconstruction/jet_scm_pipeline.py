@@ -39,48 +39,27 @@ class JetSecondaryLoader(JetReconstructionNetwork):
         eq      = (pred_e == truth_e) | (~valid)                      # (E,P,K,B,p)
         pred_truth_all = eq.all(dim=-1)                               # (E,P,K,B) bool
     
-
-        # # =================== REPLACE ===================
-        # # Scores per perm and (E,K)
-        # score = (pred_truth_all & mask_perm.unsqueeze(2)).sum(dim=-1) # (E,P,K) int64
-    
-        # # For each (E,K): first permutation index achieving the max score
-        # best_score_e_k, _ = score.max(dim=1)                          # (E,K)
-        # first_is_max = (score == best_score_e_k.unsqueeze(1))         # (E,P,K)
-        # idx_first = first_is_max.int().argmax(dim=1)                  # (E,K) earliest index with max
-    
-        # # Event-level permutation used for best_truth/mask:
-        # # choose the permutation whose "first-hit" index is latest across K
-        # idx_event = idx_first.max(dim=-1).values                      # (E,)
-    
-        # # Outputs
-        # best_truth = truth_perm[torch.arange(E, device=device), idx_event]  # (E,B,p)
-        # best_mask  = mask_perm[ torch.arange(E, device=device), idx_event]  # (E,B)
-    
-        # # best_pred_truth per K at that K's own best permutation
-        # gather_idx = idx_first.view(E, 1, K, 1).expand(-1, 1, -1, pred_truth_all.size(-1))
-        # best_pred_truth = pred_truth_all.gather(dim=1, index=gather_idx).squeeze(1)  # (E,K,B)
-    
-        # return best_truth, best_mask, best_pred_truth
-
-        # # =================== NEW ===================
         # Scores per perm and (E,K)
-        score = (pred_truth_all & mask_perm.unsqueeze(2)).sum(dim=-1)   # (E,P,K)
-
-        # Choose ONE canonical permutation per event: maximize total matched valid branches across all K
-        score_sum = score.sum(dim=-1)                                   # (E,P)
-        idx_event = score_sum.argmax(dim=1)                             # (E,)
-
-        # Canonicalized truth/mask for the event
+        score = (pred_truth_all & mask_perm.unsqueeze(2)).sum(dim=-1) # (E,P,K) int64
+    
+        # For each (E,K): first permutation index achieving the max score
+        best_score_e_k, _ = score.max(dim=1)                          # (E,K)
+        first_is_max = (score == best_score_e_k.unsqueeze(1))         # (E,P,K)
+        idx_first = first_is_max.int().argmax(dim=1)                  # (E,K) earliest index with max
+    
+        # Event-level permutation used for best_truth/mask:
+        # choose the permutation whose "first-hit" index is latest across K
+        idx_event = idx_first.max(dim=-1).values                      # (E,)
+    
+        # Outputs
         best_truth = truth_perm[torch.arange(E, device=device), idx_event]  # (E,B,p)
         best_mask  = mask_perm[ torch.arange(E, device=device), idx_event]  # (E,B)
-
-        # Pred-branch matches evaluated at that SAME canonical permutation for all K
-        gather_idx_event = idx_event.view(E, 1, 1, 1).expand(-1, 1, K, pred_truth_all.size(-1))  # (E,1,K,B)
-        pred_truth_canon = pred_truth_all.gather(dim=1, index=gather_idx_event).squeeze(1)       # (E,K,B)
-
-        return best_truth, best_mask, pred_truth_canon
-
+    
+        # best_pred_truth per K at that K's own best permutation
+        gather_idx = idx_first.view(E, 1, K, 1).expand(-1, 1, -1, pred_truth_all.size(-1))
+        best_pred_truth = pred_truth_all.gather(dim=1, index=gather_idx).squeeze(1)  # (E,K,B)
+    
+        return best_truth, best_mask, best_pred_truth
     
     @torch.compile(dynamic=True)
     def _topk_core(
@@ -118,19 +97,11 @@ class JetSecondaryLoader(JetReconstructionNetwork):
             dim=1, index=flat_idx.unsqueeze(-1).expand(-1, -1, Fdim)
         ).view(E, K, B, p_max, Fdim)
 
-        # # =================== REPLACE ===================
-        # # Step 4: Derive class-level truth from branch match and mask
-        # has_rec     = canon_masks.any(dim=1, keepdim=True)                 # (E, 1)
-        # mask_exp    = canon_masks.unsqueeze(1)                             # (E, 1, B)
-        # branch_ok   = (pred_truth == mask_exp).all(dim=2)                  # (E, K)
-        # class_truth = branch_ok & has_rec.expand_as(branch_ok)            # (E, K)
-
-        # # =================== NEW ===================
-        has_rec  = canon_masks.any(dim=1, keepdim=True)              # (E,1)
-        mask_exp = canon_masks.unsqueeze(1)                          # (E,1,B)
-        # Require correctness only where the branch is reconstructable; ignore invalid branches
-        strict_branch = torch.where(mask_exp, pred_truth, torch.ones_like(pred_truth, dtype=torch.bool))
-        class_truth   = strict_branch.all(dim=2) & has_rec.expand_as(strict_branch.all(dim=2))
+        # Step 4: Derive class-level truth from branch match and mask
+        has_rec     = canon_masks.any(dim=1, keepdim=True)                 # (E, 1)
+        mask_exp    = canon_masks.unsqueeze(1)                             # (E, 1, B)
+        branch_ok   = (pred_truth == mask_exp).all(dim=2)                  # (E, K)
+        class_truth = branch_ok & has_rec.expand_as(branch_ok)            # (E, K)
 
         return pred_truth, class_truth, features_arr, canon_idx, canon_masks
 
