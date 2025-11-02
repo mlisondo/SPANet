@@ -342,66 +342,66 @@ class Options(Namespace):
 
 
 
-# =======================================================================================
+=======================================================================================
 
-    # # ================================================== ARCH A ==================================================
-    # # Baseline/fast reference. Cross-branch ON, detach ON. Balanced schedules.
-    #     # ---- schedules (~ 30 epochs) ----
-    #     self.prior_weight_start  = 0.85
-    #     self.prior_weight_end    = 0.50
-    #     self.prior_weight_epochs = 15
-    #     self.masker_weight_start = 0.00
-    #     self.masker_weight_end   = 0.15
-    #     self.masker_weight_epochs= 7
+    # ================================================== ARCH A ==================================================
+    # Baseline/fast reference. Cross-branch ON, detach ON. Balanced schedules.
+        # ---- schedules (~ 30 epochs) ----
+        self.prior_weight_start  = 0.85
+        self.prior_weight_end    = 0.50
+        self.prior_weight_epochs = 15
+        self.masker_weight_start = 0.00
+        self.masker_weight_end   = 0.15
+        self.masker_weight_epochs= 7
 
-    #     # ====================== MASKER (inclusive / prior) ======================
-    #     # Inclusive
-    #     self.i_dim_masker     = 64
-    #     self.inc_heads_masker = 4
-    #     self.i_inds_masker    = 8
-    #     self.i_isab_masker    = 2
-    #     self.i_sab_masker     = 1
-    #     self.i_attn_masker    = 0.10
-    #     self.i_ff_masker      = 0.10
-    #     self.i_ln_masker      = True
+        # ====================== MASKER (inclusive / prior) ======================
+        # Inclusive
+        self.i_dim_masker     = 64
+        self.inc_heads_masker = 4
+        self.i_inds_masker    = 8
+        self.i_isab_masker    = 2
+        self.i_sab_masker     = 1
+        self.i_attn_masker    = 0.10
+        self.i_ff_masker      = 0.10
+        self.i_ln_masker      = True
 
-    #     # Prior
-    #     self.p_dim_masker     = 48
-    #     self.p_heads_masker   = 3
-    #     self.p_inds_masker    = 6
-    #     self.p_isab_masker    = 2
-    #     self.p_sab_masker     = 1
-    #     self.p_attn_masker    = 0.15
-    #     self.p_ff_masker      = 0.15
-    #     self.p_ln_masker      = True
+        # Prior
+        self.p_dim_masker     = 48
+        self.p_heads_masker   = 3
+        self.p_inds_masker    = 6
+        self.p_isab_masker    = 2
+        self.p_sab_masker     = 1
+        self.p_attn_masker    = 0.15
+        self.p_ff_masker      = 0.15
+        self.p_ln_masker      = True
 
-    #     # ==================== CLASSIFIER (inclusive / prior) ====================
-    #     self.use_x_branches = True
-    #     self.detach_branch  = True
+        # ==================== CLASSIFIER (inclusive / prior) ====================
+        self.use_x_branches = True
+        self.detach_branch  = True
 
-    #     # Inclusive
-    #     self.i_dim_classifer      = 64
-    #     self.inc_heads_classifer  = 4
-    #     self.i_inds_classifer     = 8
-    #     self.i_isab_classifer     = 2
-    #     self.i_sab_classifer      = 1
-    #     self.i_seeds_classifer    = 1   # PMA seeds = 1
-    #     self.i_attn_classifer     = 0.10
-    #     self.i_ff_classifer       = 0.10
-    #     self.i_ln_classifer       = True
-    #     self.i_global_classifer   = True
+        # Inclusive
+        self.i_dim_classifer      = 64
+        self.inc_heads_classifer  = 4
+        self.i_inds_classifer     = 8
+        self.i_isab_classifer     = 2
+        self.i_sab_classifer      = 1
+        self.i_seeds_classifer    = 1   # PMA seeds = 1
+        self.i_attn_classifer     = 0.10
+        self.i_ff_classifer       = 0.10
+        self.i_ln_classifer       = True
+        self.i_global_classifer   = True
 
-    #     # Prior
-    #     self.p_dim_classifer      = 48
-    #     self.p_heads_classifer    = 3
-    #     self.p_inds_classifer     = 6
-    #     self.p_isab_classifer     = 2
-    #     self.p_sab_classifer      = 1
-    #     self.p_seeds_classifer    = 1   # PMA seeds = 1
-    #     self.p_attn_classifer     = 0.15
-    #     self.p_ff_classifer       = 0.15
-    #     self.p_ln_classifer       = True
-    #     self.p_global_classifer   = True
+        # Prior
+        self.p_dim_classifer      = 48
+        self.p_heads_classifer    = 3
+        self.p_inds_classifer     = 6
+        self.p_isab_classifer     = 2
+        self.p_sab_classifer      = 1
+        self.p_seeds_classifer    = 1   # PMA seeds = 1
+        self.p_attn_classifer     = 0.15
+        self.p_ff_classifer       = 0.15
+        self.p_ln_classifer       = True
+        self.p_global_classifer   = True
 
 
     # # ================================================= ARCH B ==================================================
@@ -819,62 +819,62 @@ class Options(Namespace):
 
 
 
-    # ================================================== ARCH I ==================================================
-    # Deep SAB after pooling @ ~40 epochs. Tests whether post-PMA depth boosts candidate reasoning.
-        # ---- schedules (~40 epochs) ----
-        self.prior_weight_start  = 0.78
-        self.prior_weight_end    = 0.50
-        self.prior_weight_epochs = 18
-        self.masker_weight_start = 0.00
-        self.masker_weight_end   = 0.22
-        self.masker_weight_epochs= 12
+    # # ================================================== ARCH I ==================================================
+    # # Deep SAB after pooling @ ~40 epochs. Tests whether post-PMA depth boosts candidate reasoning.
+    #     # ---- schedules (~40 epochs) ----
+    #     self.prior_weight_start  = 0.78
+    #     self.prior_weight_end    = 0.50
+    #     self.prior_weight_epochs = 18
+    #     self.masker_weight_start = 0.00
+    #     self.masker_weight_end   = 0.22
+    #     self.masker_weight_epochs= 12
 
-        # ====================== MASKER ======================
-        # Inclusive
-        self.i_dim_masker     = 96
-        self.inc_heads_masker = 6
-        self.i_inds_masker    = 14
-        self.i_isab_masker    = 2
-        self.i_sab_masker     = 3   # deeper SAB
-        self.i_attn_masker    = 0.10
-        self.i_ff_masker      = 0.10
-        self.i_ln_masker      = True
-        # Prior
-        self.p_dim_masker     = 72
-        self.p_heads_masker   = 6
-        self.p_inds_masker    = 12
-        self.p_isab_masker    = 2
-        self.p_sab_masker     = 3   # deeper SAB
-        self.p_attn_masker    = 0.10
-        self.p_ff_masker      = 0.10
-        self.p_ln_masker      = True
+    #     # ====================== MASKER ======================
+    #     # Inclusive
+    #     self.i_dim_masker     = 96
+    #     self.inc_heads_masker = 6
+    #     self.i_inds_masker    = 14
+    #     self.i_isab_masker    = 2
+    #     self.i_sab_masker     = 3   # deeper SAB
+    #     self.i_attn_masker    = 0.10
+    #     self.i_ff_masker      = 0.10
+    #     self.i_ln_masker      = True
+    #     # Prior
+    #     self.p_dim_masker     = 72
+    #     self.p_heads_masker   = 6
+    #     self.p_inds_masker    = 12
+    #     self.p_isab_masker    = 2
+    #     self.p_sab_masker     = 3   # deeper SAB
+    #     self.p_attn_masker    = 0.10
+    #     self.p_ff_masker      = 0.10
+    #     self.p_ln_masker      = True
 
-        # ==================== CLASSIFIER ====================
-        self.use_x_branches = True
-        self.detach_branch  = False  # let deeper reasoning influence branches
+    #     # ==================== CLASSIFIER ====================
+    #     self.use_x_branches = True
+    #     self.detach_branch  = False  # let deeper reasoning influence branches
 
-        # Inclusive
-        self.i_dim_classifer      = 96
-        self.inc_heads_classifer  = 6
-        self.i_inds_classifer     = 14
-        self.i_isab_classifer     = 2
-        self.i_sab_classifer      = 3   # deeper SAB
-        self.i_seeds_classifer    = 1
-        self.i_attn_classifer     = 0.10
-        self.i_ff_classifer       = 0.10
-        self.i_ln_classifer       = True
-        self.i_global_classifer   = True
-        # Prior
-        self.p_dim_classifer      = 72
-        self.p_heads_classifer    = 6
-        self.p_inds_classifer     = 12
-        self.p_isab_classifer     = 2
-        self.p_sab_classifer      = 3   # deeper SAB
-        self.p_seeds_classifer    = 1
-        self.p_attn_classifer     = 0.10
-        self.p_ff_classifer       = 0.10
-        self.p_ln_classifer       = True
-        self.p_global_classifer   = True
+    #     # Inclusive
+    #     self.i_dim_classifer      = 96
+    #     self.inc_heads_classifer  = 6
+    #     self.i_inds_classifer     = 14
+    #     self.i_isab_classifer     = 2
+    #     self.i_sab_classifer      = 3   # deeper SAB
+    #     self.i_seeds_classifer    = 1
+    #     self.i_attn_classifer     = 0.10
+    #     self.i_ff_classifer       = 0.10
+    #     self.i_ln_classifer       = True
+    #     self.i_global_classifer   = True
+    #     # Prior
+    #     self.p_dim_classifer      = 72
+    #     self.p_heads_classifer    = 6
+    #     self.p_inds_classifer     = 12
+    #     self.p_isab_classifer     = 2
+    #     self.p_sab_classifer      = 3   # deeper SAB
+    #     self.p_seeds_classifer    = 1
+    #     self.p_attn_classifer     = 0.10
+    #     self.p_ff_classifer       = 0.10
+    #     self.p_ln_classifer       = True
+    #     self.p_global_classifer   = True
 
 
 
