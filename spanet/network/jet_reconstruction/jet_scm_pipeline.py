@@ -158,10 +158,7 @@ class JetSecondaryLoader(JetReconstructionNetwork):
             outputs = self.forward(sources)
         probe(outputs, "outputs")
 
-        scores = [S.to(jet_data.device) for S in outputs.assignments] # [B, E, J, J, J]
-        probe(scores, "scores")
-
-        scores = scores.permute(1, 0)
+        scores = torch.stack([S.to(jet_data.device) for S in outputs.assignments], dim=1) # [E, B, J, J, J]
         probe(scores, "scores")
 
         # features_arr = torch.cat([features_arr, jet_scores.unsqueeze(-1)], dim=-1)
