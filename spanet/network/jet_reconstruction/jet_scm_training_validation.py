@@ -76,7 +76,7 @@ class MAB(nn.Module):
             nn.Linear(4*dim_V, dim_V), nn.Dropout(ff_drop),
         )
 
-        self.attn_gate = nn.Parameter(torch.tensor(0.1))
+        self.attn_gate = nn.Parameter(torch.tensor(1.0))
 
     def forward(self, Q, K, key_padding_mask : Optional[Tensor] = None) -> Tensor:
 
@@ -478,7 +478,7 @@ class CandidateSetEncoder(nn.Module):
         if self.inclusive_use_global_context: # give every candidate the same event-level summary built from all candidates, then add it to each candidate
             global_inclusive = self.inclusive_global_pma(inclusive_ct, key_padding_mask = candidate_kpm_inclusive).squeeze(1) # (EK, 1, inclusive_embed_dim).squeeze -> (EK, inclusive_embed_dim)
 
-            # Note: IF THIS LINE ERRORES OUT, ITS BECAUSE PMA_seed IS SET TO SOMETHING GREATER THAN 1, CHECK options.py *_seeds_classifer
+            # Note: IF THIS LINE ERRORES OUT, ITS BECAUSE r IS SET TO SOMETHING GREATER THAN 1, CHECK options.py *_seeds_classifer
             inclusive_ct = inclusive_ct + global_inclusive.unsqueeze(1) # unsqueeze (EK, 1, D); broadcasts across K when added; (E, K, D) 
         else:
             global_inclusive = None
@@ -559,7 +559,7 @@ class SCM_Training_Val(JetSecondaryLoader):
 
         # New transformer config with sensible defaults if missing
         # masker
-        self.i_dim_masker = options.i_dim_masker
+        self.i_dim_masker = options.i_dim_masker # both models expect the same dim
         self.p_dim_masker = options.p_dim_masker
 
         self.inc_heads_masker = options.inc_heads_masker
@@ -669,7 +669,7 @@ class SCM_Training_Val(JetSecondaryLoader):
         # ============================== CLASSIFIER ==============================
         self.classifier = CandidateSetEncoder(
             # must match maskers per-candidate token dims
-            inclusive_embed_dim       = self.i_dim_classifer,
+            inclusive_embed_dim       = self.i_dim_classifer, # NOTE:  # both models expect the same dim
             prior_embed_dim           = self.p_dim_classifer,
 
             # attention heads
@@ -814,19 +814,6 @@ class SCM_Training_Val(JetSecondaryLoader):
 
         return loss, has_truth, num_pos, ce_baseline
 
-    @staticmethod
-    def listwise_softmax_ce(logits, truth, valid_mask):
-        TEMP = 2.0 # >1 flattens; set 1.0 to disable
-        neg_inf = torch.finfo(logits.dtype).min
-        masked = logits.masked_fill(~valid_mask, neg_inf) / TEMP
-        logp = torch.log_softmax(masked, dim = 1)
-        pos = (truth.bool() & valid_mask).to(logits.dtype)
-        Z = pos.sum(dim = 1, keepdim = True).clamp_min(1)
-        target = pos / Z
-        has_pos = pos.any(dim = 1)
-        loss_vec = -(target * logp).sum(dim = 1)
-        return loss_vec[has_pos].mean() if has_pos.any() else torch.zeros((), device = logits.device, dtype = loss_vec.dtype)
-
     def _compiled_core(self, features_arr, pred_truth, class_truth, cand_keep, cand_kpm : Optional[Tensor] = None, branch_kpm : Optional[Tensor] = None, jet_kpm : Optional[Tensor] = None):
         N, K, B, J, Fdim = features_arr.shape
 
@@ -849,17 +836,15 @@ class SCM_Training_Val(JetSecondaryLoader):
         #       necessary : inclusive_bt, prior_bt, inclusive_ct, prior_ct
         #       optional  : branch_kpm_inclusive, branch_kpm_prior, candidate_kpm_inclusive, candidate_kpm_prior
 
-        ce_loss_inclusive, has_truth, num_pos, ce_baseline_inclusive = self.multi_positive_ce(inclusive_logits, class_truth, valid_mask = cand_keep)
-        ce_rank_inclusice = self.listwise_softmax_ce(inclusive_logits, class_truth, valid_mask = cand_keep)
+        inclusive_class_loss, has_truth, num_pos, ce_baseline_inclusive = self.multi_positive_ce(inclusive_logits, class_truth, valid_mask = cand_keep)
 
-        ce_loss_prior, _, _, ce_baseline_prior = self.multi_positive_ce(prior_logits, class_truth, valid_mask = cand_keep)
-        ce_rank_prior = self.listwise_softmax_ce(prior_logits, class_truth, valid_mask = cand_keep)
+        prior_class_loss, _, _, ce_baseline_prior = self.multi_positive_ce(prior_logits, class_truth, valid_mask = cand_keep)
 
         rows = torch.arange(N, device = inclusive_logits.device)
-        inclusive_class_loss = ce_loss_inclusive + ce_rank_inclusice
-        prior_class_loss = ce_loss_prior + ce_rank_prior
 
-        pred_k = inclusive_logits.argmax(dim=1) # should i do a seperate one for prior ?
+        neg_inf = torch.finfo(inclusive_logits.dtype).min
+        masked_inclusive = inclusive_logits.masked_fill(~cand_keep, neg_inf)
+        pred_k = masked_inclusive.argmax(dim=1)
 
         top1_acc_truth = torch.tensor(0., device = inclusive_logits.device)
         num_pos_mean = num_pos.float().mean()

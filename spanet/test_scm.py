@@ -19,15 +19,15 @@ def classifier_metrics(
     class_truth : np.ndarray,           # (E, K)
     class_logits: np.ndarray,           # (E, K)
     k           : int,
-    valid_mask  : Optional[np.ndarray] = None      # (E,)
+    cand_keep  : Optional[np.ndarray] = None      # (E,)
     ) -> Dict[str, float]:
     E, K = class_logits.shape
-    if valid_mask is None:
-        valid_mask = np.ones(E, dtype=bool)
+    if cand_keep is None:
+        cand_keep = np.ones(E, dtype=bool)
 
     # Eligibility mask: events that actually contain at least 1 positive label
     has_truth = class_truth.any(axis=1)
-    keep      = has_truth & valid_mask
+    keep      = has_truth & cand_keep
     if not keep.any():
         nan = float("nan")
         return {
@@ -83,87 +83,89 @@ def masker_metrics(mask_prob : np.ndarray,
 
 # ------------------------------------------------------------------ JOINT
 def joint_metrics(class_truth  : np.ndarray,        # (E, K)
-                  class_pred   : np.ndarray,        # (E,) classifier hypothesis index
+                  class_pred   : np.ndarray,        # (E,)
                   mask_pred    : np.ndarray,        # (E, K, B)
                   pred_truth   : np.ndarray,        # (E, K, B)
-                  true_masks   : np.ndarray         # (E, B)
+                  true_masks   : np.ndarray         # (E, B) unused
     ) -> Dict[str, float]:
     E, K, B = mask_pred.shape
+    rows = np.arange(E)
 
-    # Reconstruction categorization
-    branch_valid_count = true_masks.sum(axis=1)
-    is_full_reco       = (branch_valid_count == B)
-    is_partial_reco    = (branch_valid_count > 0) & (branch_valid_count < B)
-    n_full_reco    = is_full_reco.sum()
-    n_partial_reco = is_partial_reco.sum()
-    
-    # METRICS: every branch (valid or not) must match the ground-truth mask
-    correct_hypothesis = class_truth[np.arange(E), class_pred] == 1
-    mask_chosen  = mask_pred[np.arange(E), class_pred]   # (E, B)
-    correct_mask = np.all(mask_chosen == true_masks, axis=1)
+    # ---------------- eligibility from pred_truth ----------------
+    pt_best  = pred_truth.max(axis=1)        # (E, B): any candidate gets branch right
+    counts   = pt_best.sum(axis=1)           # (E,)
+    is_full_reco    = (counts == B)          # full achievable via some hypothesis
+    is_partial_reco = (counts > 0) & (counts < B)
+    n_full_reco, n_partial_reco = int(is_full_reco.sum()), int(is_partial_reco.sum())
+
+    # ---------------- classifier correctness ----------------
+    correct_hypothesis = (class_truth[rows, class_pred] == 1)
+
+    # ---------------- mask correctness vs pred_truth row ----------------
+    mask_chosen   = mask_pred[rows, class_pred]                # (E, B)
+    target_pt_row = pred_truth[rows, class_pred]               # (E, B)
+    correct_mask  = np.all(mask_chosen == target_pt_row, axis=1)
+
+    # ---------------- base comparison also vs pred_truth  --------
     correct_base_mask = np.all(mask_pred[:, -1] == pred_truth[:, -1], axis=1)
-    correct_both = correct_hypothesis & correct_mask
 
-    correct_hypothesis_base = class_truth[np.arange(E), -1] == 1
-    correct_both_base = correct_hypothesis_base & correct_base_mask
+    correct_both        = correct_hypothesis & correct_mask
+    correct_hypothesis_base = (class_truth[rows, -1] == 1)
+    correct_both_base   = correct_hypothesis_base & correct_base_mask
+
     truth_available = np.any(class_truth, axis=1)
 
-    event_eff        = correct_both[is_full_reco].mean()         if n_full_reco else float('nan')
-    partial_eff      = correct_both[is_partial_reco].mean()      if n_partial_reco else float('nan')
-    event_eff_no_mask   = correct_hypothesis[is_full_reco].mean()    if n_full_reco else float('nan')
-    partial_eff_no_mask = correct_hypothesis[is_partial_reco].mean() if n_partial_reco else float('nan')
+    event_eff            = correct_both[is_full_reco].mean()            if n_full_reco    else float('nan')
+    partial_eff          = correct_both[is_partial_reco].mean()         if n_partial_reco else float('nan')
+    event_eff_no_mask    = correct_hypothesis[is_full_reco].mean()      if n_full_reco    else float('nan')
+    partial_eff_no_mask  = correct_hypothesis[is_partial_reco].mean()   if n_partial_reco else float('nan')
 
-    event_eff_base        = correct_both_base[is_full_reco].mean()         if n_full_reco else float('nan')
-    partial_eff_base      = correct_both_base[is_partial_reco].mean()      if n_partial_reco else float('nan')
-    event_eff_no_mask_base   = correct_hypothesis_base[is_full_reco].mean()    if n_full_reco else float('nan')
-    partial_eff_no_mask_base = correct_hypothesis_base[is_partial_reco].mean() if n_partial_reco else float('nan')
-    event_eff_no_mask_base_max   = truth_available[is_full_reco].mean()    if n_full_reco else float('nan')
-    partial_eff_no_mask_base_max = truth_available[is_partial_reco].mean() if n_partial_reco else float('nan')
+    event_eff_base            = correct_both_base[is_full_reco].mean()         if n_full_reco    else float('nan')
+    partial_eff_base          = correct_both_base[is_partial_reco].mean()      if n_partial_reco else float('nan')
+    event_eff_no_mask_base    = correct_hypothesis_base[is_full_reco].mean()   if n_full_reco    else float('nan')
+    partial_eff_no_mask_base  = correct_hypothesis_base[is_partial_reco].mean()if n_partial_reco else float('nan')
+
+    # upper bounds the same (based on truth availability)
+    event_eff_no_mask_base_max    = truth_available[is_full_reco].mean()    if n_full_reco    else float('nan')
+    partial_eff_no_mask_base_max  = truth_available[is_partial_reco].mean() if n_partial_reco else float('nan')
 
     return {
-        "event_eff"        : float(event_eff),
-        "partial_eff"      : float(partial_eff),
-        "event_eff_no_mask"   : float(event_eff_no_mask),
-        "partial_eff_no_mask" : float(partial_eff_no_mask),
-        "event_eff_base"         : float(event_eff_base),
-        "partial_eff_base"       : float(partial_eff_base),
-        "event_eff_no_mask_base"    : float(event_eff_no_mask_base),
-        "partial_eff_no_mask_base"  : float(partial_eff_no_mask_base),
-        "event_eff_no_mask_base_max"    : float(event_eff_no_mask_base_max),
-        "partial_eff_no_mask_base_max"  : float(partial_eff_no_mask_base_max),
-        "_n_full_eligible"    : int(n_full_reco),
-        "_n_partial_eligible" : int(n_partial_reco),
+        "event_eff": float(event_eff),
+        "partial_eff": float(partial_eff),
+        "event_eff_no_mask": float(event_eff_no_mask),
+        "partial_eff_no_mask": float(partial_eff_no_mask),
+        "event_eff_base": float(event_eff_base),
+        "partial_eff_base": float(partial_eff_base),
+        "event_eff_no_mask_base": float(event_eff_no_mask_base),
+        "partial_eff_no_mask_base": float(partial_eff_no_mask_base),
+        "event_eff_no_mask_base_max": float(event_eff_no_mask_base_max),
+        "partial_eff_no_mask_base_max": float(partial_eff_no_mask_base_max),
+        "_n_full_eligible": n_full_reco,
+        "_n_partial_eligible": n_partial_reco,
     }
 
 # ------------------------------------------------------------------ REAL
 def strict_metric(class_truth  : np.ndarray,        # (E, K)
-                  class_pred   : np.ndarray,        # (E,)   SCM‑chosen hypothesis index
+                  class_pred   : np.ndarray,        # (E,)
                   mask_pred    : np.ndarray,        # (E, K, B)
-                  pred_truth   : np.ndarray,        # (E, K, B)  branch‑level truth match flags
-                  true_masks   : np.ndarray         # (E, B)     “reconstructable” mask
+                  pred_truth   : np.ndarray,        # (E, K, B)
+                  true_masks   : np.ndarray         # (E, B)  # unused
     ) -> Dict[str, float]:
-    """
-    real_event_eff         - SCM:  all branches AND mask exactly match ground truth
-    real_event_eff_base    - SPANet baseline (index K-1) under the same strict rule
-    """
     E, K, B = mask_pred.shape
-    base_k  = K - 1
-    # strict correctness for SCM-chosen hypothesis
-    scm_all_branches_ok = np.all(pred_truth[np.arange(E), class_pred] == true_masks, axis=1)
-    scm_mask_ok         = np.all(mask_pred[np.arange(E), class_pred]  == true_masks, axis=1)
-    strict_scm_correct  = scm_all_branches_ok & scm_mask_ok         # (E,)
+    rows = np.arange(E)
+    base_k = K - 1
 
-    # 2.  Strict correctness for SPANet baseline (hypothesis K-1) ------------
-    base_all_branches_ok = np.all(pred_truth[:, base_k] == true_masks, axis=1)
-    base_mask_ok         = np.all(mask_pred[:, base_k]  == true_masks, axis=1)
-    strict_base_correct  = base_all_branches_ok & base_mask_ok        # (E,)
-
-    real_event_eff       = strict_scm_correct.mean()   if E else float("nan")
-    real_event_eff_base  = strict_base_correct.mean()  if E else float("nan")
+    # strict -> mask == pred_truth for the chosen hypothesis
+    scm_ok  = (class_truth[rows, class_pred] == 1) & np.all(
+        mask_pred[rows, class_pred] == pred_truth[rows, class_pred], axis=1
+    )
+    base_ok = (class_truth[:, base_k] == 1) & np.all(
+        mask_pred[:, base_k] == pred_truth[:, base_k], axis=1
+    )
 
     return {
-        "real_event_eff"       : float(real_event_eff),
-        "real_event_eff_base"  : float(real_event_eff_base),
+        "real_event_eff": float(scm_ok.mean()  if E else float('nan')),
+        "real_event_eff_base": float(base_ok.mean() if E else float('nan')),
     }
 
 
@@ -250,13 +252,13 @@ def main(
         _PCL  = PCL[chosen];  _PCPd = PCPd[chosen]
         _PMP  = PMP[chosen];  _PMPd = PMPd[chosen]
 
-        # --- Classifier ---
-        m_cls = classifier_metrics(_CT, _CL, model.options.k, valid_mask=_RV)
-        metrics.update({f"{tag}/{k}": v for k, v in m_cls.items()})
-        m_cls = classifier_metrics(_CT, _ICL, model.options.k, valid_mask=_RV)
-        metrics.update({f"INCLUSIVE/{tag}/{k}": v for k, v in m_cls.items()})
-        m_cls = classifier_metrics(_CT, _PCL, model.options.k, valid_mask=_RV)
-        metrics.update({f"PRIOR/{tag}/{k}": v for k, v in m_cls.items()})
+        # # --- Classifier ---
+        # m_cls = classifier_metrics(_CT, _CL, model.options.k, cand_keep=_RV)
+        # metrics.update({f"{tag}/{k}": v for k, v in m_cls.items()})
+        # m_cls = classifier_metrics(_CT, _ICL, model.options.k, cand_keep=_RV)
+        # metrics.update({f"INCLUSIVE/{tag}/{k}": v for k, v in m_cls.items()})
+        # m_cls = classifier_metrics(_CT, _PCL, model.options.k, cand_keep=_RV)
+        # metrics.update({f"PRIOR/{tag}/{k}": v for k, v in m_cls.items()})
 
         # --- Masker ---
         m_mask = masker_metrics(_MP, _MPd, _PT)
