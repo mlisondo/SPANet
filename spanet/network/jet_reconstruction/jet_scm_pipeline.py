@@ -112,6 +112,16 @@ class JetSecondaryLoader(JetReconstructionNetwork):
         jet_mult = sources[0][1]  # (E,Njets) bool  for ttbar (Njets) = 10, true if jet is valid
     
         raw_preds, particle_scores, *_ = self.predict(sources)  # list[B] of (E,K,p_i)
+
+        probe(batch, "batch")
+        probe(sources, "sources")
+        probe(targets, "targets")
+        probe(jet_data, "jet_data")
+        probe(jet_mult, "jet_mult")
+        probe(self.predict(sources), "self.predict(sources)")
+        probe(raw_preds, "raw_preds")
+        probe(particle_scores, "particle_scores")
+
         jet_preds_tensor = torch.stack(
             [torch.as_tensor(p, device=jet_data.device).permute(0, 2, 1)
              for p in raw_preds],
@@ -128,12 +138,23 @@ class JetSecondaryLoader(JetReconstructionNetwork):
     
         true_idx   = torch.stack(true_idx)   # (B,E,p_max)
         true_masks = torch.stack(true_masks) # (B,E)
+
+        probe(jet_preds_tensor, "jet_preds_tensor")
+        probe(p_max, "p_max")
+        probe(true_idx, "true_idx")
+        probe(true_masks, "true_masks")
     
         pred_truth, class_truth, features_arr, canon_idx, canon_masks = self._topk_core(
             jet_data, jet_preds_tensor, true_idx, true_masks
         )
         canon_idx = canon_idx.permute(1, 0, 2)
         canon_masks = canon_masks.permute(1, 0)
+
+        probe(pred_truth, "pred_truth")
+        probe(class_truth, "class_truth")
+        probe(features_arr, "features_arr")
+        probe(canon_idx, "canon_idx")
+        probe(canon_masks, "canon_masks")
 
         super_true_event_idx = torch.nonzero(true_masks.all(dim=0)).squeeze(1)[:2]
 
@@ -155,8 +176,7 @@ class JetSecondaryLoader(JetReconstructionNetwork):
         # probe(jet_data, "jet_data")
         # # probe(canon_idx, "canon_idx")
         # # probe(canon_masks, "canon_masks")
-
-        probe(particle_scores, "particle_scores")
+        # probe(particle_scores, "particle_scores")
 
         # for e in one_one:
         #     print(f"\n===== EVENT {int(e)} =====")
