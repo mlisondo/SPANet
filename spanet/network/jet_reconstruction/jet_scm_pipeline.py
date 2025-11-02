@@ -12,6 +12,23 @@ class JetSecondaryLoader(JetReconstructionNetwork):
         self.evaluator = SymmetricEvaluator(self.training_dataset.event_info)
         self.options = options
 
+    def slot_jet_marginals(S: torch.Tensor, eps: float = 1e-12) -> torch.Tensor:
+        """
+        S: (E, J, J, ..., J)  # p slot axes after batch dim
+        returns (E, p, J)     # per-slot, per-jet 'jet_scores'
+        """
+        p = S.dim() - 1
+        # Detect probs vs logits; convert probs -> log for stable logsumexp
+        if S.min() >= 0 and S.max() <= 1.0001:
+            Slog = S.clamp_min(eps).log()
+        else:
+            Slog = S
+        outs = []
+        for s in range(p):
+            reduce_dims = tuple(1 + d for d in range(p) if d != s)
+            outs.append(torch.logsumexp(Slog, dim=reduce_dims))  # (E, J)
+        return torch.stack(outs, dim=1)  # (E, p, J)
+
     @torch.no_grad()
     def best_truth_permutation_vectorized(
         self,
@@ -113,15 +130,6 @@ class JetSecondaryLoader(JetReconstructionNetwork):
     
         raw_preds, particle_scores, *_ = self.predict(sources)  # list[B] of (E,K,p_i)
 
-        probe(batch, "batch")
-        probe(sources, "sources")
-        probe(targets, "targets")
-        probe(jet_data, "jet_data")
-        probe(jet_mult, "jet_mult")
-        probe(self.predict(sources), "self.predict(sources)")
-        probe(raw_preds, "raw_preds")
-        probe(particle_scores, "particle_scores")
-
         jet_preds_tensor = torch.stack(
             [torch.as_tensor(p, device=jet_data.device).permute(0, 2, 1)
              for p in raw_preds],
@@ -139,30 +147,49 @@ class JetSecondaryLoader(JetReconstructionNetwork):
         true_idx   = torch.stack(true_idx)   # (B,E,p_max)
         true_masks = torch.stack(true_masks) # (B,E)
 
-        probe(jet_preds_tensor, "jet_preds_tensor")
-        probe(p_max, "p_max")
-        probe(true_idx, "true_idx")
-        probe(true_masks, "true_masks")
-    
         pred_truth, class_truth, features_arr, canon_idx, canon_masks = self._topk_core(
             jet_data, jet_preds_tensor, true_idx, true_masks
         )
         canon_idx = canon_idx.permute(1, 0, 2)
         canon_masks = canon_masks.permute(1, 0)
 
-        probe(pred_truth, "pred_truth")
-        probe(class_truth, "class_truth")
-        probe(features_arr, "features_arr")
-        probe(canon_idx, "canon_idx")
-        probe(canon_masks, "canon_masks")
+        # JET SCORES
+        with torch.no_grad():
+            outputs = self.forward(sources)
+        score_vols = [S.to(jet_data.device) for S in outputs.assignments]   # len B
+        marginals_per_branch = [slot_jet_marginals(S) for S in score_vols]
 
-        super_true_event_idx = torch.nonzero(true_masks.all(dim=0)).squeeze(1)[:2]
+        E, K, B, p_max = jet_preds_tensor.shape
+        jet_scores_per_b = []
+        for b in range(B):
+            M = marginals_per_branch[b]               # (E, p_b, J)
+            p_b, J = M.size(1), M.size(2)
+            slot_scores = []
+            for s in range(p_b):
+                sel = jet_preds_tensor[:, :, b, s].long().clamp_(0, J-1)  # (E, K)
+                slot_scores.append(torch.gather(M[:, s, :], 1, sel))      # (E, K)
+            S_b = torch.stack(slot_scores, dim=-1)                         # (E, K, p_b)
+            # pad only if some branch had p_b < p_max (often unnecessary for t t̄ all-jets)
+            if p_b < p_max:
+                S_b = torch.nn.functional.pad(S_b, (0, p_max - p_b))
+            jet_scores_per_b.append(S_b)
 
-        true_event_idx = torch.nonzero(class_truth[:, 0]).squeeze(1)[:2]
+        jet_scores = torch.stack(jet_scores_per_b, dim=2)                  # (E, K, B, p_max)
 
-        false_event_idx = torch.nonzero(~class_truth[:, 0]).squeeze(1)[:2]
+        probe(outputs, "outputs")
+        probe(score_vols, "score_vols")
+        probe(marginals_per_branch, "marginals_per_branch")
+        probe(jet_scores, "jet_scores")
 
-        one_one = torch.cat([super_true_event_idx, true_event_idx, false_event_idx])  
+        # features_arr = torch.cat([features_arr, jet_scores.unsqueeze(-1)], dim=-1)
+
+        # super_true_event_idx = torch.nonzero(true_masks.all(dim=0)).squeeze(1)[:2]
+
+        # true_event_idx = torch.nonzero(class_truth[:, 0]).squeeze(1)[:2]
+
+        # false_event_idx = torch.nonzero(~class_truth[:, 0]).squeeze(1)[:2]
+
+        # one_one = torch.cat([super_true_event_idx, true_event_idx, false_event_idx])  
 
         # probe(sources[0], "sources[0]")
         # probe(jet_data, "jet_data")
