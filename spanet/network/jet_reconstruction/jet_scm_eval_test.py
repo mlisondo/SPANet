@@ -30,12 +30,12 @@ class SCM_Eval_Test(SCM_Training_Val):
         )
 
         # ~~~~~ total ~~~~~
-        mask_logits = prior_mask_logits * 2 + inclusive_mask_logits     # NOTE: THIS IS A WEIGHTED GUESS, LOSS FUNCTION IS NOT AS BIASED.
+        mask_logits = prior_mask_logits + inclusive_mask_logits     # NOTE: THIS IS A WEIGHTED GUESS, LOSS FUNCTION IS NOT AS BIASED.
         mask_probs = torch.sigmoid(mask_logits)
         mask_preds = (mask_probs > 0.5).long()
 
         # ~~~~~ inclusive-only ~~~~~
-        inc_mask_probs = torch.sigmoid(prior_mask_logits * 2)
+        inc_mask_probs = torch.sigmoid(prior_mask_logits)
         inc_mask_preds = (prior_mask_logits > 0.5).long()
 
         # ~~~~~ prior-only ~~~~~
@@ -52,7 +52,7 @@ class SCM_Eval_Test(SCM_Training_Val):
         neg_inf = torch.tensor(float("-inf"), device=inclusive_logits.device, dtype=inclusive_logits.dtype)
 
         # ~~~~~ total ~~~~~
-        class_logits = prior_logits * 2 + inclusive_logits     # NOTE: THIS IS A WEIGHTED GUESS, LOSS FUNCTION IS NOT BIASED.
+        class_logits = prior_logits + inclusive_logits     # NOTE: THIS IS A WEIGHTED GUESS, LOSS FUNCTION IS NOT BIASED.
         masked_logits = class_logits.masked_fill(~valid_mask, neg_inf) # has to be "NOT"edm, should be applied to invalid entries, not valid ones
         class_probs = torch.softmax(masked_logits, dim=1)  # sums to 1 over valid K
         class_preds = class_probs.argmax(dim=1)
