@@ -113,7 +113,7 @@ class JetSecondaryLoader(JetReconstructionNetwork):
     
         raw_preds, ps, *_ = self.predict(sources)  # raw preds : list[B] of (E,K,p_i)
 
-        particle_scores = torch.from_numpy(ps).to(jet_data.device).t().contiguous()
+        # particle_scores = torch.from_numpy(ps).to(jet_data.device).t().contiguous()
 
         jet_preds_tensor = torch.stack(
             [torch.as_tensor(p, device=jet_data.device).permute(0, 2, 1)
@@ -138,36 +138,36 @@ class JetSecondaryLoader(JetReconstructionNetwork):
         canon_idx = canon_idx.permute(1, 0, 2)
         canon_masks = canon_masks.permute(1, 0)
 
-        # JET SCORES
-        with torch.no_grad():
-            outputs = self.forward(sources)
-        scores = torch.stack([S.to(jet_data.device) for S in outputs.assignments], dim=1) # [E, B, J, J, J]
+        # # JET SCORES
+        # with torch.no_grad():
+        #     outputs = self.forward(sources)
+        # scores = torch.stack([S.to(jet_data.device) for S in outputs.assignments], dim=1) # [E, B, J, J, J]
 
-        E, K, B, p = jet_preds_tensor.shape         # p=3
-        J = scores.size(-1)
+        # E, K, B, p = jet_preds_tensor.shape         # p=3
+        # J = scores.size(-1)
 
-        # slot marginals: (E,B,J) each
-        m0 = torch.logsumexp(scores, dim=(3,4))
-        m1 = torch.logsumexp(scores, dim=(2,4))
-        m2 = torch.logsumexp(scores, dim=(2,3))
+        # # slot marginals: (E,B,J) each
+        # m0 = torch.logsumexp(scores, dim=(3,4))
+        # m1 = torch.logsumexp(scores, dim=(2,4))
+        # m2 = torch.logsumexp(scores, dim=(2,3))
 
-        # broadcast over K: (E,K,B,J)
-        m0 = m0.unsqueeze(1).expand(-1, K, -1, -1)
-        m1 = m1.unsqueeze(1).expand(-1, K, -1, -1)
-        m2 = m2.unsqueeze(1).expand(-1, K, -1, -1)
+        # # broadcast over K: (E,K,B,J)
+        # m0 = m0.unsqueeze(1).expand(-1, K, -1, -1)
+        # m1 = m1.unsqueeze(1).expand(-1, K, -1, -1)
+        # m2 = m2.unsqueeze(1).expand(-1, K, -1, -1)
 
-        sel = jet_preds_tensor.long()   # (E,K,B,3)
-        pad_mask = sel.lt(0)            # guard if you ever store -1
-        sel = sel.clamp(0, J-1)         # keep indices valid
+        # sel = jet_preds_tensor.long()   # (E,K,B,3)
+        # pad_mask = sel.lt(0)            # guard if you ever store -1
+        # sel = sel.clamp(0, J-1)         # keep indices valid
 
-        # gather along the J axis (dim=3) -> (E,K,B)
-        g0 = torch.gather(m0, 3, sel[..., 0].unsqueeze(-1)).squeeze(-1)
-        g1 = torch.gather(m1, 3, sel[..., 1].unsqueeze(-1)).squeeze(-1)
-        g2 = torch.gather(m2, 3, sel[..., 2].unsqueeze(-1)).squeeze(-1)
+        # # gather along the J axis (dim=3) -> (E,K,B)
+        # g0 = torch.gather(m0, 3, sel[..., 0].unsqueeze(-1)).squeeze(-1)
+        # g1 = torch.gather(m1, 3, sel[..., 1].unsqueeze(-1)).squeeze(-1)
+        # g2 = torch.gather(m2, 3, sel[..., 2].unsqueeze(-1)).squeeze(-1)
 
-        # per-slot per-jet scores aligned with features_arr[..., slot, :]
-        jet_slot_scores = torch.stack([g0, g1, g2], dim=-1)  # (E,K,B,3)
-        jet_slot_scores = jet_slot_scores.masked_fill(pad_mask, float("-inf"))
+        # # per-slot per-jet scores aligned with features_arr[..., slot, :]
+        # jet_slot_scores = torch.stack([g0, g1, g2], dim=-1)  # (E,K,B,3)
+        # jet_slot_scores = jet_slot_scores.masked_fill(pad_mask, float("-inf"))
 
 
         # super_true_event_idx = torch.nonzero(true_masks.all(dim=0)).squeeze(1)[:2]
