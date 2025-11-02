@@ -111,7 +111,7 @@ class JetSecondaryLoader(JetReconstructionNetwork):
         jet_data = sources[0][0]  # (E,Njets,F)
         jet_mult = sources[0][1]  # (E,Njets) bool  for ttbar (Njets) = 10, true if jet is valid
     
-        raw_preds, *_ = self.predict(sources)  # list[B] of (E,K,p_i)
+        raw_preds, particle_scores, *_ = self.predict(sources)  # list[B] of (E,K,p_i)
         jet_preds_tensor = torch.stack(
             [torch.as_tensor(p, device=jet_data.device).permute(0, 2, 1)
              for p in raw_preds],
@@ -135,13 +135,13 @@ class JetSecondaryLoader(JetReconstructionNetwork):
         canon_idx = canon_idx.permute(1, 0, 2)
         canon_masks = canon_masks.permute(1, 0)
 
-        # super_true_event_idx = torch.nonzero(true_masks.all(dim=0)).squeeze(1)[:2]
+        super_true_event_idx = torch.nonzero(true_masks.all(dim=0)).squeeze(1)[:2]
 
-        # true_event_idx = torch.nonzero(class_truth[:, 0]).squeeze(1)[:2]
+        true_event_idx = torch.nonzero(class_truth[:, 0]).squeeze(1)[:2]
 
-        # false_event_idx = torch.nonzero(~class_truth[:, 0]).squeeze(1)[:2]
+        false_event_idx = torch.nonzero(~class_truth[:, 0]).squeeze(1)[:2]
 
-        # one_one = torch.cat([super_true_event_idx, true_event_idx, false_event_idx])  
+        one_one = torch.cat([super_true_event_idx, true_event_idx, false_event_idx])  
 
         # probe(sources[0], "sources[0]")
         # probe(jet_data, "jet_data")
@@ -156,6 +156,8 @@ class JetSecondaryLoader(JetReconstructionNetwork):
         # # probe(canon_idx, "canon_idx")
         # # probe(canon_masks, "canon_masks")
 
+        probe(particle_scores, "particle_scores")
+
         # for e in one_one:
         #     print(f"\n===== EVENT {int(e)} =====")
 
@@ -167,6 +169,9 @@ class JetSecondaryLoader(JetReconstructionNetwork):
 
         #     print("jet_preds_tensor:")
         #     print(jet_preds_tensor[e])
+
+        #     print("particle scores:")
+        #     print(particle_scores[e])
 
         #     # print("true_idx:")
         #     # print(true_idx[:, e])
@@ -191,7 +196,7 @@ class JetSecondaryLoader(JetReconstructionNetwork):
 
         #     print("=" * 30)
 
-        # raise RuntimeError("Debug break")
+        raise RuntimeError("Debug break")
 
         return pred_truth, canon_masks, features_arr, class_truth, canon_idx, jet_preds_tensor, jet_mult
 
