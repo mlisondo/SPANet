@@ -156,72 +156,72 @@ class JetSecondaryLoader(JetReconstructionNetwork):
         # JET SCORES
         with torch.no_grad():
             outputs = self.forward(sources)
-        probe(outputs, "outputs")
 
         scores = torch.stack([S.to(jet_data.device) for S in outputs.assignments], dim=1) # [E, B, J, J, J]
+
+        super_true_event_idx = torch.nonzero(true_masks.all(dim=0)).squeeze(1)[:2]
+
+        true_event_idx = torch.nonzero(class_truth[:, 0]).squeeze(1)[:2]
+
+        false_event_idx = torch.nonzero(~class_truth[:, 0]).squeeze(1)[:2]
+
+        one_one = torch.cat([super_true_event_idx, true_event_idx, false_event_idx])  
+
+        probe(sources[0], "sources[0]")
+        probe(jet_data, "jet_data")
+        probe(jet_preds_tensor, "jet_preds_tensor")
+        probe(jet_mult, "jet_mult")
+        # probe(true_idx, "true_idx")
+        # probe(true_masks, "true_masks")
+        # probe(pred_truth, "pred_truth")
+        # probe(class_truth, "class_truth")
+        probe(features_arr, "features_arr")
+        probe(jet_data, "jet_data")
+        # probe(canon_idx, "canon_idx")
+        # probe(canon_masks, "canon_masks")
+        probe(particle_scores, "particle_scores")
         probe(scores, "scores")
 
-        # features_arr = torch.cat([features_arr, jet_scores.unsqueeze(-1)], dim=-1)
+        for e in one_one:
+            print(f"\n===== EVENT {int(e)} =====")
 
-        # super_true_event_idx = torch.nonzero(true_masks.all(dim=0)).squeeze(1)[:2]
+            print("Jet data for events:")
+            print(jet_data[e])
 
-        # true_event_idx = torch.nonzero(class_truth[:, 0]).squeeze(1)[:2]
+            print("Jet options for events:")
+            print(jet_mult[e])
 
-        # false_event_idx = torch.nonzero(~class_truth[:, 0]).squeeze(1)[:2]
+            print("jet_preds_tensor:")
+            print(jet_preds_tensor[e])
 
-        # one_one = torch.cat([super_true_event_idx, true_event_idx, false_event_idx])  
+            print("particle scores:")
+            print(particle_scores[e])
 
-        # probe(sources[0], "sources[0]")
-        # probe(jet_data, "jet_data")
-        # probe(jet_preds_tensor, "jet_preds_tensor")
-        # probe(jet_mult, "jet_mult")
-        # # probe(true_idx, "true_idx")
-        # # probe(true_masks, "true_masks")
-        # # probe(pred_truth, "pred_truth")
-        # # probe(class_truth, "class_truth")
-        # probe(features_arr, "features_arr")
-        # probe(jet_data, "jet_data")
-        # # probe(canon_idx, "canon_idx")
-        # # probe(canon_masks, "canon_masks")
-        # probe(particle_scores, "particle_scores")
+            print("jet scores:")
+            print(scores[e])
 
-        # for e in one_one:
-        #     print(f"\n===== EVENT {int(e)} =====")
+            # print("true_idx:")
+            # print(true_idx[:, e])
 
-        #     print("Jet data for events:")
-        #     print(jet_data[e])
+            # print("canon_idx:")
+            # print(canon_idx[:, e])
 
-        #     print("Jet options for events:")
-        #     print(jet_mult[e])
+            # print("true_masks:")
+            # print(true_masks[:, e])
 
-        #     print("jet_preds_tensor:")
-        #     print(jet_preds_tensor[e])
+            # print("canon_masks")
+            # print(canon_masks[:, e])
 
-        #     print("particle scores:")
-        #     print(particle_scores[e])
+            # print("pred_truth matrix (K x B):")
+            # print(pred_truth[e])
 
-        #     # print("true_idx:")
-        #     # print(true_idx[:, e])
+            # print("class_truth row:")
+            # print(class_truth[e])
 
-        #     # print("canon_idx:")
-        #     # print(canon_idx[:, e])
+            print("feature for selected events:")
+            print(features_arr[e])
 
-        #     # print("true_masks:")
-        #     # print(true_masks[:, e])
-
-        #     # print("canon_masks")
-        #     # print(canon_masks[:, e])
-
-        #     # print("pred_truth matrix (K x B):")
-        #     # print(pred_truth[e])
-
-        #     # print("class_truth row:")
-        #     # print(class_truth[e])
-
-        #     print("feature for selected events:")
-        #     print(features_arr[e])
-
-        #     print("=" * 30)
+            print("=" * 30)
 
         raise RuntimeError("Debug break")
 
