@@ -128,7 +128,9 @@ class JetSecondaryLoader(JetReconstructionNetwork):
         jet_data = sources[0][0]  # (E,Njets,F)
         jet_mult = sources[0][1]  # (E,Njets) bool  for ttbar (Njets) = 10, true if jet is valid
     
-        raw_preds, particle_scores, *_ = self.predict(sources)  # list[B] of (E,K,p_i)
+        raw_preds, particle_scores, *_ = self.predict(sources)  # raw preds : list[B] of (E,K,p_i)
+
+        particle_scores = particle_scores.permute(1, 0)
 
         jet_preds_tensor = torch.stack(
             [torch.as_tensor(p, device=jet_data.device).permute(0, 2, 1)
@@ -156,7 +158,6 @@ class JetSecondaryLoader(JetReconstructionNetwork):
         # JET SCORES
         with torch.no_grad():
             outputs = self.forward(sources)
-
         scores = torch.stack([S.to(jet_data.device) for S in outputs.assignments], dim=1) # [E, B, J, J, J]
 
         super_true_event_idx = torch.nonzero(true_masks.all(dim=0)).squeeze(1)[:2]
