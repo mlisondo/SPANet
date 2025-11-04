@@ -716,8 +716,8 @@ class SCM_Training_Val(JetSecondaryLoader):
         # Imbalance / focal
         self.pos_weight_cap = 1000.0
         self.use_focal_masker = "use_focal_masker"
-        self.focal_alpha_pos = 0.7
-        self.focal_gamma = 2.0
+        self.focal_alpha_pos = 0.85 # 0.7                                           # I CHANGED THIS
+        self.focal_gamma = 1.0 # 2.0 
     
     @staticmethod
     def focal_bce_with_logits(logits, targets, alpha_pos=0.25, gamma=2.0, reduction="mean"):
