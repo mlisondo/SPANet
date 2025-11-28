@@ -723,15 +723,28 @@ class SCM_Training_Val(JetSecondaryLoader):
     
     @staticmethod
     def focal_bce_with_logits(logits, targets, alpha_pos=0.25, gamma=2.0, reduction="mean"):
+        logits = logits.float()
+        target_mask = targets.bool()
+        targets = target_mask.to(dtype=logits.dtype)
         p = torch.sigmoid(logits)
-        pt = torch.where(targets.bool(), p, 1 - p)  # p_t
-        bce = F.binary_cross_entropy_with_logits(logits, targets, reduction="none")
 
-        alpha_t = torch.where(
-            targets.bool(),
-            torch.as_tensor(alpha_pos, device=logits.device, dtype=logits.dtype),
-            torch.as_tensor(1 - alpha_pos, device=logits.device, dtype=logits.dtype),
+        # p_t = p if y=1 else 1-p
+        pt = torch.where(target_mask, p, 1 - p)
+
+        bce = F.binary_cross_entropy_with_logits(
+            logits,
+            targets,
+            reduction="none",
         )
+
+        # alpha_t = alpha for positives, (1-alpha) for negatives
+        alpha_pos_tensor = torch.as_tensor(alpha_pos, device=logits.device, dtype=logits.dtype)
+        alpha_t = torch.where(
+            target_mask,
+            alpha_pos_tensor,
+            1 - alpha_pos_tensor,
+        )
+
         loss = alpha_t * (1 - pt).pow(gamma) * bce
 
         if reduction == "mean":
