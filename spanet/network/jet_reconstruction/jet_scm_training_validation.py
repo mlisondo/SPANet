@@ -9,6 +9,8 @@ from typing import Optional
 from torch import Tensor
 
 tcompile = torch.compile
+torch.set_float32_matmul_precision('high')
+dynamo.config.accumulated_cache_size_limit = 128
 
 def probe(o, name=None):
     obj = type(o)
