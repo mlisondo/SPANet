@@ -720,7 +720,7 @@ class SCM_Training_Val(JetSecondaryLoader):
         self.use_focal_masker = "use_focal_masker"
         self.focal_alpha_pos = options.focal_alpha_pos
         self.focal_gamma = options.focal_gamma
-    
+
     @staticmethod
     def focal_bce_with_logits(logits, targets, alpha_pos=0.25, gamma=2.0, reduction="mean"):
         logits = logits.float()
@@ -894,7 +894,7 @@ class SCM_Training_Val(JetSecondaryLoader):
             branch_loss_inclusive, branch_loss_prior
         )
         
-    # _compiled_core = tcompile(_compiled_core, dynamic = True)
+    _compiled_core = tcompile(_compiled_core, dynamic = True)
 
     def forward_scm(self, batch):
         (
