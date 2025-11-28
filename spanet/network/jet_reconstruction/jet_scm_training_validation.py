@@ -709,9 +709,9 @@ class SCM_Training_Val(JetSecondaryLoader):
             if not (n.startswith("classifier.") or n.startswith("masker.")):
                 p.requires_grad_(False)
 
-        # # Compile
-        # self.classifier = tcompile(self.classifier, dynamic=True)
-        # self.masker     = tcompile(self.masker,    dynamic=True)
+        # Compile
+        self.classifier = tcompile(self.classifier, dynamic=True)
+        self.masker     = tcompile(self.masker,    dynamic=True)
 
         # Imbalance / focal
         self.pos_weight_cap = 1000.0
