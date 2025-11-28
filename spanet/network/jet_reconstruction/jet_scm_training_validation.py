@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torch._dynamo as dynamo
 from spanet.options import Options
 from spanet.network.jet_reconstruction.jet_scm_pipeline import JetSecondaryLoader
 from spanet.dataset.types import Batch
@@ -48,15 +49,78 @@ def probe(o, name=None):
 
 # --------------------------------------------------------------------------------------------------- MODULES FOR SET TRANSFORMER
 
-# MULTIHEAD ATTENTION BLOCK
+# # MULTIHEAD ATTENTION BLOCK
+# class MAB(nn.Module):
+#     def __init__(self, dim_Q : int, dim_K : int, dim_V : int, num_heads : int, attn_drop : float = 0.0, ff_drop : float = 0.0, ln : bool = True, use_gate : bool = True):
+#         super().__init__()
+
+#         self.pre_ln = ln
+#         self.use_gate = use_gate
+
+#         self.q_in = nn.Identity() if dim_Q == dim_V else nn.Linear(dim_Q, dim_V) # mha does k and v porjections internally
+
+#         self.ln_q = nn.LayerNorm(dim_Q)
+#         self.ln_k = nn.LayerNorm(dim_K)
+#         self.ln_ff_in = nn.LayerNorm(dim_V)
+        
+#         self.mha = nn.MultiheadAttention(
+#             embed_dim = dim_V,
+#             num_heads = num_heads,
+#             dropout = attn_drop,
+#             batch_first = True,
+#             kdim = dim_K,
+#             vdim = dim_K
+#         )
+
+#         self.ff = nn.Sequential(
+#             nn.Linear(dim_V, 4*dim_V), nn.GELU(), nn.Dropout(ff_drop),
+#             nn.Linear(4*dim_V, dim_V), nn.Dropout(ff_drop),
+#         )
+
+#         self.attn_gate = nn.Parameter(torch.tensor(1.0))
+
+#     def forward(self, Q, K, key_padding_mask : Optional[Tensor] = None) -> Tensor:
+
+#         Qn = self.ln_q(Q) if self.pre_ln else Q
+#         Kn = self.ln_k(K) if self.pre_ln else K
+
+#         Qq = self.q_in(Qn)
+
+#         # ------- key_padding_mask -------
+#         # muted, not deaf
+#         # Nobody can listen to that position, but that position can still listen to others
+#         # mask shape (batch size, #keys/values)
+
+#         # ------- attn_mask ------- DO NOT NEED ATTN_MASK
+#         # choose who's muted and/or deaf
+#         # Block a column -> that position is muted
+#         # Block a row -> that position is deaf
+#         # Block row + column -> fully isolated
+#         # mask shape (#queries, #keys/values) or (batch size * num_heads, #queries, #keys/values)
+
+#         attn_out, _ = self.mha(
+#             Qq, Kn, Kn, 
+#             key_padding_mask = key_padding_mask,
+#             need_weights = False
+#         )
+
+#         out = Qq + (self.attn_gate * attn_out if self.use_gate else attn_out)
+#         ln_out = self.ln_ff_in(out) if self.pre_ln else out
+
+#         return out + self.ff(ln_out)
+
+
 class MAB(nn.Module):
-    def __init__(self, dim_Q : int, dim_K : int, dim_V : int, num_heads : int, attn_drop : float = 0.0, ff_drop : float = 0.0, ln : bool = True, use_gate : bool = True):
+    def __init__(self, dim_Q: int, dim_K: int, dim_V: int,
+                 num_heads: int, attn_drop: float = 0.0,
+                 ff_drop: float = 0.0, ln: bool = True,
+                 use_gate: bool = True):
         super().__init__()
 
         self.pre_ln = ln
         self.use_gate = use_gate
 
-        self.q_in = nn.Identity() if dim_Q == dim_V else nn.Linear(dim_Q, dim_V) # mha does k and v porjections internally
+        self.q_in = nn.Identity() if dim_Q == dim_V else nn.Linear(dim_Q, dim_V)
 
         self.ln_q = nn.LayerNorm(dim_Q)
         self.ln_k = nn.LayerNorm(dim_K)
@@ -65,43 +129,35 @@ class MAB(nn.Module):
         self.mha = nn.MultiheadAttention(
             embed_dim = dim_V,
             num_heads = num_heads,
-            dropout = attn_drop,
+            dropout   = attn_drop,
             batch_first = True,
             kdim = dim_K,
-            vdim = dim_K
+            vdim = dim_K,
         )
 
         self.ff = nn.Sequential(
-            nn.Linear(dim_V, 4*dim_V), nn.GELU(), nn.Dropout(ff_drop),
-            nn.Linear(4*dim_V, dim_V), nn.Dropout(ff_drop),
+            nn.Linear(dim_V, 4 * dim_V), nn.GELU(), nn.Dropout(ff_drop),
+            nn.Linear(4 * dim_V, dim_V),  nn.Dropout(ff_drop),
         )
 
         self.attn_gate = nn.Parameter(torch.tensor(1.0))
 
-    def forward(self, Q, K, key_padding_mask : Optional[Tensor] = None) -> Tensor:
+    @dynamo.disable
+    def _mha_call(self, Qq, Kn, key_padding_mask):
+        # This runs in eager mode, even when the rest of the model is compiled.
+        return self.mha(
+            Qq, Kn, Kn,
+            key_padding_mask = key_padding_mask,
+            need_weights     = False,
+        )
 
+    def forward(self, Q, K, key_padding_mask: Optional[Tensor] = None) -> Tensor:
         Qn = self.ln_q(Q) if self.pre_ln else Q
         Kn = self.ln_k(K) if self.pre_ln else K
 
         Qq = self.q_in(Qn)
 
-        # ------- key_padding_mask -------
-        # muted, not deaf
-        # Nobody can listen to that position, but that position can still listen to others
-        # mask shape (batch size, #keys/values)
-
-        # ------- attn_mask ------- DO NOT NEED ATTN_MASK
-        # choose who's muted and/or deaf
-        # Block a column -> that position is muted
-        # Block a row -> that position is deaf
-        # Block row + column -> fully isolated
-        # mask shape (#queries, #keys/values) or (batch size * num_heads, #queries, #keys/values)
-
-        attn_out, _ = self.mha(
-            Qq, Kn, Kn, 
-            key_padding_mask = key_padding_mask,
-            need_weights = False
-        )
+        attn_out, _ = self._mha_call(Qq, Kn, key_padding_mask)
 
         out = Qq + (self.attn_gate * attn_out if self.use_gate else attn_out)
         ln_out = self.ln_ff_in(out) if self.pre_ln else out
@@ -973,6 +1029,7 @@ class SCM_Training_Val(JetSecondaryLoader):
         return loss
 
     @staticmethod
+    @dynamo.disable
     def candidate_mute_mask(jet_preds_tensor): # for KTM
         # keep exactly the last member of each equivalence class
         # earlier duplicates are marked and dropped
@@ -1087,20 +1144,24 @@ class SCM_Training_Val(JetSecondaryLoader):
             num_pos_mean = num_pos[has_truth].float().mean()
         has_truth_frac = has_truth.float().mean()
 
-        flat_truth = pred_truth.reshape(N * K, B)
+        # flat_truth = pred_truth.reshape(N * K, B)
+        flat_truth = pred_truth.flatten(0, 1)
         pos_rate = flat_truth.float().mean()
+
+        flat_inclusive_mask_logits = inclusive_mask_logits.flatten(0, 1)
+        flat_prior_mask_logits = prior_mask_logits.flatten(0, 1)
 
         # I DONT THINK I SHOULD RUN THIS LOSS DUE TO THE FACT THAT IT MIGHT AFFECT CLASSIFICATION METRICS.
         # the branch set encoder is currently trying to learn two things at once, how to properly summarize the data and then how to
         # tell if the branch is reconstructable or not. i might have to ignore reconstructability for now.
         branch_loss_inclusive = self.focal_bce_with_logits(
-            inclusive_mask_logits.reshape(N*K, B), flat_truth,
+            flat_inclusive_mask_logits, flat_truth,
             alpha_pos = self.focal_alpha_pos,
             gamma = self.focal_gamma,
             reduction = "mean"
         )
         branch_loss_prior = self.focal_bce_with_logits(
-            prior_mask_logits.reshape(N*K, B), flat_truth,
+            flat_prior_mask_logits, flat_truth,
             alpha_pos = self.focal_alpha_pos,
             gamma = self.focal_gamma,
             reduction = "mean"

@@ -527,127 +527,127 @@ class Options(Namespace):
     #     self.p_global_classifer   = True
 
 
-    # ================================================== ARCH D ==================================================
-    # Joint training with stronger branch supervision. Cross-branch ON, detach OFF.
-        # ---- schedules (forget about the prior head LOL) ----
-        self.prior_weight_start  = 0.50
-        self.prior_weight_end    = 0.05
-        self.prior_weight_epochs = 12
-        self.masker_weight_start = 0.05
-        self.masker_weight_end   = 0.30
-        self.masker_weight_epochs= 10
-
-        self.focal_alpha_pos = 0.85
-        self.focal_gamma = 1.0
-
-        # ====================== MASKER (inclusive / prior) ======================
-        # Inclusive
-        self.i_dim_masker     = 80
-        self.inc_heads_masker = 5
-        self.i_inds_masker    = 12
-        self.i_isab_masker    = 2
-        self.i_sab_masker     = 1
-        self.i_attn_masker    = 0.10
-        self.i_ff_masker      = 0.10
-        self.i_ln_masker      = True
-
-        # Prior
-        self.p_dim_masker     = 64
-        self.p_heads_masker   = 4
-        self.p_inds_masker    = 10
-        self.p_isab_masker    = 2
-        self.p_sab_masker     = 1
-        self.p_attn_masker    = 0.10
-        self.p_ff_masker      = 0.10
-        self.p_ln_masker      = True
-
-        # ==================== CLASSIFIER (inclusive / prior) ====================
-        self.use_x_branches = True
-        self.detach_branch  = False  # backprop into masker
-
-        # Inclusive
-        self.i_dim_classifer      = 80
-        self.inc_heads_classifer  = 5
-        self.i_inds_classifer     = 12
-        self.i_isab_classifer     = 2
-        self.i_sab_classifer      = 1
-        self.i_seeds_classifer    = 1   # PMA seeds = 1
-        self.i_attn_classifer     = 0.10
-        self.i_ff_classifer       = 0.10
-        self.i_ln_classifer       = True
-        self.i_global_classifer   = True
-
-        # Prior
-        self.p_dim_classifer      = 64
-        self.p_heads_classifer    = 4
-        self.p_inds_classifer     = 10
-        self.p_isab_classifer     = 2
-        self.p_sab_classifer      = 1
-        self.p_seeds_classifer    = 1   # PMA seeds = 1
-        self.p_attn_classifer     = 0.10
-        self.p_ff_classifer       = 0.10
-        self.p_ln_classifer       = True
-        self.p_global_classifer   = True
-
-
-    # # ================================================== ARCH E ==================================================
-    # # Prior-leaning schedule + medium width; clean divisibility; low dropout.
-    #     # ---- schedules (more prior early, still settle at 0.55) ----
-    #     self.prior_weight_start  = 0.90
-    #     self.prior_weight_end    = 0.55
-    #     self.prior_weight_epochs = 20
-    #     self.masker_weight_start = 0.00
-    #     self.masker_weight_end   = 0.20
+    # # ================================================== ARCH D ==================================================
+    # # Joint training with stronger branch supervision. Cross-branch ON, detach OFF.
+    #     # ---- schedules (forget about the prior head LOL) ----
+    #     self.prior_weight_start  = 0.50
+    #     self.prior_weight_end    = 0.05
+    #     self.prior_weight_epochs = 12
+    #     self.masker_weight_start = 0.05
+    #     self.masker_weight_end   = 0.30
     #     self.masker_weight_epochs= 10
 
+    #     self.focal_alpha_pos = 0.85
+    #     self.focal_gamma = 1.0
+
     #     # ====================== MASKER (inclusive / prior) ======================
-    #     # Inclusive (medium)
-    #     self.i_dim_masker     = 72
-    #     self.inc_heads_masker = 6
-    #     self.i_inds_masker    = 10
-    #     self.i_isab_masker    = 3
+    #     # Inclusive
+    #     self.i_dim_masker     = 80
+    #     self.inc_heads_masker = 5
+    #     self.i_inds_masker    = 12
+    #     self.i_isab_masker    = 2
     #     self.i_sab_masker     = 1
-    #     self.i_attn_masker    = 0.08
-    #     self.i_ff_masker      = 0.08
+    #     self.i_attn_masker    = 0.10
+    #     self.i_ff_masker      = 0.10
     #     self.i_ln_masker      = True
 
-    #     # Prior (medium)
-    #     self.p_dim_masker     = 60
-    #     self.p_heads_masker   = 5
+    #     # Prior
+    #     self.p_dim_masker     = 64
+    #     self.p_heads_masker   = 4
     #     self.p_inds_masker    = 10
-    #     self.p_isab_masker    = 3
+    #     self.p_isab_masker    = 2
     #     self.p_sab_masker     = 1
-    #     self.p_attn_masker    = 0.08
-    #     self.p_ff_masker      = 0.08
+    #     self.p_attn_masker    = 0.10
+    #     self.p_ff_masker      = 0.10
     #     self.p_ln_masker      = True
 
     #     # ==================== CLASSIFIER (inclusive / prior) ====================
     #     self.use_x_branches = True
-    #     self.detach_branch  = True
+    #     self.detach_branch  = False  # backprop into masker
 
     #     # Inclusive
-    #     self.i_dim_classifer      = 72
-    #     self.inc_heads_classifer  = 6
-    #     self.i_inds_classifer     = 10
-    #     self.i_isab_classifer     = 3
+    #     self.i_dim_classifer      = 80
+    #     self.inc_heads_classifer  = 5
+    #     self.i_inds_classifer     = 12
+    #     self.i_isab_classifer     = 2
     #     self.i_sab_classifer      = 1
     #     self.i_seeds_classifer    = 1   # PMA seeds = 1
-    #     self.i_attn_classifer     = 0.08
-    #     self.i_ff_classifer       = 0.08
+    #     self.i_attn_classifer     = 0.10
+    #     self.i_ff_classifer       = 0.10
     #     self.i_ln_classifer       = True
     #     self.i_global_classifer   = True
 
     #     # Prior
-    #     self.p_dim_classifer      = 60
-    #     self.p_heads_classifer    = 5
+    #     self.p_dim_classifer      = 64
+    #     self.p_heads_classifer    = 4
     #     self.p_inds_classifer     = 10
-    #     self.p_isab_classifer     = 3
+    #     self.p_isab_classifer     = 2
     #     self.p_sab_classifer      = 1
     #     self.p_seeds_classifer    = 1   # PMA seeds = 1
-    #     self.p_attn_classifer     = 0.08
-    #     self.p_ff_classifer       = 0.08
+    #     self.p_attn_classifer     = 0.10
+    #     self.p_ff_classifer       = 0.10
     #     self.p_ln_classifer       = True
     #     self.p_global_classifer   = True
+
+
+    # ================================================== ARCH E ==================================================
+    # Prior-leaning schedule + medium width; clean divisibility; low dropout.
+        # ---- schedules (more prior early, still settle at 0.55) ----
+        self.prior_weight_start  = 0.90
+        self.prior_weight_end    = 0.55
+        self.prior_weight_epochs = 20
+        self.masker_weight_start = 0.00
+        self.masker_weight_end   = 0.20
+        self.masker_weight_epochs= 10
+
+        # ====================== MASKER (inclusive / prior) ======================
+        # Inclusive (medium)
+        self.i_dim_masker     = 72
+        self.inc_heads_masker = 6
+        self.i_inds_masker    = 10
+        self.i_isab_masker    = 3
+        self.i_sab_masker     = 1
+        self.i_attn_masker    = 0.08
+        self.i_ff_masker      = 0.08
+        self.i_ln_masker      = True
+
+        # Prior (medium)
+        self.p_dim_masker     = 60
+        self.p_heads_masker   = 5
+        self.p_inds_masker    = 10
+        self.p_isab_masker    = 3
+        self.p_sab_masker     = 1
+        self.p_attn_masker    = 0.08
+        self.p_ff_masker      = 0.08
+        self.p_ln_masker      = True
+
+        # ==================== CLASSIFIER (inclusive / prior) ====================
+        self.use_x_branches = True
+        self.detach_branch  = True
+
+        # Inclusive
+        self.i_dim_classifer      = 72
+        self.inc_heads_classifer  = 6
+        self.i_inds_classifer     = 10
+        self.i_isab_classifer     = 3
+        self.i_sab_classifer      = 1
+        self.i_seeds_classifer    = 1   # PMA seeds = 1
+        self.i_attn_classifer     = 0.08
+        self.i_ff_classifer       = 0.08
+        self.i_ln_classifer       = True
+        self.i_global_classifer   = True
+
+        # Prior
+        self.p_dim_classifer      = 60
+        self.p_heads_classifer    = 5
+        self.p_inds_classifer     = 10
+        self.p_isab_classifer     = 3
+        self.p_sab_classifer      = 1
+        self.p_seeds_classifer    = 1   # PMA seeds = 1
+        self.p_attn_classifer     = 0.08
+        self.p_ff_classifer       = 0.08
+        self.p_ln_classifer       = True
+        self.p_global_classifer   = True
 
 
     # # ================================================== ARCH F ==================================================
