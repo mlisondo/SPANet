@@ -477,8 +477,7 @@ class CandidateSetEncoder(nn.Module):
         
         if self.inclusive_use_global_context: # give every candidate the same event-level summary built from all candidates, then add it to each candidate
             global_inclusive = self.inclusive_global_pma(inclusive_ct, key_padding_mask = candidate_kpm_inclusive).squeeze(1) # (EK, 1, inclusive_embed_dim).squeeze -> (EK, inclusive_embed_dim)
-            probe(global_inclusive, "global_inclusive")
-            raise RuntimeError("Debug break")
+
             
 
             # Note: IF THIS LINE ERRORES OUT, ITS BECAUSE r IS SET TO SOMETHING GREATER THAN 1, CHECK options.py *_seeds_classifer
@@ -882,7 +881,7 @@ class SCM_Training_Val(JetSecondaryLoader):
             branch_loss_inclusive, branch_loss_prior
         )
         
-    _compiled_core = tcompile(_compiled_core, dynamic = True)
+    # _compiled_core = tcompile(_compiled_core, dynamic = True)
 
     def forward_scm(self, batch):
         (
