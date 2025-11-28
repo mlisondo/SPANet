@@ -257,49 +257,139 @@ class BranchSetEncoder(nn.Module):
             ff_drop     = prior_ff_drop,
             ln          = prior_ln
         )
+
+# ========================================================================================== old branch forward
     
-    def forward(self, inclusive_X, prior_X, 
-    inclusive_jet_kpm : Optional[Tensor] = None, inclusive_branch_kpm  : Optional[Tensor] = None,
-    prior_jet_kpm : Optional[Tensor] = None, prior_branch_kpm : Optional[Tensor] = None):
-        # ====================== INCLUSIVE ======================
+    # def forward(self, inclusive_X, prior_X, 
+    # inclusive_jet_kpm : Optional[Tensor] = None, inclusive_branch_kpm  : Optional[Tensor] = None,
+    # prior_jet_kpm : Optional[Tensor] = None, prior_branch_kpm : Optional[Tensor] = None):
+    #     # ====================== INCLUSIVE ======================
+    #     E, K, B, J, inclusive_F = inclusive_X.shape
+    #     # inclusive_X = inclusive_X.reshape(E * K * B, J, inclusive_F) # (E*K*B, J, inclusive_F)
+    #     inclusive_X = inclusive_X.reshape(-1, J, inclusive_F) # (E*K*B, J, inclusive_F)
+
+    #     # Per-branch encoding
+    #     inclusive_bt = self.inclusive_jet_set(inclusive_X, key_padding_mask = inclusive_jet_kpm).squeeze(1)
+    #     # self.inclusive_jet_set(...) -> (E*K*B, 1, inclusive_embed_dim); squeeze(1) -> (E*K*B, inclusive_embed_dim)
+
+    #     # Per-branch mask logits
+    #     inclusive_m = self.inclusive_mask_head(inclusive_bt).squeeze(-1)
+    #     # Linear(inclusive_embed_dim -> 1) -> (E*K*B, 1); squeeze(-1) => (E*K*B,)
+    #     inclusive_mask_logits = inclusive_m.reshape(E, K, B) # (E, K, B)
+
+    #     # Reshape tokens to (EK, B, E) and pool to candidate token with PMA
+    #     inclusive_bt = inclusive_bt.reshape(E, K, B, -1) # (E, K, B, inclusive_embed_dim)
+    #     inclusive_bt2 = inclusive_bt.reshape(E * K, B, -1) # (E*K, B, inclusive_embed_dim)
+    #     inclusive_ct = self.inclusive_branch_pma(inclusive_bt2, key_padding_mask = inclusive_branch_kpm).squeeze(1)
+    #     # (E*K, num_seeds (1), inclusive_embed_dim); squeeze(1) -> (E*K, inclusive_embed_dim)
+    #     inclusive_ct = inclusive_ct.reshape(E, K, -1) # (E, K, inclusive_embed_dim)
+
+    #     # ====================== PRIOR ======================
+    #     _, _, _, _, prior_F = prior_X.shape
+    #     # prior_X = prior_X.reshape(E * K * B, J, prior_F)
+    #     prior_X = prior_X.reshape(-1, J, prior_F)
+
+    #     # Per-branch encoding
+    #     prior_bt = self.prior_jet_set(prior_X, key_padding_mask = prior_jet_kpm).squeeze(1)
+
+    #     # Per-branch mask logits
+    #     prior_m = self.prior_mask_head(prior_bt).squeeze(-1)
+    #     prior_mask_logits = prior_m.reshape(E, K, B)
+
+    #     # Reshape tokens to (EK, B, E) and pool to candidate token with PMA        
+    #     prior_bt = prior_bt.reshape(E, K, B, -1)
+    #     prior_bt2 = prior_bt.reshape(E * K, B, -1)
+    #     prior_ct = self.prior_branch_pma(prior_bt2, key_padding_mask = prior_branch_kpm).squeeze(1)
+    #     prior_ct = prior_ct.reshape(E, K, -1)
+
+    #     return (inclusive_bt, inclusive_ct, inclusive_mask_logits, 
+    #     prior_bt, prior_ct, prior_mask_logits)
+
+# ========================================================================================== new branch forward
+
+    def forward(
+        self,
+        inclusive_X,
+        prior_X,
+        inclusive_jet_kpm   : Optional[Tensor] = None,
+        inclusive_branch_kpm: Optional[Tensor] = None,
+        prior_jet_kpm       : Optional[Tensor] = None,
+        prior_branch_kpm    : Optional[Tensor] = None,
+    ):
+        # inclusive_X: (E, K, B, J, F_incl)
+        # prior_X:     (E, K, B, J, F_prior)
         E, K, B, J, inclusive_F = inclusive_X.shape
-        inclusive_X = inclusive_X.reshape(E * K * B, J, inclusive_F) # (E*K*B, J, inclusive_F)
+        _, _, _, _, prior_F     = prior_X.shape
 
-        # Per-branch encoding
-        inclusive_bt = self.inclusive_jet_set(inclusive_X, key_padding_mask = inclusive_jet_kpm).squeeze(1)
-        # self.inclusive_jet_set(...) -> (E*K*B, 1, inclusive_embed_dim); squeeze(1) -> (E*K*B, inclusive_embed_dim)
+        # ====================== INCLUSIVE ======================
+        # (E, K, B, J, F) -> (E*K*B, J, F)
+        inclusive_X_flat = inclusive_X.flatten(0, 2)  # merge dims 0..2
 
-        # Per-branch mask logits
-        inclusive_m = self.inclusive_mask_head(inclusive_bt).squeeze(-1)
-        # Linear(inclusive_embed_dim -> 1) -> (E*K*B, 1); squeeze(-1) => (E*K*B,)
-        inclusive_mask_logits = inclusive_m.reshape(E, K, B) # (E, K, B)
+        if inclusive_jet_kpm is not None:
+            # inclusive_jet_kpm is expected as (E, K, B, J) -> flatten the same way
+            inclusive_jet_kpm_flat = inclusive_jet_kpm.flatten(0, 2)  # (E*K*B, J)
+        else:
+            inclusive_jet_kpm_flat = None
 
-        # Reshape tokens to (EK, B, E) and pool to candidate token with PMA
-        inclusive_bt = inclusive_bt.reshape(E, K, B, -1) # (E, K, B, inclusive_embed_dim)
-        inclusive_bt2 = inclusive_bt.reshape(E * K, B, -1) # (E*K, B, inclusive_embed_dim)
-        inclusive_ct = self.inclusive_branch_pma(inclusive_bt2, key_padding_mask = inclusive_branch_kpm).squeeze(1)
-        # (E*K, num_seeds (1), inclusive_embed_dim); squeeze(1) -> (E*K, inclusive_embed_dim)
-        inclusive_ct = inclusive_ct.reshape(E, K, -1) # (E, K, inclusive_embed_dim)
+        # Per-branch encoding (over jets)
+        # output: (E*K*B, 1, D_incl) -> squeeze(1) -> (E*K*B, D_incl)
+        inclusive_bt_flat = self.inclusive_jet_set(
+            inclusive_X_flat,
+            key_padding_mask=inclusive_jet_kpm_flat,
+        ).squeeze(1)
+
+        # Per-branch mask logits: (E*K*B,) -> (E, K, B)
+        inclusive_m = self.inclusive_mask_head(inclusive_bt_flat).squeeze(-1)
+        inclusive_mask_logits = inclusive_m.view(E, K, B)
+
+        # Reshape tokens back to (E, K, B, D)
+        inclusive_bt = inclusive_bt_flat.view(E, K, B, -1)
+
+        # Pool branches -> candidate token
+        # (E, K, B, D) -> (E*K, B, D)
+        inclusive_bt2 = inclusive_bt.flatten(0, 1)
+
+        # PMA over B branches per candidate; key_padding_mask should be (E*K, B) if provided
+        inclusive_ct_flat = self.inclusive_branch_pma(
+            inclusive_bt2,
+            key_padding_mask=inclusive_branch_kpm,   # expected shape: (E*K, B)
+        ).squeeze(1)  # (E*K, D)
+
+        # Back to (E, K, D)
+        inclusive_ct = inclusive_ct_flat.view(E, K, -1)
 
         # ====================== PRIOR ======================
-        _, _, _, _, prior_F = prior_X.shape
-        prior_X = prior_X.reshape(E * K * B, J, prior_F)
+        prior_X_flat = prior_X.flatten(0, 2)  # (E*K*B, J, F_prior)
 
-        # Per-branch encoding
-        prior_bt = self.prior_jet_set(prior_X, key_padding_mask = prior_jet_kpm).squeeze(1)
+        if prior_jet_kpm is not None:
+            prior_jet_kpm_flat = prior_jet_kpm.flatten(0, 2)  # (E*K*B, J)
+        else:
+            prior_jet_kpm_flat = None
 
-        # Per-branch mask logits
-        prior_m = self.prior_mask_head(prior_bt).squeeze(-1)
-        prior_mask_logits = prior_m.reshape(E, K, B)
+        prior_bt_flat = self.prior_jet_set(
+            prior_X_flat,
+            key_padding_mask=prior_jet_kpm_flat,
+        ).squeeze(1)
 
-        # Reshape tokens to (EK, B, E) and pool to candidate token with PMA        
-        prior_bt = prior_bt.reshape(E, K, B, -1)
-        prior_bt2 = prior_bt.reshape(E * K, B, -1)
-        prior_ct = self.prior_branch_pma(prior_bt2, key_padding_mask = prior_branch_kpm).squeeze(1)
-        prior_ct = prior_ct.reshape(E, K, -1)
+        prior_m = self.prior_mask_head(prior_bt_flat).squeeze(-1)
+        prior_mask_logits = prior_m.view(E, K, B)
 
-        return (inclusive_bt, inclusive_ct, inclusive_mask_logits, 
-        prior_bt, prior_ct, prior_mask_logits)
+        prior_bt = prior_bt_flat.view(E, K, B, -1)
+
+        prior_bt2 = prior_bt.flatten(0, 1)  # (E*K, B, D_prior)
+
+        prior_ct_flat = self.prior_branch_pma(
+            prior_bt2,
+            key_padding_mask=prior_branch_kpm,  # expected: (E*K, B)
+        ).squeeze(1)  # (E*K, D_prior)
+
+        prior_ct = prior_ct_flat.view(E, K, -1)
+
+        return (
+            inclusive_bt, inclusive_ct, inclusive_mask_logits,
+            prior_bt,     prior_ct,     prior_mask_logits,
+        )
+
 
 # SHAPES :
     # inclusive_bt : (E, K, B, inclusive_embed_dim)
@@ -439,83 +529,210 @@ class CandidateSetEncoder(nn.Module):
             nn.Linear(prior_embed_dim, 1)
         )
         
+# ========================================================================================== old cand forward
 
-    def forward(self,
-    inclusive_bt, prior_bt, # (E, K, B, *_embed_dim)
-    inclusive_ct, prior_ct,  # (E, K, *_embed_dim)
-    branch_kpm_inclusive: Optional[Tensor] = None,  # (E*K,B)
-    branch_kpm_prior: Optional[Tensor] = None,
-    candidate_kpm_inclusive: Optional[Tensor] = None,  # (E,K)
-    candidate_kpm_prior: Optional[Tensor] = None,
-    ):
-        # ====================== INCLUSIVE ======================
-        # E, K, B, J, inclusive_F = inclusive_X.shape
-        # inclusive_X_flat = inclusive_X.reshape(E, K, B * J * inclusive_F)
+    # def forward(self,
+    # inclusive_bt, prior_bt, # (E, K, B, *_embed_dim)
+    # inclusive_ct, prior_ct,  # (E, K, *_embed_dim)
+    # branch_kpm_inclusive: Optional[Tensor] = None,  # (E*K,B)
+    # branch_kpm_prior: Optional[Tensor] = None,
+    # candidate_kpm_inclusive: Optional[Tensor] = None,  # (E,K)
+    # candidate_kpm_prior: Optional[Tensor] = None,
+    # ):
+    #     # ====================== INCLUSIVE ======================
+    #     # E, K, B, J, inclusive_F = inclusive_X.shape
+    #     # inclusive_X_flat = inclusive_X.reshape(E, K, B * J * inclusive_F)
 
-        for inclusive_isab in self.inclusive_isabs:
-            inclusive_ct = inclusive_isab(inclusive_ct, key_padding_mask = candidate_kpm_inclusive) # (E, K, inclusive_embed_dim)
+    #     for inclusive_isab in self.inclusive_isabs:
+    #         inclusive_ct = inclusive_isab(inclusive_ct, key_padding_mask = candidate_kpm_inclusive) # (E, K, inclusive_embed_dim)
 
-        for inclusive_sab in self.inclusive_sabs:
-            inclusive_ct = inclusive_sab(inclusive_ct, key_padding_mask = candidate_kpm_inclusive) # (E, K, inclusive_embed_dim)
+    #     for inclusive_sab in self.inclusive_sabs:
+    #         inclusive_ct = inclusive_sab(inclusive_ct, key_padding_mask = candidate_kpm_inclusive) # (E, K, inclusive_embed_dim)
 
-        if self.use_cross_from_branches: # each candidate refine itself using only its own branches
-            # let candidate token be enriched by looking at its own branch tokens
-            E, K, B, inclusive_embed_dim = inclusive_bt.shape
-            if self.detach_bt:
-                inclusive_bt = inclusive_bt.detach()
-            inclusive_bt = inclusive_bt.reshape(E * K, B, inclusive_embed_dim) # (EK, B, inclusive_embed_dim)
-            inclusive_ct = inclusive_ct.reshape(E * K, inclusive_embed_dim).unsqueeze(1) # (EK, 1, inclusive_embed_dim)
-            x_talk_inclusive = self.inclusive_xattn(inclusive_ct, inclusive_bt, key_padding_mask = branch_kpm_inclusive).squeeze(1) # (E*K, 1, inclusive_embed_dim) -> (E*K, inclusive_embed_dim)
-            x_talk_inclusive = x_talk_inclusive.reshape(E, K, inclusive_embed_dim) # (E, K, inclusive_embed_dim)
-            inclusive_ct = inclusive_ct.reshape(E, K, inclusive_embed_dim) # (E, K, inclusive_embed_dim)
+    #     if self.use_cross_from_branches: # each candidate refine itself using only its own branches
+    #         # let candidate token be enriched by looking at its own branch tokens
+    #         E, K, B, inclusive_embed_dim = inclusive_bt.shape
+    #         if self.detach_bt:
+    #             inclusive_bt = inclusive_bt.detach()
+    #         inclusive_bt = inclusive_bt.reshape(E * K, B, inclusive_embed_dim) # (EK, B, inclusive_embed_dim)
+    #         inclusive_ct = inclusive_ct.reshape(E * K, inclusive_embed_dim).unsqueeze(1) # (EK, 1, inclusive_embed_dim)
+    #         x_talk_inclusive = self.inclusive_xattn(inclusive_ct, inclusive_bt, key_padding_mask = branch_kpm_inclusive).squeeze(1) # (E*K, 1, inclusive_embed_dim) -> (E*K, inclusive_embed_dim)
+    #         x_talk_inclusive = x_talk_inclusive.reshape(E, K, inclusive_embed_dim) # (E, K, inclusive_embed_dim)
+    #         inclusive_ct = inclusive_ct.reshape(E, K, inclusive_embed_dim) # (E, K, inclusive_embed_dim)
 
-            # inclusive_bt : torch.Tensor(E*K, B, inclusive_embed_dim)
-            # inclusive_ct : torch.Tensor(E, K, inclusive_embed_dim)
-            # x_talk_inclusive : torch.Tensor(E, K, inclusive_embed_dim)
+    #         # inclusive_bt : torch.Tensor(E*K, B, inclusive_embed_dim)
+    #         # inclusive_ct : torch.Tensor(E, K, inclusive_embed_dim)
+    #         # x_talk_inclusive : torch.Tensor(E, K, inclusive_embed_dim)
 
-            inclusive_ct = inclusive_ct + self.inclusive_gate * x_talk_inclusive
+    #         inclusive_ct = inclusive_ct + self.inclusive_gate * x_talk_inclusive
         
-        if self.inclusive_use_global_context: # give every candidate the same event-level summary built from all candidates, then add it to each candidate
-            global_inclusive = self.inclusive_global_pma(inclusive_ct, key_padding_mask = candidate_kpm_inclusive).squeeze(1) # (EK, 1, inclusive_embed_dim).squeeze -> (EK, inclusive_embed_dim)
+    #     if self.inclusive_use_global_context: # give every candidate the same event-level summary built from all candidates, then add it to each candidate
+    #         global_inclusive = self.inclusive_global_pma(inclusive_ct, key_padding_mask = candidate_kpm_inclusive).squeeze(1) # (EK, 1, inclusive_embed_dim).squeeze -> (EK, inclusive_embed_dim)
 
             
 
-            # Note: IF THIS LINE ERRORES OUT, ITS BECAUSE r IS SET TO SOMETHING GREATER THAN 1, CHECK options.py *_seeds_classifer
-            inclusive_ct = inclusive_ct + global_inclusive.unsqueeze(1) # unsqueeze (EK, 1, D); broadcasts across K when added; (E, K, D) 
+    #         # Note: IF THIS LINE ERRORES OUT, ITS BECAUSE r IS SET TO SOMETHING GREATER THAN 1, CHECK options.py *_seeds_classifer
+    #         inclusive_ct = inclusive_ct + global_inclusive.unsqueeze(1) # unsqueeze (EK, 1, D); broadcasts across K when added; (E, K, D) 
+    #     else:
+    #         global_inclusive = None
+
+    #     inclusive_logits = self.inclusive_readout(inclusive_ct).squeeze(-1)
+
+    #     if candidate_kpm_inclusive is not None:
+    #         neg_inf = torch.finfo(inclusive_logits.dtype).min
+    #         inclusive_logits = inclusive_logits.masked_fill(candidate_kpm_inclusive, neg_inf) # EXTRA PROTECTION against all masked
+
+    #     # ====================== PRIOR ======================
+    #     # _, _, _, _, prior_F = prior_X.shape
+    #     # prior_X_flat = prior_X.reshape(E, K, B * J * prior_F)
+
+    #     for prior_isab in self.prior_isabs:
+    #         prior_ct = prior_isab(prior_ct, key_padding_mask = candidate_kpm_prior)
+
+    #     for prior_sab in self.prior_sabs:
+    #         prior_ct = prior_sab(prior_ct, key_padding_mask = candidate_kpm_prior)
+
+    #     if self.use_cross_from_branches:
+    #         # let candidate token be enriched by looking at its own branch tokens
+    #         E, K, B, prior_embed_dim = prior_bt.shape
+    #         if self.detach_bt:
+    #             prior_bt = prior_bt.detach()
+    #         prior_bt = prior_bt.reshape(E * K, B, prior_embed_dim) # (EK, B, prior_embed_dim)
+    #         prior_ct = prior_ct.reshape(E * K, prior_embed_dim).unsqueeze(1) # (EK, 1, prior_embed_dim)
+    #         x_talk_prior = self.prior_xattn(prior_ct, prior_bt, key_padding_mask=branch_kpm_prior).squeeze(1) # (E*K, 1, prior_embed_dim) -> (E*K, prior_embed_dim)
+    #         # MAKE SURE THAT THE DIM MACTH
+    #         x_talk_prior = x_talk_prior.reshape(E, K, prior_embed_dim) # (E, K, prior_embed_dim)
+    #         prior_ct = prior_ct.reshape(E, K, prior_embed_dim)
+    #         prior_ct = prior_ct + self.prior_gate * x_talk_prior
+        
+    #     if self.prior_use_global_context:
+    #         global_prior = self.prior_global_pma(prior_ct, key_padding_mask = candidate_kpm_prior).squeeze(1)
+    #         prior_ct = prior_ct + global_prior.unsqueeze(1)
+    #     else:
+    #         global_prior = None
+
+    #     prior_logits = self.prior_readout(prior_ct).squeeze(-1)
+
+    #     if candidate_kpm_prior is not None:
+    #         neg_inf = torch.finfo(prior_logits.dtype).min
+    #         prior_logits = prior_logits.masked_fill(candidate_kpm_prior, neg_inf) # EXTRA MEASURE !!
+
+    #     return (inclusive_logits, inclusive_ct, global_inclusive,
+    #     prior_logits, prior_ct, global_prior)
+
+# ========================================================================================== new cand forward
+
+    def forward(
+        self,
+        inclusive_bt, prior_bt,   # (E, K, B, D_incl / D_prior)
+        inclusive_ct, prior_ct,   # (E, K, D_incl / D_prior)
+        branch_kpm_inclusive: Optional[Tensor] = None,  # (E*K, B) or None
+        branch_kpm_prior:     Optional[Tensor] = None,
+        candidate_kpm_inclusive: Optional[Tensor] = None,  # (E, K) or None
+        candidate_kpm_prior:     Optional[Tensor] = None,
+    ):
+        # inclusive_ct, prior_ct initially: (E, K, D)
+        E, K, B, incl_D = inclusive_bt.shape
+        _, _, _, prior_D = prior_bt.shape
+
+        # ====================== INCLUSIVE ======================
+        # Per-candidate refinement with ISAB/SAB over K candidates
+        for inclusive_isab in self.inclusive_isabs:
+            inclusive_ct = inclusive_isab(
+                inclusive_ct,
+                key_padding_mask=candidate_kpm_inclusive,  # (E, K)
+            )
+
+        for inclusive_sab in self.inclusive_sabs:
+            inclusive_ct = inclusive_sab(
+                inclusive_ct,
+                key_padding_mask=candidate_kpm_inclusive,
+            )
+
+        if self.use_cross_from_branches:
+            # Let each candidate look at its own branch tokens
+            if self.detach_bt:
+                inclusive_bt = inclusive_bt.detach()
+
+            # (E, K, B, D) -> (E*K, B, D)
+            inclusive_bt_fk = inclusive_bt.flatten(0, 1)
+
+            # (E, K, D) -> (E*K, 1, D)
+            inclusive_ct_fk = inclusive_ct.flatten(0, 1).unsqueeze(1)
+
+            # key_padding_mask should be (E*K, B) here
+            x_talk_inclusive = self.inclusive_xattn(
+                inclusive_ct_fk,              # Q: (E*K, 1, D)
+                inclusive_bt_fk,              # K/V: (E*K, B, D)
+                key_padding_mask=branch_kpm_inclusive,
+            ).squeeze(1)                      # (E*K, D)
+
+            # Back to (E, K, D)
+            x_talk_inclusive = x_talk_inclusive.view(E, K, incl_D)
+
+            # Add cross-talk with a learnable gate
+            inclusive_ct = inclusive_ct + self.inclusive_gate * x_talk_inclusive
+
+        if self.inclusive_use_global_context:
+            # global_inclusive: (E, D)
+            global_inclusive = self.inclusive_global_pma(
+                inclusive_ct,                        # (E, K, D)
+                key_padding_mask=candidate_kpm_inclusive,  # (E, K)
+            ).squeeze(1)  # (E, D)
+
+            # Broadcast over K: (E, 1, D) -> (E, K, D)
+            inclusive_ct = inclusive_ct + global_inclusive.unsqueeze(1)
         else:
             global_inclusive = None
 
+        # Final logits over candidates: (E, K, 1) -> (E, K)
         inclusive_logits = self.inclusive_readout(inclusive_ct).squeeze(-1)
 
         if candidate_kpm_inclusive is not None:
             neg_inf = torch.finfo(inclusive_logits.dtype).min
-            inclusive_logits = inclusive_logits.masked_fill(candidate_kpm_inclusive, neg_inf) # EXTRA PROTECTION against all masked
+            inclusive_logits = inclusive_logits.masked_fill(
+                candidate_kpm_inclusive, neg_inf
+            )
 
         # ====================== PRIOR ======================
-        # _, _, _, _, prior_F = prior_X.shape
-        # prior_X_flat = prior_X.reshape(E, K, B * J * prior_F)
-
         for prior_isab in self.prior_isabs:
-            prior_ct = prior_isab(prior_ct, key_padding_mask = candidate_kpm_prior)
+            prior_ct = prior_isab(
+                prior_ct,
+                key_padding_mask=candidate_kpm_prior,
+            )
 
         for prior_sab in self.prior_sabs:
-            prior_ct = prior_sab(prior_ct, key_padding_mask = candidate_kpm_prior)
+            prior_ct = prior_sab(
+                prior_ct,
+                key_padding_mask=candidate_kpm_prior,
+            )
 
         if self.use_cross_from_branches:
-            # let candidate token be enriched by looking at its own branch tokens
-            E, K, B, prior_embed_dim = prior_bt.shape
             if self.detach_bt:
                 prior_bt = prior_bt.detach()
-            prior_bt = prior_bt.reshape(E * K, B, prior_embed_dim) # (EK, B, prior_embed_dim)
-            prior_ct = prior_ct.reshape(E * K, prior_embed_dim).unsqueeze(1) # (EK, 1, prior_embed_dim)
-            x_talk_prior = self.prior_xattn(prior_ct, prior_bt, key_padding_mask=branch_kpm_prior).squeeze(1) # (E*K, 1, prior_embed_dim) -> (E*K, prior_embed_dim)
-            # MAKE SURE THAT THE DIM MACTH
-            x_talk_prior = x_talk_prior.reshape(E, K, prior_embed_dim) # (E, K, prior_embed_dim)
-            prior_ct = prior_ct.reshape(E, K, prior_embed_dim)
+
+            # (E, K, B, D_prior) -> (E*K, B, D_prior)
+            prior_bt_fk = prior_bt.flatten(0, 1)
+
+            # (E, K, D_prior) -> (E*K, 1, D_prior)
+            prior_ct_fk = prior_ct.flatten(0, 1).unsqueeze(1)
+
+            x_talk_prior = self.prior_xattn(
+                prior_ct_fk,
+                prior_bt_fk,
+                key_padding_mask=branch_kpm_prior,
+            ).squeeze(1)  # (E*K, D_prior)
+
+            x_talk_prior = x_talk_prior.view(E, K, prior_D)
+
             prior_ct = prior_ct + self.prior_gate * x_talk_prior
-        
+
         if self.prior_use_global_context:
-            global_prior = self.prior_global_pma(prior_ct, key_padding_mask = candidate_kpm_prior).squeeze(1)
+            global_prior = self.prior_global_pma(
+                prior_ct,
+                key_padding_mask=candidate_kpm_prior,
+            ).squeeze(1)  # (E, D_prior)
+
             prior_ct = prior_ct + global_prior.unsqueeze(1)
         else:
             global_prior = None
@@ -524,10 +741,12 @@ class CandidateSetEncoder(nn.Module):
 
         if candidate_kpm_prior is not None:
             neg_inf = torch.finfo(prior_logits.dtype).min
-            prior_logits = prior_logits.masked_fill(candidate_kpm_prior, neg_inf) # EXTRA MEASURE !!
+            prior_logits = prior_logits.masked_fill(candidate_kpm_prior, neg_inf)
 
-        return (inclusive_logits, inclusive_ct, global_inclusive,
-        prior_logits, prior_ct, global_prior)
+        return (
+            inclusive_logits, inclusive_ct, global_inclusive,
+            prior_logits,    prior_ct,    global_prior,
+        )
 
 # --------------------------------------------------------------------------------------------------- DATA
 
