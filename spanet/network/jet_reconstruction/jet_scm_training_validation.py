@@ -263,10 +263,10 @@ class BranchSetEncoder(nn.Module):
     prior_jet_kpm : Optional[Tensor] = None, prior_branch_kpm : Optional[Tensor] = None):
         # ====================== INCLUSIVE ======================
         E, K, B, J, inclusive_F = inclusive_X.shape
-        inclusive_X_flat = inclusive_X.reshape(E * K * B, J, inclusive_F) # (E*K*B, J, inclusive_F)
+        inclusive_X = inclusive_X.reshape(E * K * B, J, inclusive_F) # (E*K*B, J, inclusive_F)
 
         # Per-branch encoding
-        inclusive_bt = self.inclusive_jet_set(inclusive_X_flat, key_padding_mask = inclusive_jet_kpm).squeeze(1)
+        inclusive_bt = self.inclusive_jet_set(inclusive_X, key_padding_mask = inclusive_jet_kpm).squeeze(1)
         # self.inclusive_jet_set(...) -> (E*K*B, 1, inclusive_embed_dim); squeeze(1) -> (E*K*B, inclusive_embed_dim)
 
         # Per-branch mask logits
@@ -283,10 +283,10 @@ class BranchSetEncoder(nn.Module):
 
         # ====================== PRIOR ======================
         _, _, _, _, prior_F = prior_X.shape
-        prior_X_flat = prior_X.reshape(E * K * B, J, prior_F)
+        prior_X = prior_X.reshape(E * K * B, J, prior_F)
 
         # Per-branch encoding
-        prior_bt = self.prior_jet_set(prior_X_flat, key_padding_mask = prior_jet_kpm).squeeze(1)
+        prior_bt = self.prior_jet_set(prior_X, key_padding_mask = prior_jet_kpm).squeeze(1)
 
         # Per-branch mask logits
         prior_m = self.prior_mask_head(prior_bt).squeeze(-1)
@@ -709,9 +709,9 @@ class SCM_Training_Val(JetSecondaryLoader):
             if not (n.startswith("classifier.") or n.startswith("masker.")):
                 p.requires_grad_(False)
 
-        # Compile
-        self.classifier = tcompile(self.classifier, dynamic=True)
-        self.masker     = tcompile(self.masker,    dynamic=True)
+        # # Compile
+        # self.classifier = tcompile(self.classifier, dynamic=True)
+        # self.masker     = tcompile(self.masker,    dynamic=True)
 
         # Imbalance / focal
         self.pos_weight_cap = 1000.0
