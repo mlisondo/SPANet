@@ -825,7 +825,7 @@ class Options(Namespace):
 
 
 
-    # # ================================================== ARCH I ==================================================
+    # # ================================================== ARCH I ================================================== changed from this one
     # # Deep SAB after pooling @ ~40 epochs. Tests whether post-PMA depth boosts candidate reasoning.
     #     # ---- schedules (~40 epochs) ----
     #     self.prior_weight_start  = 0.00

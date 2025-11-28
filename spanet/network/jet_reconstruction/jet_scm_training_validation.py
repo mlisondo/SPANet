@@ -133,7 +133,7 @@ class ISAB(nn.Module):
         return Y
 
 # POOLING BY MULTIHEAD ATTENTION
-class PMA(nn.Module):
+class PMA(nn.Module): # ive set num_seeds to 1 by default. ive still let it be changeable tho
     def __init__(self, dim, num_heads, num_seeds, attn_drop = 0.0, ff_drop = 0.0, ln = True, use_gate = True):
         super().__init__()
         self.S = nn.Parameter(torch.empty(1, num_seeds, dim))
@@ -323,7 +323,7 @@ class CandidateSetEncoder(nn.Module):
     inclusive_attn_drop : float,          prior_attn_drop : float,
     inclusive_ff_drop : float,            prior_ff_drop : float,
     inclusive_ln : bool,                  prior_ln : bool,
-    inclusive_num_seeds : int,            prior_num_seeds : int,
+    # inclusive_num_seeds : int,            prior_num_seeds : int, # ive set this to 1 by default
     use_cross_from_branches : bool,
     detach_bt : bool
     ):
@@ -360,7 +360,7 @@ class CandidateSetEncoder(nn.Module):
         self.inclusive_global_pma = PMA(
                 dim       = inclusive_embed_dim,
                 num_heads = inclusive_num_heads,
-                num_seeds = inclusive_num_seeds, # set to 1 by default
+                num_seeds = 1, # set to 1 by default
                 attn_drop = inclusive_attn_drop, # im not sure if i should make a seperate one for this module
                 ff_drop   = inclusive_ff_drop, # im not sure if i should make a seperate one for this module
                 ln        = inclusive_ln
@@ -414,7 +414,7 @@ class CandidateSetEncoder(nn.Module):
         self.prior_global_pma = PMA(
                 dim       = prior_embed_dim,
                 num_heads = prior_num_heads,
-                num_seeds = prior_num_seeds, # set to 1 by default
+                num_seeds = 1, # set to 1 by default
                 attn_drop = prior_attn_drop, # im not sure if i should make a seperate one for this module
                 ff_drop   = prior_ff_drop, # im not sure if i should make a seperate one for this module
                 ln        = prior_ln
@@ -477,6 +477,9 @@ class CandidateSetEncoder(nn.Module):
         
         if self.inclusive_use_global_context: # give every candidate the same event-level summary built from all candidates, then add it to each candidate
             global_inclusive = self.inclusive_global_pma(inclusive_ct, key_padding_mask = candidate_kpm_inclusive).squeeze(1) # (EK, 1, inclusive_embed_dim).squeeze -> (EK, inclusive_embed_dim)
+            probe(global_inclusive, "global_inclusive")
+            raise RuntimeError("Debug break")
+            
 
             # Note: IF THIS LINE ERRORES OUT, ITS BECAUSE r IS SET TO SOMETHING GREATER THAN 1, CHECK options.py *_seeds_classifer
             inclusive_ct = inclusive_ct + global_inclusive.unsqueeze(1) # unsqueeze (EK, 1, D); broadcasts across K when added; (E, K, D) 
@@ -696,9 +699,9 @@ class SCM_Training_Val(JetSecondaryLoader):
             inclusive_ln              = self.i_ln_classifer,
             prior_ln                  = self.p_ln_classifer,
 
-            # PMA seeds for global context
-            inclusive_num_seeds       = self.i_seeds_classifer,
-            prior_num_seeds           = self.p_seeds_classifer,
+            # # PMA seeds for global context
+            # inclusive_num_seeds       = self.i_seeds_classifer,   # ive set this to one by default
+            # prior_num_seeds           = self.p_seeds_classifer,
 
             # classifier-specific knobs
             use_cross_from_branches   = self.use_x_branches,
