@@ -113,7 +113,7 @@ class JetSecondaryLoader(JetReconstructionNetwork):
     
         raw_preds, ps, *_ = self.predict(sources)  # raw preds : list[B] of (E,K,p_i)
 
-        # particle_scores = torch.from_numpy(ps).to(jet_data.device).t().contiguous()
+        particle_scores = torch.from_numpy(ps).to(jet_data.device).t().contiguous()
 
         jet_preds_tensor = torch.stack(
             [torch.as_tensor(p, device=jet_data.device).permute(0, 2, 1)
@@ -139,11 +139,18 @@ class JetSecondaryLoader(JetReconstructionNetwork):
         canon_masks = canon_masks.permute(1, 0)
 
         # # JET SCORES
-        # with torch.no_grad():
-        #     outputs = self.forward(sources)
+        with torch.no_grad():
+            outputs = self.forward(sources)
+
+
+
+        probe(particle_scores, "particle_scores")
+        probe(outputs, "outputs")
+
+
         # scores = torch.stack([S.to(jet_data.device) for S in outputs.assignments], dim=1) # [E, B, J, J, J]
 
-        # E, K, B, p = jet_preds_tensor.shape         # p=3
+        # E, K, B, p_max = jet_preds_tensor.shape         # p_max=3
         # J = scores.size(-1)
 
         # # slot marginals: (E,B,J) each
