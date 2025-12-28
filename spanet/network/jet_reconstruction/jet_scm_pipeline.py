@@ -110,13 +110,15 @@ class JetSecondaryLoader(JetReconstructionNetwork):
         sources, _, targets, _, _ = batch
         jet_data = sources[0][0]  # (E,Njets,F)
         jet_mult = sources[0][1]  # (E,Njets) bool  for ttbar (Njets) = 10, true if jet is valid
+
+        device = jet_data.device
     
         raw_preds, ps, *_ = self.predict(sources)  # raw preds : list[B] of (E,K,p_i)
 
-        particle_scores = torch.from_numpy(ps).to(jet_data.device).t().contiguous()
+        particle_scores = torch.from_numpy(ps).to(device).t().contiguous()
 
         jet_preds_tensor = torch.stack(
-            [torch.as_tensor(p, device=jet_data.device).permute(0, 2, 1)
+            [torch.as_tensor(p, device=device).permute(0, 2, 1)
              for p in raw_preds],
             dim=2
         )  # (E,K,B,p_max)
@@ -126,8 +128,8 @@ class JetSecondaryLoader(JetReconstructionNetwork):
         for idx_t, m in targets:
             if idx_t.shape[1] < p_max:
                 idx_t = F.pad(idx_t, (0, p_max - idx_t.shape[1]), value=-1)
-            true_idx.append(idx_t.to(jet_data.device))
-            true_masks.append(m.to(jet_data.device))
+            true_idx.append(idx_t.to(device))
+            true_masks.append(m.to(device))
     
         true_idx   = torch.stack(true_idx)   # (B,E,p_max)
         true_masks = torch.stack(true_masks) # (B,E)
@@ -143,12 +145,13 @@ class JetSecondaryLoader(JetReconstructionNetwork):
             outputs = self.forward(sources)
 
 
-
         probe(particle_scores, "particle_scores")
         probe(outputs, "outputs")
 
 
-        # scores = torch.stack([S.to(jet_data.device) for S in outputs.assignments], dim=1) # [E, B, J, J, J]
+        scores = torch.stack([S.to(device) for S in outputs.assignments], dim=1) # [E, B, J, J, J]
+
+        probe(scores, "scores")
 
         # E, K, B, p_max = jet_preds_tensor.shape         # p_max=3
         # J = scores.size(-1)
