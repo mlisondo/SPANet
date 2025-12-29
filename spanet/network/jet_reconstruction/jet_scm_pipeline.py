@@ -153,6 +153,7 @@ class JetSecondaryLoader(JetReconstructionNetwork):
 
         probe(scores, "scores")
         probe(jet_preds_tensor, "jet_preds_tensor")
+        print(scores[0])
 
         # E, K, B, p_max = jet_preds_tensor.shape         # p_max=3
         # J = scores.size(-1)
