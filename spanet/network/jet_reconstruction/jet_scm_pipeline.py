@@ -145,13 +145,14 @@ class JetSecondaryLoader(JetReconstructionNetwork):
             outputs = self.forward(sources)
 
 
-        probe(particle_scores, "particle_scores")
-        probe(outputs, "outputs")
+        # probe(particle_scores, "particle_scores")
+        # probe(outputs, "outputs")
 
 
         scores = torch.stack([S.to(device) for S in outputs.assignments], dim=1) # [E, B, J, J, J]
 
         probe(scores, "scores")
+        probe(jet_preds_tensor, "jet_preds_tensor")
 
         # E, K, B, p_max = jet_preds_tensor.shape         # p_max=3
         # J = scores.size(-1)
